@@ -11,7 +11,7 @@ if [ -f "${SDK_NAME}" ]; then
   echo "File exists"
 else
   curl -L -o ${SDK_NAME} \
-    https://github.com/MapMindAI/EasyGaussianSplatting/releases/download/v1/Insta360SDK.deb
+    https://github.com/MapMindAI/EasyGaussianSplatting/releases/download/v1.1/Insta360SDK.deb
 fi
 
 apt-get install -y ./${SDK_NAME}

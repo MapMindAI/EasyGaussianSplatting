@@ -6,9 +6,10 @@ mkdir -p /tmp/installers
 pushd /tmp/installers
 
 # https://exiftool.org/index.html
-wget -O Image-ExifTool-13.56.tar.gz https://sourceforge.net/projects/exiftool/files/Image-ExifTool-13.56.tar.gz/download 
-gzip -dc Image-ExifTool-13.56.tar.gz | tar -xf -
-cd Image-ExifTool-13.56
+EXIFTOOL_VERSION=13.59
+wget -O Image-ExifTool-${EXIFTOOL_VERSION}.tar.gz https://sourceforge.net/projects/exiftool/files/Image-ExifTool-${EXIFTOOL_VERSION}.tar.gz/download
+gzip -dc Image-ExifTool-${EXIFTOOL_VERSION}.tar.gz | tar -xf -
+cd Image-ExifTool-${EXIFTOOL_VERSION}
 perl Makefile.PL
 make test
 make install
