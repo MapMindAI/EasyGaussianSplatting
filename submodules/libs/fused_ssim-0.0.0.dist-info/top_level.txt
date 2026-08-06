@@ -1,2 +1,0 @@
-fused_ssim
-fused_ssim_cuda
