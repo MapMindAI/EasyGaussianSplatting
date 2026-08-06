@@ -1,6 +1,6 @@
 #FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
 #FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
-FROM colmap/colmap:20260406.6666
+FROM colmap/colmap:20260729.7651
 
 
 SHELL [ "/bin/bash", "--login", "-c" ]
@@ -33,10 +33,6 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 
-# installl openMVG
-# COPY installers/openMBG.sh /tmp/installers/
-# RUN bash /tmp/installers/openMBG.sh && rm /tmp/installers/openMBG.sh
-
 # installl insta360_sdk
 COPY installers/insta360_sdk.sh /tmp/installers/
 COPY installers/insta_360_main.cc /tmp/installers/
@@ -52,7 +48,7 @@ RUN rm -rf /tmp/installers
 
 
 # install miniconda
-ENV CONDA_DIR $HOME/miniconda3
+ENV CONDA_DIR /opt/miniconda3
 RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py312_24.5.0-0-Linux-x86_64.sh -O ~/miniconda.sh && \
     chmod +x ~/miniconda.sh && \
     ~/miniconda.sh -b -p $CONDA_DIR && \
