@@ -20,10 +20,15 @@ IMAGE_DIR="${WORK_DIR}/images"
 DATABASE_PATH="${WORK_DIR}/database.db"
 SPARSE_DIR="${WORK_DIR}/sparse"
 
+if [ -s "${SPARSE_DIR}/0/cameras.bin" ]; then
+  echo "${SPARSE_DIR}/0 already exists, skipping reconstruction"
+  exit 0
+fi
+
 mkdir -p "${IMAGE_DIR}" "${SPARSE_DIR}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-/opt/miniconda3/envs/gaussian_splatting/bin/python3 \
+python3 \
   "${SCRIPT_DIR}/../mapping/extract_images.py" \
   "${INPUT_VIDEO}" "${IMAGE_DIR}" --frame-rate "${FRAME_RATE}"
 

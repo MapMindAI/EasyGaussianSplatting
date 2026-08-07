@@ -70,9 +70,12 @@ RUN echo ". $CONDA_DIR/etc/profile.d/conda.sh" >> ~/.profile
 # make conda activate command available from /bin/bash --interative shells
 RUN conda init bash
 
-COPY environment.yml /tmp/
-RUN conda env create --file /tmp/environment.yml
+# opencv-python-headless is for scripts/stitch_pano.sh and scripts/colmap_reconstruct.sh,
+# which only need cv2 (no GUI) and so share the base env rather than a dedicated one.
+RUN pip install --no-cache-dir jupyterlab opencv-python-headless
 
-RUN pip install jupyterlab
-
-RUN conda activate gaussian_splatting
+# GGPS (panoramic Gaussian Splatting training), in its own conda env: see
+# installers/install_ggps.sh for why it needs a different Python/CUDA stack
+# than the base env above.
+COPY installers/install_ggps.sh /tmp/installers/
+RUN bash /tmp/installers/install_ggps.sh && rm /tmp/installers/install_ggps.sh

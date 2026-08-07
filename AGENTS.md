@@ -3,8 +3,10 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 ## Repository layout
 
 * `README.md` — user-facing entry point: what the pipeline does, Docker image contents, usage.
-* `artifacts/docker/` — `dev.dockerfile` (COLMAP + Insta360 Media SDK + ExifTool + conda env) and its `installers/` scripts. CI (`.github/workflows/docker.yml`) builds and publishes this to `ghcr.io/mapmindai/gaussiansplatting`.
-* `arguments/` — vendored parameter-parsing classes (`ModelParams`, `PipelineParams`, `OptimizationParams`) from upstream `graphdeco-inria/gaussian-splatting`, for the training step.
+* `artifacts/docker/` — `dev.dockerfile` (COLMAP + Insta360 Media SDK + ExifTool + a `ggps` conda env for training) and its `installers/` scripts. CI (`.github/workflows/docker.yml`) builds and publishes this to `ghcr.io/mapmindai/gaussiansplatting`.
+* `scripts/` — the pipeline: `stitch_pano.sh`, `colmap_reconstruct.sh`, and `ggps_train.sh` each run inside the container; `run_pipeline.sh` runs on the host and chains all three via `docker run`.
+* `mapping/` — `extract_images.py`, the frame-extraction helper `colmap_reconstruct.sh` calls.
+* `arguments/` — vendored parameter-parsing classes (`ModelParams`, `PipelineParams`, `OptimizationParams`) from upstream `graphdeco-inria/gaussian-splatting`; unused now that training goes through GGPS's own entry point (see `scripts/ggps_train.sh`).
 * `data/` — local dev datasets/captures (see §5); not repo-managed.
 
 ## 1. Read the docs before starting a task
