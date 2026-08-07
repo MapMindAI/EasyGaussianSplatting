@@ -27,6 +27,9 @@ RUN apt-get update && \
     g++-10 \
     libvulkan-dev \
     vulkan-tools \
+    # workaround: insta360_media_stitcher deadlocks on Vulkan device init failure
+    # when a GPU is passed through with no ICD available; this gives it one
+    mesa-vulkan-drivers \
     libglfw3-dev \
     libdc1394-dev \
     mesa-utils \
