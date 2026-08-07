@@ -2,6 +2,10 @@
 #FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
 FROM colmap/colmap:20260729.7651
 
+# insta360_media_stitcher needs NVENC/NVDEC (libnvidia-encode/libnvcuvid), which the
+# container runtime only mounts when the "video" capability is requested; the base
+# image's "compute,utility" default leaves hardware encode failing with EPERM.
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
 
 SHELL [ "/bin/bash", "--login", "-c" ]
 
