@@ -78,6 +78,11 @@ YAML
 source /opt/miniconda3/etc/profile.d/conda.sh
 conda activate ggps
 cd /opt/ggps
+# The rasterizer's per-iteration backward buffers are freed only every
+# densification_interval steps, which fragments the CUDA allocator on
+# small GPUs; expandable_segments lets it reuse freed blocks instead of
+# hitting an early OOM (see torch's own hint in the OOM error message).
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 python3 train_large.py --config "${CONFIG_PATH}" \
   --test_iterations "${ITERATIONS}" --save_iterations "${ITERATIONS}"
 
