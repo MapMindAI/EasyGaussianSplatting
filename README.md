@@ -107,3 +107,13 @@ docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
 
 The trained model lands in `<reconstruction_dir>/ggps_output/`. Export/viewer
 integration isn't wired yet — see Status.
+
+Training renders at the stitched video's resolution divided by `resolution`,
+and the CUDA rasterizer's per-iteration buffers scale with that pixel count
+times the (growing, via densification) number of Gaussians. On GPUs with
+less than ~8GB VRAM, training a `4000x2000` capture at `resolution 1` will
+run out of memory partway through densification; pass `resolution 2` or
+higher instead. `scripts/ggps_train.sh` also sets
+`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` to reduce allocator
+fragmentation from those buffers, which otherwise depletes VRAM before
+the process leaks it.
