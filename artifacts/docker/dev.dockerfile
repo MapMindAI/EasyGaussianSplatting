@@ -72,16 +72,7 @@ RUN conda init bash
 
 # opencv-python-headless is for scripts/stitch_pano.sh and scripts/colmap_reconstruct.sh,
 # which only need cv2 (no GUI) and so share the base env rather than a dedicated one.
-# pycolmap is pinned to the same version as the base image's COLMAP CLI; pillow and
-# tqdm are for panorama.py, copied in below.
-RUN pip install --no-cache-dir jupyterlab opencv-python-headless pycolmap==4.2.0.dev0 pillow tqdm
-
-# pycolmap.panorama and the panorama_sfm.py example script (used by
-# scripts/colmap_reconstruct.sh) aren't published in the pycolmap wheel, so they're
-# sourced from the third_party/colmap submodule via the "colmapsrc" build context
-# (see README for the --build-context flag this requires).
-COPY --from=colmapsrc python/pycolmap/panorama.py $CONDA_DIR/lib/python3.12/site-packages/pycolmap/panorama.py
-COPY --from=colmapsrc python/examples/panorama_sfm.py /opt/colmap/panorama_sfm.py
+RUN pip install --no-cache-dir jupyterlab opencv-python-headless
 
 # gsplat (Gaussian Splatting training), in its own conda env: see
 # installers/install_gsplat.sh for why it needs a different Python/CUDA
@@ -92,3 +83,14 @@ COPY --from=colmapsrc python/examples/panorama_sfm.py /opt/colmap/panorama_sfm.p
 COPY --from=gsplatsrc . /opt/gsplat
 COPY installers/install_gsplat.sh /tmp/installers/
 RUN bash /tmp/installers/install_gsplat.sh && rm /tmp/installers/install_gsplat.sh
+
+# pycolmap is pinned to the same version as the base image's COLMAP CLI; pillow and
+# tqdm are for panorama.py, copied in below.
+RUN pip install --no-cache-dir pycolmap==4.2.0.dev0 pillow tqdm
+
+# pycolmap.panorama and the panorama_sfm.py example script (used by
+# scripts/colmap_reconstruct.sh) aren't published in the pycolmap wheel, so they're
+# sourced from the third_party/colmap submodule via the "colmapsrc" build context
+# (see README for the --build-context flag this requires).
+COPY --from=colmapsrc python/pycolmap/panorama.py $CONDA_DIR/lib/python3.12/site-packages/pycolmap/panorama.py
+COPY --from=colmapsrc python/examples/panorama_sfm.py /opt/colmap/panorama_sfm.py
