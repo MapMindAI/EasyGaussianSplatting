@@ -263,9 +263,10 @@ def main():
     parser.add_argument("output_dir", help="directory to write the cube-map images/ and sparse/0/")
     parser.add_argument("--face-size", type=int, default=1024,
                          help="width/height in pixels of each cube face (default: 1024)")
-    parser.add_argument("--faces", default="front,right,back,left,up,down",
+    parser.add_argument("--faces", default="front,right,back,left,up",
                          help="comma-separated subset of front,right,back,left,up,down "
-                              "(default: all six; drop 'down' if a tripod occludes the nadir)")
+                              "(default: all but 'down', which usually shows whoever is "
+                              "carrying the rig; pass all six explicitly to include it)")
     args = parser.parse_args()
     faces = args.faces.split(",")
     unknown = set(faces) - set(FACE_AXES)

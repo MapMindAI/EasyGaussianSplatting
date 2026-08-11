@@ -46,8 +46,9 @@ so the script always requests `use_gpu 0`. The sparse model lands in
 Run `scripts/cubemap_convert.sh <reconstruction_dir> [face_size] [faces]` to
 turn that equirect reconstruction into a 6-face cube map (gsplat only
 supports perspective/fisheye COLMAP camera models, not `EQUIRECTANGULAR`).
-`face_size` defaults to 1024; `faces` defaults to all six
-(`front,right,back,left,up,down`):
+`face_size` defaults to 1024; `faces` defaults to all but `down`
+(`front,right,back,left,up`) since the nadir usually shows whoever is
+carrying the rig — pass all six explicitly to include it:
 
 ```
 scripts/cubemap_convert.sh data/pano_mapping 1024

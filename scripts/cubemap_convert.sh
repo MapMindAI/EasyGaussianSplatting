@@ -10,7 +10,9 @@ fi
 
 RECONSTRUCTION_DIR="$(cd "$1" && pwd)"
 FACE_SIZE="${2:-1024}"
-FACES="${3:-front,right,back,left,up,down}"
+# "down" is dropped by default: it points at the ground below the rig, where
+# whoever is carrying it usually shows up.
+FACES="${3:-front,right,back,left,up}"
 
 OUTPUT_DIR="${RECONSTRUCTION_DIR}_cubemap"
 

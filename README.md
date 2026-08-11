@@ -108,8 +108,9 @@ equirect reconstruction has to be split into a 6-face cube map first.
 reprojects each frame into per-face pinhole images and rebuilds the sparse
 model with per-face poses/intrinsics. `face_size` (cube-face width/height in
 pixels) defaults to `1024`; `faces` (comma-separated subset of
-`front,right,back,left,up,down`) defaults to all six — drop `down` if a
-tripod occludes the nadir:
+`front,right,back,left,up,down`) defaults to all but `down` — the nadir
+usually shows whoever is carrying the rig, so it's excluded unless you pass
+all six explicitly:
 
 ```
 docker run -it --rm -v $(pwd):/workspace -w /workspace \
