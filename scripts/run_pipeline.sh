@@ -17,6 +17,7 @@ FACE_SIZE="${4:-1024}"
 GS_ITERATIONS="${5:-30000}"
 GS_DATA_FACTOR="${6:-1}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/mapmindai/gaussiansplatting:latest}"
+TORCH_CACHE_VOLUME="easygaussiansplatting-torch-cache"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSV_ABS="$(cd "$(dirname "${INPUT_INSV}")" && pwd)/$(basename "${INPUT_INSV}")"
@@ -37,7 +38,7 @@ REL_RECONSTRUCTION_DIR="${REL_OUTPUT_VIDEO%.*}_mapping"
 
 mkdir -p "${REPO_ROOT}/${REL_OUTPUT_DIR}"
 
-docker run --rm --gpus all \
+docker run --rm --gpus all --shm-size=1g \
   -e INPUT_INSV="/workspace/${REL_INSV}" \
   -e OUTPUT_VIDEO="/workspace/${REL_OUTPUT_VIDEO}" \
   -e OUTPUT_SIZE="${OUTPUT_SIZE}" \
@@ -46,6 +47,7 @@ docker run --rm --gpus all \
   -e FACE_SIZE="${FACE_SIZE}" \
   -e GS_ITERATIONS="${GS_ITERATIONS}" \
   -e GS_DATA_FACTOR="${GS_DATA_FACTOR}" \
+  --mount "type=volume,source=${TORCH_CACHE_VOLUME},target=/root/.cache/torch" \
   -v "${REPO_ROOT}:/workspace" -w /workspace "${DOCKER_IMAGE}" \
   bash -c 'set -euo pipefail
 scripts/stitch_pano.sh

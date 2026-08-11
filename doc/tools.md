@@ -5,7 +5,7 @@ has an NVIDIA GPU — `insta360_media_stitcher` uses it for hardware video
 encode/decode (NVENC/NVDEC) and falls back to software encoding without it:
 
 ```
-docker run -it --rm --gpus all -v $(pwd)/data:/workspace ghcr.io/mapmindai/gaussiansplatting:latest bash
+docker run -it --rm --gpus all --shm-size=1g -v $(pwd)/data:/workspace ghcr.io/mapmindai/gaussiansplatting:latest bash
 ```
 
 Stitch a raw Insta360 capture into an equirectangular video:
@@ -60,7 +60,8 @@ The cube-map model lands in `data/pano_mapping_cubemap`.
 Run `scripts/gsplat_train.sh <cubemap_reconstruction_dir> [iterations] [data_factor]`
 to train a [gsplat](https://github.com/nerfstudio-project/gsplat) model from
 that cube-map reconstruction. `iterations` defaults to 30000, `data_factor`
-(a COLMAP-style downsample factor) to 1:
+(a COLMAP-style downsample factor) to 1. The container needs at least 1 GiB of
+shared memory for gsplat's data-loader workers:
 
 ```
 scripts/gsplat_train.sh data/pano_mapping_cubemap 30000 2

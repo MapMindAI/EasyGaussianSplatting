@@ -10,7 +10,7 @@ camera per frame).
 `scripts/run_pipeline.sh <input.insv> [frame_rate] [output_size] [face_size] [gs_iterations] [gs_data_factor]`
 runs on the host and drives the container itself, chaining stitching, frame
 extraction, COLMAP reconstruction, cube-map conversion, and gsplat training
-in a single `docker run --gpus all`. `input.insv` must live under the repo
+in a single `docker run --gpus all --shm-size=1g`. `input.insv` must live under the repo
 checkout (it gets bind-mounted as `/workspace`). `frame_rate` defaults to 2,
 `output_size` to `8000x4000`, `face_size` (cube-face width/height in pixels)
 to `1024`, `gs_iterations` to `30000`, `gs_data_factor` (a COLMAP-style
@@ -24,7 +24,9 @@ Results land next to the capture, in `<capture_name>_reconstruction/`:
 `pano.mp4` (the stitched video), `pano_mapping/sparse` (the COLMAP sparse
 model), `pano_mapping_cubemap/sparse` (the cube-map model gsplat trains on),
 and `pano_mapping_cubemap/gsplat_output` (the trained model). Set
-`DOCKER_IMAGE` to use a locally built image instead of the published one.
+`DOCKER_IMAGE` to use a locally built image instead of the published one. The
+script keeps downloaded PyTorch model weights in the persistent Docker volume
+`easygaussiansplatting-torch-cache`, so later runs reuse them.
 
 ![COLMAP sparse reconstruction viewer](assets/reconstruction_viewer.jpg)
 
@@ -65,9 +67,10 @@ additional build context, since the Dockerfile's own build context is just
 `artifacts/docker/` (kept small so it doesn't have to send `data/`):
 
 ```
-git submodule update --init third_party/gsplat
+git submodule update --init third_party/gsplat third_party/colmap
 docker build -f artifacts/docker/dev.dockerfile -t easygaussiansplatting:dev \
-  --build-context gsplatsrc=./third_party/gsplat artifacts/docker
+  --build-context gsplatsrc=./third_party/gsplat \
+  --build-context colmapsrc=./third_party/colmap artifacts/docker
 ```
 
 ## Using the tools
@@ -134,7 +137,7 @@ from a `cubemap_convert.sh` output directory. `iterations` defaults to
 `30000`, `data_factor` (a COLMAP-style downsample factor) to `1`:
 
 ```
-docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
+docker run -it --rm --gpus all --shm-size=1g -v $(pwd):/workspace -w /workspace \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   scripts/gsplat_train.sh data/pano_mapping_cubemap 30000 2
 ```
@@ -147,6 +150,6 @@ rasterizer's per-iteration buffers scale with that pixel count times the
 (growing, via densification) number of Gaussians, times 6 (one image per
 cube face per frame). On GPUs with less than ~8GB VRAM, drop `face_size` in
 `cubemap_convert.sh` and/or raise `data_factor` here to fit. `scripts/gsplat_train.sh`
-also sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` to reduce
+also sets `PYTORCH_ALLOC_CONF=expandable_segments:True` to reduce
 allocator fragmentation from those buffers, which otherwise depletes VRAM
 before the process leaks it.

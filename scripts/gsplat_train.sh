@@ -21,7 +21,7 @@ set +u
 conda activate gsplat
 set -u
 cd /opt/gsplat/examples
-export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+export PYTORCH_ALLOC_CONF="${PYTORCH_ALLOC_CONF:-expandable_segments:True}"
 python3 simple_trainer.py default \
   --data_dir "${CUBEMAP_DIR}" \
   --data_factor "${DATA_FACTOR}" \
