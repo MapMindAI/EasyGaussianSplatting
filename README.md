@@ -1,8 +1,9 @@
 # EasyGaussianSplatting
 
 An end-to-end pipeline for turning Insta360 360° captures into Gaussian Splatting
-reconstructions, using COLMAP's native spherical (equirectangular) camera model to
-reconstruct directly from panoramic frames.
+reconstructions, reconstructing panoramic frames with COLMAP's `panorama_sfm`
+(rig of virtual perspective views, reprojected back to a native equirectangular
+camera per frame).
 
 ## Running the full pipeline in one command
 
@@ -33,7 +34,7 @@ This branch is a ground-up remake of the pipeline. What's done so far:
 
 - [x] Docker image with COLMAP, the Insta360 Media SDK, and ExifTool
 - [x] Script to stitch raw Insta360 footage into equirectangular video
-- [x] Script to run COLMAP reconstruction with the spherical camera model
+- [x] Script to run COLMAP reconstruction via `panorama_sfm`
 - [x] Script to convert an equirect COLMAP reconstruction to a cube-map one
 - [x] Script to train a Gaussian Splatting model from the cube-map reconstruction (gsplat)
 - [ ] Export/viewer wired to the above
@@ -42,9 +43,10 @@ This branch is a ground-up remake of the pipeline. What's done so far:
 
 Built from `artifacts/docker/dev.dockerfile`:
 
-- **COLMAP** (>= 4.1.0), built with native `EQUIRECTANGULAR` camera model support,
-  so panoramic frames can be reconstructed directly without reprojecting to
-  perspective views first.
+- **COLMAP** (>= 4.1.0), built with native `EQUIRECTANGULAR` camera model support, plus
+  `pycolmap` and its `panorama_sfm` example script/module (not published in the
+  `pycolmap` wheel, so sourced from the `third_party/colmap` submodule) for
+  reconstructing panoramic frames via a rig of virtual perspective views.
 - **Insta360 Media SDK**, exposed as `insta360_media_stitcher`, for stitching raw
   `.insv`/`.lrv` footage into a panorama video or image sequence.
 - **ExifTool**, for reading GPS/timestamp metadata off the source footage.
@@ -61,14 +63,16 @@ docker pull ghcr.io/mapmindai/gaussiansplatting:latest
 ```
 
 Or build it locally from your checkout. The build needs your `third_party/gsplat`
-submodule checked out (`git submodule update --init`) and passed in as an
-additional build context, since the Dockerfile's own build context is just
-`artifacts/docker/` (kept small so it doesn't have to send `data/`):
+and `third_party/colmap` submodules checked out (`git submodule update --init`)
+and passed in as additional build contexts, since the Dockerfile's own build
+context is just `artifacts/docker/` (kept small so it doesn't have to send
+`data/`):
 
 ```
-git submodule update --init third_party/gsplat
+git submodule update --init third_party/gsplat third_party/colmap
 docker build -f artifacts/docker/dev.dockerfile -t easygaussiansplatting:dev \
-  --build-context gsplatsrc=./third_party/gsplat artifacts/docker
+  --build-context gsplatsrc=./third_party/gsplat \
+  --build-context colmapsrc=./third_party/colmap artifacts/docker
 ```
 
 ## Using the tools

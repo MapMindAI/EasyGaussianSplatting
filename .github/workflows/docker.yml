@@ -7,12 +7,14 @@ on:
       - ".github/workflows/docker.yml"
       - "artifacts/**"
       - "third_party/gsplat"
+      - "third_party/colmap"
   pull_request:
     branches: ["master"]
     paths:
       - ".github/workflows/docker.yml"
       - "artifacts/**"
       - "third_party/gsplat"
+      - "third_party/colmap"
   workflow_dispatch:
 
 permissions:
@@ -54,6 +56,7 @@ jobs:
           context: ./artifacts/docker
           build-contexts: |
             gsplatsrc=./third_party/gsplat
+            colmapsrc=./third_party/colmap
           file: ./artifacts/docker/dev.dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}

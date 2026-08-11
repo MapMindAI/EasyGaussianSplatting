@@ -1,3 +1,6 @@
 [submodule "third_party/gsplat"]
 	path = third_party/gsplat
 	url = https://github.com/nerfstudio-project/gsplat.git
+[submodule "third_party/colmap"]
+	path = third_party/colmap
+	url = https://github.com/colmap/colmap
