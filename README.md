@@ -43,10 +43,7 @@ This branch is a ground-up remake of the pipeline. What's done so far:
 
 Built from `artifacts/docker/dev.dockerfile`:
 
-- **COLMAP** (>= 4.1.0), built with native `EQUIRECTANGULAR` camera model support, plus
-  `pycolmap` and its `panorama_sfm` example script/module (not published in the
-  `pycolmap` wheel, so sourced from the `third_party/colmap` submodule) for
-  reconstructing panoramic frames via a rig of virtual perspective views.
+- **COLMAP** (>= 4.1.0), built with native `EQUIRECTANGULAR` camera model support.
 - **Insta360 Media SDK**, exposed as `insta360_media_stitcher`, for stitching raw
   `.insv`/`.lrv` footage into a panorama video or image sequence.
 - **ExifTool**, for reading GPS/timestamp metadata off the source footage.
@@ -63,16 +60,14 @@ docker pull ghcr.io/mapmindai/gaussiansplatting:latest
 ```
 
 Or build it locally from your checkout. The build needs your `third_party/gsplat`
-and `third_party/colmap` submodules checked out (`git submodule update --init`)
-and passed in as additional build contexts, since the Dockerfile's own build
-context is just `artifacts/docker/` (kept small so it doesn't have to send
-`data/`):
+submodule checked out (`git submodule update --init`) and passed in as an
+additional build context, since the Dockerfile's own build context is just
+`artifacts/docker/` (kept small so it doesn't have to send `data/`):
 
 ```
-git submodule update --init third_party/gsplat third_party/colmap
+git submodule update --init third_party/gsplat
 docker build -f artifacts/docker/dev.dockerfile -t easygaussiansplatting:dev \
-  --build-context gsplatsrc=./third_party/gsplat \
-  --build-context colmapsrc=./third_party/colmap artifacts/docker
+  --build-context gsplatsrc=./third_party/gsplat artifacts/docker
 ```
 
 ## Using the tools
@@ -81,9 +76,15 @@ See [doc/tools.md](doc/tools.md).
 
 ## Running the reconstruction script in Docker
 
-`scripts/colmap_reconstruct.sh` needs the repo checkout itself (for
-`mapping/extract_images.py`), not just your data, so mount the whole checkout
-instead of only `data/`:
+`scripts/colmap_reconstruct.sh` needs the repo checkout itself for
+`mapping/extract_images.py` and the `third_party/colmap` submodule. Initialize
+that submodule and mount the whole checkout instead of only `data/`. The script
+installs the matching `pycolmap` wheel and its panorama dependencies in the
+disposable container at runtime.
+
+```
+git submodule update --init third_party/colmap
+```
 
 ```
 docker run -it --rm -v $(pwd):/workspace -w /workspace \

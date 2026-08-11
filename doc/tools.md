@@ -32,7 +32,8 @@ Run `scripts/colmap_reconstruct.sh <video_path> [frame_rate]` to extract frames
 from the panorama video (via `mapping/extract_images.py`) and reconstruct the
 scene with COLMAP's `EQUIRECTANGULAR` camera model. `frame_rate` (frames/sec
 sampled from the video) defaults to 2. Results land next to the video, in a
-`<video_name>_mapping/` directory:
+`<video_name>_mapping/` directory. Terminal output is also appended to
+`<video_name>_mapping/colmap_reconstruct.log`:
 
 ```
 scripts/colmap_reconstruct.sh data/pano.mp4 2
