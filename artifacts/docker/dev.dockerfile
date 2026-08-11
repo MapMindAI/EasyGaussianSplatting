@@ -74,8 +74,12 @@ RUN conda init bash
 # which only need cv2 (no GUI) and so share the base env rather than a dedicated one.
 RUN pip install --no-cache-dir jupyterlab opencv-python-headless
 
-# GGPS (panoramic Gaussian Splatting training), in its own conda env: see
-# installers/install_ggps.sh for why it needs a different Python/CUDA stack
-# than the base env above.
-COPY installers/install_ggps.sh /tmp/installers/
-RUN bash /tmp/installers/install_ggps.sh && rm /tmp/installers/install_ggps.sh
+# gsplat (Gaussian Splatting training), in its own conda env: see
+# installers/install_gsplat.sh for why it needs a different Python/CUDA
+# stack than the base env above. Sourced from the third_party/gsplat
+# submodule via the "gsplatsrc" build context (see README for the
+# --build-context flag this requires), not the default build context, so
+# the image build doesn't have to send the whole repo (including data/).
+COPY --from=gsplatsrc . /opt/gsplat
+COPY installers/install_gsplat.sh /tmp/installers/
+RUN bash /tmp/installers/install_gsplat.sh && rm /tmp/installers/install_gsplat.sh

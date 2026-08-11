@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # End-to-end pipeline: stitch an Insta360 capture, extract frames, run COLMAP
-# reconstruction, and train a Gaussian Splatting model (GGPS), all via the
-# project's Docker image. Runs on the host (not inside the container) and
-# drives `docker run` itself.
+# reconstruction, convert it to a cube-map model, and train a Gaussian
+# Splatting model (gsplat), all via the project's Docker image. Runs on the
+# host (not inside the container) and drives `docker run` itself.
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-  echo "Usage: $0 <input.insv> [frame_rate] [output_size] [gs_iterations] [gs_resolution]" >&2
+  echo "Usage: $0 <input.insv> [frame_rate] [output_size] [face_size] [gs_iterations] [gs_data_factor]" >&2
   exit 1
 fi
 
 INPUT_INSV="$1"
 FRAME_RATE="${2:-2}"
 OUTPUT_SIZE="${3:-8000x4000}"
-GS_ITERATIONS="${4:-30000}"
-GS_RESOLUTION="${5:-1}"
+FACE_SIZE="${4:-1024}"
+GS_ITERATIONS="${5:-30000}"
+GS_DATA_FACTOR="${6:-1}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/mapmindai/gaussiansplatting:latest}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -42,12 +43,14 @@ docker run --rm --gpus all \
   -e OUTPUT_SIZE="${OUTPUT_SIZE}" \
   -e FRAME_RATE="${FRAME_RATE}" \
   -e RECONSTRUCTION_DIR="/workspace/${REL_RECONSTRUCTION_DIR}" \
+  -e FACE_SIZE="${FACE_SIZE}" \
   -e GS_ITERATIONS="${GS_ITERATIONS}" \
-  -e GS_RESOLUTION="${GS_RESOLUTION}" \
+  -e GS_DATA_FACTOR="${GS_DATA_FACTOR}" \
   -v "${REPO_ROOT}:/workspace" -w /workspace "${DOCKER_IMAGE}" \
   bash -c 'set -euo pipefail
 scripts/stitch_pano.sh
 scripts/colmap_reconstruct.sh "$OUTPUT_VIDEO" "$FRAME_RATE"
-scripts/ggps_train.sh "$RECONSTRUCTION_DIR" "$GS_ITERATIONS" "$GS_RESOLUTION"'
+scripts/cubemap_convert.sh "$RECONSTRUCTION_DIR" "$FACE_SIZE"
+scripts/gsplat_train.sh "${RECONSTRUCTION_DIR}_cubemap" "$GS_ITERATIONS" "$GS_DATA_FACTOR"'
 
-echo "Model written to ${REPO_ROOT}/${REL_RECONSTRUCTION_DIR}/ggps_output"
+echo "Model written to ${REPO_ROOT}/${REL_RECONSTRUCTION_DIR}_cubemap/gsplat_output"

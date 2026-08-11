@@ -42,3 +42,26 @@ It runs `feature_extractor`, `sequential_matcher`, and `mapper` on CPU —
 COLMAP's default GPU path hard-aborts when the container has no CUDA device,
 so the script always requests `use_gpu 0`. The sparse model lands in
 `data/pano_mapping/sparse`.
+
+Run `scripts/cubemap_convert.sh <reconstruction_dir> [face_size] [faces]` to
+turn that equirect reconstruction into a 6-face cube map (gsplat only
+supports perspective/fisheye COLMAP camera models, not `EQUIRECTANGULAR`).
+`face_size` defaults to 1024; `faces` defaults to all six
+(`front,right,back,left,up,down`):
+
+```
+scripts/cubemap_convert.sh data/pano_mapping 1024
+```
+
+The cube-map model lands in `data/pano_mapping_cubemap`.
+
+Run `scripts/gsplat_train.sh <cubemap_reconstruction_dir> [iterations] [data_factor]`
+to train a [gsplat](https://github.com/nerfstudio-project/gsplat) model from
+that cube-map reconstruction. `iterations` defaults to 30000, `data_factor`
+(a COLMAP-style downsample factor) to 1:
+
+```
+scripts/gsplat_train.sh data/pano_mapping_cubemap 30000 2
+```
+
+The trained model lands in `data/pano_mapping_cubemap/gsplat_output`.
