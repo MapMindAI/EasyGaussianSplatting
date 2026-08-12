@@ -6,7 +6,7 @@
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-  echo "Usage: $0 <input.insv> [frame_rate] [output_size] [face_size] [gs_iterations] [gs_data_factor]" >&2
+  echo "Usage: $0 <input.insv> [frame_rate] [output_size] [face_size] [gs_iterations] [gs_data_factor] [gs_floater_reg_weight]" >&2
   exit 1
 fi
 
@@ -16,6 +16,7 @@ OUTPUT_SIZE="${3:-8000x4000}"
 FACE_SIZE="${4:-1024}"
 GS_ITERATIONS="${5:-30000}"
 GS_DATA_FACTOR="${6:-1}"
+GS_FLOATER_REG_WEIGHT="${7:-0.01}"
 DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/mapmindai/gaussiansplatting:latest}"
 TORCH_CACHE_VOLUME="easygaussiansplatting-torch-cache"
 
@@ -47,12 +48,13 @@ docker run --rm --gpus all --shm-size=1g \
   -e FACE_SIZE="${FACE_SIZE}" \
   -e GS_ITERATIONS="${GS_ITERATIONS}" \
   -e GS_DATA_FACTOR="${GS_DATA_FACTOR}" \
+  -e GS_FLOATER_REG_WEIGHT="${GS_FLOATER_REG_WEIGHT}" \
   --mount "type=volume,source=${TORCH_CACHE_VOLUME},target=/root/.cache/torch" \
   -v "${REPO_ROOT}:/workspace" -w /workspace "${DOCKER_IMAGE}" \
   bash -c 'set -euo pipefail
 scripts/stitch_pano.sh
 scripts/colmap_reconstruct.sh "$OUTPUT_VIDEO" "$FRAME_RATE"
 scripts/cubemap_convert.sh "$RECONSTRUCTION_DIR" "$FACE_SIZE"
-scripts/gsplat_train.sh "${RECONSTRUCTION_DIR}_cubemap" "$GS_ITERATIONS" "$GS_DATA_FACTOR"'
+scripts/gsplat_train.sh "${RECONSTRUCTION_DIR}_cubemap" "$GS_ITERATIONS" "$GS_DATA_FACTOR" "$GS_FLOATER_REG_WEIGHT"'
 
 echo "Model written to ${REPO_ROOT}/${REL_RECONSTRUCTION_DIR}_cubemap/gsplat_output"

@@ -7,14 +7,15 @@ camera per frame).
 
 ## Running the full pipeline in one command
 
-`scripts/run_pipeline.sh <input.insv> [frame_rate] [output_size] [face_size] [gs_iterations] [gs_data_factor]`
+`scripts/run_pipeline.sh <input.insv> [frame_rate] [output_size] [face_size] [gs_iterations] [gs_data_factor] [gs_floater_reg_weight]`
 runs on the host and drives the container itself, chaining stitching, frame
 extraction, COLMAP reconstruction, cube-map conversion, and gsplat training
 in a single `docker run --gpus all --shm-size=1g`. `input.insv` must live under the repo
 checkout (it gets bind-mounted as `/workspace`). `frame_rate` defaults to 2,
 `output_size` to `8000x4000`, `face_size` (cube-face width/height in pixels)
 to `1024`, `gs_iterations` to `30000`, `gs_data_factor` (a COLMAP-style
-downsample factor) to `1`:
+downsample factor) to `1`, and `gs_floater_reg_weight` (opacity/scale
+regularization strength) to `0.01`:
 
 ```
 scripts/run_pipeline.sh data/VID_xxx.insv 2 4000x2000
