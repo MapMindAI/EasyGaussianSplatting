@@ -149,6 +149,22 @@ def read_points3d_txt(path):
     return points
 
 
+def filter_outlier_points(points):
+    """Drop points whose distance from the scene's median position is a
+    statistical outlier (IQR method). Panorama SfM occasionally mis-
+    triangulates a point from weak-parallax matches, placing it tens of
+    scene-units away from everything else; left in, it seeds a stray
+    floater Gaussian at gsplat init."""
+    if len(points) < 4:
+        return points
+    xyz = np.array([point["xyz"] for point in points])
+    median = np.median(xyz, axis=0)
+    dist = np.linalg.norm(xyz - median, axis=1)
+    q1, q3 = np.percentile(dist, [25, 75])
+    threshold = q3 + 3.0 * (q3 - q1)
+    return [point for point, d in zip(points, dist) if d <= threshold]
+
+
 def write_cameras_txt(path, face_size, camera_ids):
     # 90-degree FOV: tan(45 deg) == 1 spans the half-width of the face in NDC.
     focal = face_size / 2.0
@@ -206,6 +222,11 @@ def convert(reconstruction_dir, output_dir, face_size, faces):
     points = read_points3d_txt(os.path.join(sparse_dir, "points3D.txt"))
     if not equirect_images:
         sys.exit(f"No registered images found in {sparse_dir}")
+
+    filtered_points = filter_outlier_points(points)
+    if len(filtered_points) != len(points):
+        print(f"Dropped {len(points) - len(filtered_points)} outlier point(s) of {len(points)}")
+    points = filtered_points
 
     equirect_camera = cameras[equirect_images[0]["camera_id"]]
     if equirect_camera["model"] != "EQUIRECTANGULAR":

@@ -2,12 +2,25 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 
 ## Repository layout
 
-* `README.md` — user-facing entry point: what the pipeline does, Docker image contents, usage.
-* `artifacts/docker/` — `dev.dockerfile` (COLMAP + Insta360 Media SDK + ExifTool + a `gsplat` conda env for training, built from the `third_party/gsplat` submodule) and its `installers/` scripts. CI (`.github/workflows/docker.yml`) builds and publishes this to `ghcr.io/mapmindai/gaussiansplatting`.
-* `scripts/` — the pipeline: `stitch_pano.sh`, `colmap_reconstruct.sh`, `cubemap_convert.sh`, and `gsplat_train.sh` each run inside the container; `run_pipeline.sh` runs on the host and chains all four via `docker run`.
-* `mapping/` — `extract_images.py` (the frame-extraction helper `colmap_reconstruct.sh` calls) and `equirect_to_cubemap.py` (the equirect-to-cube-map conversion `cubemap_convert.sh` calls).
-* `third_party/gsplat` — [gsplat](https://github.com/nerfstudio-project/gsplat) submodule; `scripts/gsplat_train.sh` runs its `examples/simple_trainer.py`.
-* `data/` — local dev datasets/captures (see §5); not repo-managed.
+```text
+.
+├── .github/workflows/docker.yml  # Builds and publishes the Docker image.
+├── artifacts/docker/
+│   ├── dev.dockerfile            # COLMAP, Insta360 SDK, ExifTool, and gsplat.
+│   └── installers/               # Docker image installation scripts.
+├── data/                         # Local datasets and captures; not repo-managed (see §5).
+├── mapping/
+│   ├── extract_images.py         # Frame extraction for COLMAP reconstruction.
+│   └── equirect_to_cubemap.py    # Equirectangular-to-cube-map conversion.
+├── scripts/
+│   ├── stitch_pano.sh            # Container: stitch Insta360 footage.
+│   ├── colmap_reconstruct.sh     # Container: extract frames and run COLMAP.
+│   ├── cubemap_convert.sh        # Container: convert the reconstruction.
+│   ├── gsplat_train.sh           # Container: train with gsplat.
+│   └── run_pipeline.sh           # Host: run the full pipeline via Docker.
+├── third_party/gsplat/           # gsplat submodule used by gsplat_train.sh.
+└── README.md                     # Pipeline, Docker image, and usage overview.
+```
 
 ## 1. Read the docs before starting a task
 

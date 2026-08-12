@@ -57,11 +57,12 @@ scripts/cubemap_convert.sh data/pano_mapping 1024
 
 The cube-map model lands in `data/pano_mapping_cubemap`.
 
-Run `scripts/gsplat_train.sh <cubemap_reconstruction_dir> [iterations] [data_factor]`
+Run `scripts/gsplat_train.sh <cubemap_reconstruction_dir> [iterations] [data_factor] [floater_reg_weight]`
 to train a [gsplat](https://github.com/nerfstudio-project/gsplat) model from
 that cube-map reconstruction. `iterations` defaults to 30000, `data_factor`
-(a COLMAP-style downsample factor) to 1. The container needs at least 1 GiB of
-shared memory for gsplat's data-loader workers:
+(a COLMAP-style downsample factor) to 1, and `floater_reg_weight`
+(opacity/scale regularization strength) to 0.01. The container needs at least
+1 GiB of shared memory for gsplat's data-loader workers:
 
 ```
 scripts/gsplat_train.sh data/pano_mapping_cubemap 30000 2
