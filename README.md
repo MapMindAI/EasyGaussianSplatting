@@ -131,10 +131,11 @@ The cube-map model lands in `<reconstruction_dir>_cubemap/` (`images/` +
 
 ## Training a Gaussian Splatting model
 
-`scripts/gsplat_train.sh <cubemap_reconstruction_dir> [iterations] [data_factor]`
+`scripts/gsplat_train.sh <cubemap_reconstruction_dir> [iterations] [data_factor] [floater_reg_weight]`
 trains a model with [gsplat](https://github.com/nerfstudio-project/gsplat)
 from a `cubemap_convert.sh` output directory. `iterations` defaults to
-`30000`, `data_factor` (a COLMAP-style downsample factor) to `1`:
+`30000`, `data_factor` (a COLMAP-style downsample factor) to `1`,
+`floater_reg_weight` (opacity/scale regularization strength) to `0.01`:
 
 ```
 docker run -it --rm --gpus all --shm-size=1g -v $(pwd):/workspace -w /workspace \
@@ -142,7 +143,11 @@ docker run -it --rm --gpus all --shm-size=1g -v $(pwd):/workspace -w /workspace 
   scripts/gsplat_train.sh data/pano_mapping_cubemap 30000 2
 ```
 
-The trained model lands in `<cubemap_reconstruction_dir>/gsplat_output/`.
+The trained model lands in `<cubemap_reconstruction_dir>/gsplat_output/`,
+including a final point cloud under `ply/`. The trainer also
+enables camera pose refinement, opacity/scale regularization (to suppress
+floaters), and antialiased rendering — gsplat defaults these off, but they
+consistently help on cube-map-converted panorama captures.
 Export/viewer integration isn't wired yet — see Status.
 
 Training renders at the cube face size divided by `data_factor`, and the
