@@ -41,6 +41,7 @@ docker run "${DOCKER_RUN_FLAGS[@]}" \
 scripts/stitch_pano.sh
 scripts/colmap_reconstruct.sh "$OUTPUT_VIDEO" "$FRAME_RATE"
 scripts/cubemap_convert.sh "$RECONSTRUCTION_DIR" "$FACE_SIZE"
+scripts/segment_people.sh "${RECONSTRUCTION_DIR}_cubemap"
 scripts/gsplat_train.sh "${RECONSTRUCTION_DIR}_cubemap" "$GS_ITERATIONS" "$GS_DATA_FACTOR" "$GS_FLOATER_REG_WEIGHT"'
 
 echo "Model written to ${REPO_ROOT}/${REL_RECONSTRUCTION_DIR}_cubemap/gsplat_output"

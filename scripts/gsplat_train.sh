@@ -17,15 +17,11 @@ FLOATER_REG_WEIGHT="${4:-0.01}"
 
 RESULT_DIR="${CUBEMAP_DIR}/gsplat_output"
 
-source /opt/miniconda3/etc/profile.d/conda.sh
-# conda's cuda-nvcc activation hook references NVCC_PREPEND_FLAGS without a
-# default, which trips `set -u` above.
-set +u
-conda activate gsplat
-set -u
-cd /opt/gsplat/examples
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/gsplat_env.sh"
+
 export PYTORCH_ALLOC_CONF="${PYTORCH_ALLOC_CONF:-expandable_segments:True}"
-python3 simple_trainer.py default \
+python3 "${SCRIPT_DIR}/../mapping/train_gsplat_with_masks.py" default \
   --data_dir "${CUBEMAP_DIR}" \
   --data_factor "${DATA_FACTOR}" \
   --max_steps "${ITERATIONS}" \
