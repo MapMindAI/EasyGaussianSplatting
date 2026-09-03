@@ -17,6 +17,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── colmap_reconstruct.sh     # Container: extract frames and run COLMAP.
 │   ├── cubemap_convert.sh        # Container: convert the reconstruction.
 │   ├── gsplat_train.sh           # Container: train with gsplat.
+│   ├── docker_common.sh          # Shared helpers for the host-side scripts.
+│   ├── run_gsplat.sh             # Host: train an existing cube-map model via Docker.
 │   └── run_pipeline.sh           # Host: run the full pipeline via Docker.
 ├── third_party/gsplat/           # gsplat submodule used by gsplat_train.sh.
 └── README.md                     # Pipeline, Docker image, and usage overview.
