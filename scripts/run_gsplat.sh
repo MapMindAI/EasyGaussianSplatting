@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Train a Gaussian Splatting model with gsplat from an existing cube-map
-# reconstruction (see cubemap_convert.sh), via the project's Docker image.
+# Mask out people and train a Gaussian Splatting model with gsplat from an
+# existing cube-map reconstruction (see cubemap_convert.sh), via the project's
+# Docker image.
 # Runs on the host (not inside the container) and drives `docker run` itself.
 set -euo pipefail
 
@@ -16,8 +17,14 @@ ITERATIONS="${2:-30000}"
 DATA_FACTOR="${3:-1}"
 FLOATER_REG_WEIGHT="${4:-0.01}"
 
-docker run "${DOCKER_RUN_FLAGS[@]}" "${DOCKER_IMAGE}" \
-  scripts/gsplat_train.sh "/workspace/${REL_CUBEMAP_DIR}" \
-  "${ITERATIONS}" "${DATA_FACTOR}" "${FLOATER_REG_WEIGHT}"
+docker run "${DOCKER_RUN_FLAGS[@]}" \
+  -e CUBEMAP_DIR="/workspace/${REL_CUBEMAP_DIR}" \
+  -e ITERATIONS="${ITERATIONS}" \
+  -e DATA_FACTOR="${DATA_FACTOR}" \
+  -e FLOATER_REG_WEIGHT="${FLOATER_REG_WEIGHT}" \
+  "${DOCKER_IMAGE}" \
+  bash -c 'set -euo pipefail
+scripts/segment_people.sh "$CUBEMAP_DIR"
+scripts/gsplat_train.sh "$CUBEMAP_DIR" "$ITERATIONS" "$DATA_FACTOR" "$FLOATER_REG_WEIGHT"'
 
 echo "Model written to ${REPO_ROOT}/${REL_CUBEMAP_DIR}/gsplat_output"

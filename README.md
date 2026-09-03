@@ -28,6 +28,7 @@ and `pano_mapping_cubemap/gsplat_output` (the trained model). Set
 `DOCKER_IMAGE` to use a locally built image instead of the published one. The
 script keeps downloaded PyTorch model weights in the persistent Docker volume
 `easygaussiansplatting-torch-cache`, so later runs reuse them.
+Existing person-segmentation masks are reused on later runs.
 
 ![COLMAP sparse reconstruction viewer](assets/reconstruction_viewer.jpg)
 
@@ -151,7 +152,7 @@ so retraining an existing cube-map model needs no pipeline rerun. The
 directory must live under the repo checkout:
 
 ```
-scripts/run_gsplat.sh data/panorama 30000 2
+scripts/run_gsplat.sh data/panorama 30000 1 0.01
 ```
 
 The trained model lands in `<cubemap_reconstruction_dir>/gsplat_output/`,
