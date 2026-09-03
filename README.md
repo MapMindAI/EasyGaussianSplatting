@@ -144,6 +144,16 @@ docker run -it --rm --gpus all --shm-size=1g -v $(pwd):/workspace -w /workspace 
   scripts/gsplat_train.sh data/pano_mapping_cubemap 30000 2
 ```
 
+`scripts/run_gsplat.sh <cubemap_reconstruction_dir> [iterations] [data_factor] [floater_reg_weight]`
+is the host-side equivalent: same arguments, but it drives the `docker run`
+itself (GPU flags, repo bind-mount, and the persistent PyTorch weight cache),
+so retraining an existing cube-map model needs no pipeline rerun. The
+directory must live under the repo checkout:
+
+```
+scripts/run_gsplat.sh data/panorama 30000 2
+```
+
 The trained model lands in `<cubemap_reconstruction_dir>/gsplat_output/`,
 including a final point cloud under `ply/`. The trainer also
 enables camera pose refinement, opacity/scale regularization (to suppress
