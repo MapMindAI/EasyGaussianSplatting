@@ -38,6 +38,6 @@ python3 "${SCRIPT_DIR}/../mapping/train_gsplat_with_masks.py" default \
   --disable_viewer \
   --result_dir "${RESULT_DIR}" \
   --strategy.grow-grad2d "${GSPLAT_GROW_GRAD2D}" \
-  ${GSPLAT_STRATEGY_OPTIONS}
+  "${GSPLAT_STRATEGY_OPTIONS[@]}"
 
 echo "Model written to ${RESULT_DIR}"

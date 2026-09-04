@@ -67,7 +67,7 @@ for configuration in "${CONFIGURATIONS[@]}"; do
   fi
 
   if [ "${subcommand}" = "default" ]; then
-    flags="${GSPLAT_STRATEGY_OPTIONS} ${flags}"
+    flags="${GSPLAT_STRATEGY_OPTIONS[*]} ${flags}"
   fi
 
   mkdir -p "${run_dir}"
