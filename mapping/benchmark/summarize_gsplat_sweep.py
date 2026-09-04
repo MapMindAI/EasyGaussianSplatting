@@ -467,7 +467,8 @@ def main():
     )
 
     command = (
-        f"python3 mapping/summarize_gsplat_sweep.py --runs-root {arguments.runs_root}"
+        f"python3 mapping/benchmark/summarize_gsplat_sweep.py"
+        f" --runs-root {arguments.runs_root}"
     )
     arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(

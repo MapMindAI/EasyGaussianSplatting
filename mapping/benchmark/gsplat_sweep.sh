@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Train one gsplat model per parameter configuration from a single cube-map
 # reconstruction, so the configurations can be compared against each other
-# (see mapping/summarize_gsplat_sweep.py for the report).
+# (see summarize_gsplat_sweep.py for the report).
 # Runs on the host (not inside the container) and drives `docker run` itself.
 #
 # Runs are sequential: the configurations are compared partly on training time
@@ -15,8 +15,9 @@ if [ $# -lt 1 ]; then
   exit 1
 fi
 
-source "$(dirname "${BASH_SOURCE[0]}")/docker_common.sh"
-source "$(dirname "${BASH_SOURCE[0]}")/gsplat_train_defaults.sh"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts" && pwd)"
+source "${SCRIPTS_DIR}/docker_common.sh"
+source "${SCRIPTS_DIR}/gsplat_train_defaults.sh"
 
 REL_CUBEMAP_DIR="$(repo_relative_path "$1")"
 ITERATIONS="${2:-30000}"

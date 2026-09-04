@@ -77,13 +77,13 @@ Person segmentation masks mirror any nested folders under the reconstruction's
 
 ## Comparing parameter configurations
 
-`scripts/gsplat_sweep.sh` trains one model per configuration from a single
+`mapping/benchmark/gsplat_sweep.sh` trains one model per configuration from a single
 cube-map reconstruction, into `<reconstruction>/sweep/<name>/`. Runs are
 sequential, and a configuration that already recorded evaluation metrics is
 skipped, so an interrupted sweep resumes where it stopped:
 
 ```
-scripts/gsplat_sweep.sh data/panorama 30000
+mapping/benchmark/gsplat_sweep.sh data/panorama 30000
 ```
 
 Edit the `CONFIGURATIONS` array in that script to change what is compared; each
@@ -92,13 +92,13 @@ flags under test. The report is generated output and is not tracked: it links
 to point clouds and thumbnails under `data/`, so regenerate it rather than
 reading a stale copy.
 
-`mapping/summarize_gsplat_sweep.py` then writes a Markdown comparison of those
+`mapping/benchmark/summarize_gsplat_sweep.py` then writes a Markdown comparison of those
 runs -- evaluation metrics, the geometry their point clouds actually contain,
 the settings that differ between them, and each run's renders beside the ground
 truth -- to `doc/gsplat_parameter_sweep.md`. Runs still training show as pending:
 
 ```
-python3 mapping/summarize_gsplat_sweep.py --runs-root data/panorama/sweep
+python3 mapping/benchmark/summarize_gsplat_sweep.py --runs-root data/panorama/sweep
 ```
 
 The `Radius / spacing` column is the one that explains lost detail: it divides
