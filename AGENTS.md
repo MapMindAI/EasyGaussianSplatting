@@ -11,12 +11,15 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 ├── data/                         # Local datasets and captures; not repo-managed (see §5).
 ├── mapping/
 │   ├── extract_images.py         # Frame extraction for COLMAP reconstruction.
+│   ├── summarize_gsplat_sweep.py # Markdown comparison of parameter-sweep runs.
 │   └── equirect_to_cubemap.py    # Equirectangular-to-cube-map conversion.
 ├── scripts/
 │   ├── stitch_pano.sh            # Container: stitch Insta360 footage.
 │   ├── colmap_reconstruct.sh     # Container: extract frames and run COLMAP.
 │   ├── cubemap_convert.sh        # Container: convert the reconstruction.
 │   ├── gsplat_train.sh           # Container: train with gsplat.
+│   ├── gsplat_train_defaults.sh  # Shipped training settings, shared with the sweep.
+│   ├── gsplat_sweep.sh           # Host: train one model per parameter configuration.
 │   ├── docker_common.sh          # Shared helpers for the host-side scripts.
 │   ├── run_gsplat.sh             # Host: train an existing cube-map model via Docker.
 │   └── run_pipeline.sh           # Host: run the full pipeline via Docker.

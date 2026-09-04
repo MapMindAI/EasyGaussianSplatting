@@ -68,4 +68,40 @@ that cube-map reconstruction. `iterations` defaults to 30000, `data_factor`
 scripts/gsplat_train.sh data/pano_mapping_cubemap 30000 2
 ```
 
-The trained model lands in `data/pano_mapping_cubemap/gsplat_output`.
+The densification settings live in `scripts/gsplat_train_defaults.sh`, shared
+with the sweep so its baseline cannot drift from what ships; `mapping/train_gsplat_with_masks.py` only attaches the masks and passes every argument through to simple_trainer. The trained model lands in `data/pano_mapping_cubemap/gsplat_output`.
+
+Person segmentation masks mirror any nested folders under the reconstruction's
+`images/` directory, so each mask keeps the same relative image path and adds
+`.png` to the image filename.
+
+## Comparing parameter configurations
+
+`scripts/gsplat_sweep.sh` trains one model per configuration from a single
+cube-map reconstruction, into `<reconstruction>/sweep/<name>/`. Runs are
+sequential, and a configuration that already recorded evaluation metrics is
+skipped, so an interrupted sweep resumes where it stopped:
+
+```
+scripts/gsplat_sweep.sh data/panorama 30000
+```
+
+Edit the `CONFIGURATIONS` array in that script to change what is compared; each
+entry is a name, a simple_trainer subcommand (`default` or `mcmc`) and the
+flags under test. The report is generated output and is not tracked: it links
+to point clouds and thumbnails under `data/`, so regenerate it rather than
+reading a stale copy.
+
+`mapping/summarize_gsplat_sweep.py` then writes a Markdown comparison of those
+runs -- evaluation metrics, the geometry their point clouds actually contain,
+the settings that differ between them, and each run's renders beside the ground
+truth -- to `doc/gsplat_parameter_sweep.md`. Runs still training show as pending:
+
+```
+python3 mapping/summarize_gsplat_sweep.py --runs-root data/panorama/sweep
+```
+
+The `Radius / spacing` column is the one that explains lost detail: it divides
+the median Gaussian radius by the estimated median distance to the nearest
+neighbour, so a value well below 1 means the Gaussians are too small to tile a
+surface and leave gaps.
