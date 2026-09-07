@@ -7,16 +7,32 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 ├── .github/workflows/docker.yml  # Builds and publishes the Docker image.
 ├── artifacts/docker/
 │   ├── dev.dockerfile            # COLMAP, Insta360 SDK, ExifTool, and gsplat.
+│   ├── jetson.dockerfile         # arm64 image: JetPack 6 CUDA and gsplat.
 │   └── installers/               # Docker image installation scripts.
 ├── data/                         # Local datasets and captures; not repo-managed (see §5).
+├── doc/                          # Pipeline, tooling, and server guides.
+├── gsplat_server/                # gRPC training server (see doc/gsplat_server.md).
+│   ├── server.py                 # gRPC service and job queue.
+│   ├── serve.sh                  # Container: start the service.
+│   ├── run_server.sh             # Host: start the service via Docker.
+│   ├── client.py                 # Command-line client.
+│   ├── parameters.py             # JobParameters text-protobuf helpers.
+│   ├── proto/                    # gsplat.proto and its generated bindings.
+│   └── config/                   # Shipped JobParameters defaults.
 ├── mapping/
+│   ├── benchmark/                # Parameter sweeps and their Markdown report.
+│   │   └── configurations/       # One JobParameters file per swept configuration.
 │   ├── extract_images.py         # Frame extraction for COLMAP reconstruction.
+│   ├── segment_people.py         # Person masks for the training images.
+│   ├── train_gsplat_with_masks.py # simple_trainer entrypoint; reads JobParameters.
 │   └── equirect_to_cubemap.py    # Equirectangular-to-cube-map conversion.
 ├── scripts/
 │   ├── stitch_pano.sh            # Container: stitch Insta360 footage.
 │   ├── colmap_reconstruct.sh     # Container: extract frames and run COLMAP.
 │   ├── cubemap_convert.sh        # Container: convert the reconstruction.
+│   ├── segment_people.sh         # Container: write person masks.
 │   ├── gsplat_train.sh           # Container: train with gsplat.
+│   ├── gsplat_env.sh             # Container: activate the gsplat conda env.
 │   ├── docker_common.sh          # Shared helpers for the host-side scripts.
 │   ├── run_gsplat.sh             # Host: train an existing cube-map model via Docker.
 │   └── run_pipeline.sh           # Host: run the full pipeline via Docker.

@@ -1,0 +1,76 @@
+# JobParameters defaults shipped by the gsplat training server.
+#
+# The main detail lever is the final Gaussian count. Lower grow_grad2d or
+# prune_opa, or raise refine_stop_iter, to retain more detail at the cost of
+# GPU memory. DefaultStrategy has no upper bound on the count.
+#
+# floater_reg_weight is applied to both opacity_reg and scale_reg. It suppresses
+# low-opacity and oversized Gaussians; lower it for more detail and higher GPU
+# memory use.
+#
+# grow_grad2d is the image-plane gradient threshold for splitting or duplicating
+# Gaussians. absgrad uses absolute rather than averaged gradients and therefore
+# requires a higher threshold than the gsplat default.
+#
+# prune_opa removes Gaussians below the opacity threshold. grow_scale3d selects
+# duplication below the 3D scale threshold; prune_scale3d removes larger ones.
+# prune_scale2d removes Gaussians covering too much of an image while the
+# refinement scale window is active.
+#
+# refine_start_iter, refine_stop_iter, and refine_every control densification.
+# reset_every periodically resets opacity so unused Gaussians can be pruned.
+# strategy selects between the two densification strategies. STRATEGY_DEFAULT
+# has no ceiling on the Gaussian count, so on a fixed GPU it grows until
+# training runs out of memory. STRATEGY_MCMC holds the count at cap_max,
+# which is how to ask for a specific budget.
+#
+# This file is the schema's defaults; a file passed to --parameters is
+# layered over it and only has to name what it changes. Its schema is
+# gsplat.proto.
+
+# Number of optimization steps and evaluation/save schedule.
+iterations: 30000
+# COLMAP image downsample factor used by the trainer.
+data_factor: 1
+# Regularization weight applied to both opacity and scale terms.
+floater_reg_weight: 0.01
+# Image-plane gradient threshold for Gaussian splitting or duplication.
+grow_grad2d: 0.0006
+# Minimum opacity below which a Gaussian is pruned. It also sets the opacity
+# reset floor, which gsplat takes as prune_opa * 2, so lowering it does not
+# simply prune less: at 0.002 every reset clamps opacities to 0.004, and with
+# floater_reg_weight 0.01 pushing them down they never recover above the prune
+# threshold. That collapses this dataset from 409k Gaussians to 10k.
+prune_opa: 0.005
+# Use absolute image-plane gradients instead of averaged gradients.
+absgrad: true
+# 3D scale below which densification duplicates a Gaussian.
+grow_scale3d: 0.01
+# Maximum 3D scale; larger Gaussians are pruned.
+prune_scale3d: 0.1
+# Maximum image-plane scale before a Gaussian is pruned.
+prune_scale2d: 0.15
+# First iteration at which densification runs.
+refine_start_iter: 500
+# Last iteration at which densification runs.
+refine_stop_iter: 20000
+# Number of iterations between densification passes.
+refine_every: 100
+# Number of iterations between opacity resets.
+reset_every: 3000
+# Densification strategy: STRATEGY_MCMC or STRATEGY_MCMC.
+strategy: STRATEGY_MCMC
+# MCMC only: Gaussian count to converge to. Ignored by STRATEGY_DEFAULT.
+cap_max: 900000
+# Spherical-harmonic degree for view-dependent colour.
+sh_degree: 3
+# Weight of the SSIM term in the loss; the rest is L1. 0.5 beat gsplat's 0.2
+# on every metric at no cost.
+ssim_lambda: 0.5
+# Packed rasterization: less GPU memory, slightly slower.
+packed: true
+# Optimize camera poses alongside the model.
+pose_opt: true
+# Segment people out of the images before training, when the upload carried no
+# masks/ of its own. Costs a few minutes and needs the segmentation weights.
+run_segmentation: false

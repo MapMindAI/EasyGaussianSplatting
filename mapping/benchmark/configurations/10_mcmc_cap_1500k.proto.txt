@@ -1,0 +1,2 @@
+cap_max: 1500000
+ssim_lambda: 0.2

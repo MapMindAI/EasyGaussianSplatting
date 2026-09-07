@@ -3,7 +3,7 @@
 
 Masks are white where gsplat should supervise training and black over people,
 named "<image_name>.png" after the image they belong to (COLMAP's mask naming
-convention).
+convention). Nested image folders are mirrored under the mask directory.
 """
 
 import argparse
@@ -59,8 +59,8 @@ def main():
 
     image_paths = sorted(
         path
-        for path in args.image_dir.iterdir()
-        if path.suffix.lower() in IMAGE_SUFFIXES
+        for path in args.image_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
     )
     if not image_paths:
         raise SystemExit(f"No images found in {args.image_dir}")
@@ -69,7 +69,11 @@ def main():
     pending_image_paths = [
         image_path
         for image_path in image_paths
-        if args.overwrite or not (args.mask_dir / f"{image_path.name}.png").exists()
+        if args.overwrite
+        or not (
+            args.mask_dir
+            / f"{image_path.relative_to(args.image_dir)}.png"
+        ).exists()
     ]
     if not pending_image_paths:
         print(f"Masks already exist in {args.mask_dir}; skipping segmentation")
@@ -81,7 +85,8 @@ def main():
 
     masked_images = 0
     for count, image_path in enumerate(pending_image_paths, start=1):
-        mask_path = args.mask_dir / f"{image_path.name}.png"
+        mask_path = args.mask_dir / f"{image_path.relative_to(args.image_dir)}.png"
+        mask_path.parent.mkdir(parents=True, exist_ok=True)
         image = Image.open(image_path).convert("RGB")
         mask = person_mask(
             model,
@@ -93,7 +98,7 @@ def main():
         )
         Image.fromarray(mask).save(mask_path)
         masked_images += int((mask == 0).any())
-        print(f"[{count}/{len(pending_image_paths)}] {mask_path.name}", flush=True)
+        print(f"[{count}/{len(pending_image_paths)}] {mask_path}", flush=True)
 
     print(f"Masks written to {args.mask_dir} ({masked_images} images contain people)")
 

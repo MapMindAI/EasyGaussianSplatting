@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Shared helpers for the host-side scripts that drive `docker run` themselves
-# (run_pipeline.sh, run_gsplat.sh). Source it; don't execute it.
+# Shared helpers for the host-side scripts that drive `docker run` themselves.
+# Source it; don't execute it.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DOCKER_IMAGE="${DOCKER_IMAGE:-ghcr.io/mapmindai/gaussiansplatting:latest}"
+# Overridden by callers whose host exposes its GPU differently, e.g. Jetson.
+read -r -a DOCKER_GPU_FLAGS <<< "${DOCKER_GPU_FLAGS:---gpus all}"
 # Prefix for `docker run`; extra options and the image go after it. The volume
-# persists downloaded PyTorch weights across runs.
+# persists downloaded PyTorch weights across runs. The shm size is a cap on a
+# tmpfs, not a reservation: below roughly 8g the trainer's dataloader workers
+# die with a bus error partway through a run.
 DOCKER_RUN_FLAGS=(
-  --rm --gpus all --shm-size=1g
+  --rm "${DOCKER_GPU_FLAGS[@]}" --shm-size=8g
   --mount "type=volume,source=easygaussiansplatting-torch-cache,target=/root/.cache/torch"
   -v "${REPO_ROOT}:/workspace" -w /workspace
 )

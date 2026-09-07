@@ -1,0 +1,5 @@
+# Pinned against the shipped defaults, which are now MCMC.
+strategy: STRATEGY_DEFAULT
+ssim_lambda: 0.2
+packed: false
+# The DefaultStrategy configuration this repo shipped before the sweep.

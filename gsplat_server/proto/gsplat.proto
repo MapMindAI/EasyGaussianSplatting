@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package gsplat;
+
+service GsplatService {
+  rpc SubmitJob(stream SubmitJobRequest) returns (Job);
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  rpc GetJob(GetJobRequest) returns (Job);
+  rpc StreamLog(StreamLogRequest) returns (stream LogChunk);
+  rpc DownloadResult(DownloadResultRequest) returns (stream ResultChunk);
+  rpc DeleteJob(DeleteJobRequest) returns (DeleteJobResponse);
+}
+
+message SubmitJobRequest {
+  oneof payload {
+    JobParameters parameters = 1;
+    bytes archive_chunk = 2;
+  }
+}
+message JobParameters {
+  // Number of optimization steps and evaluation/save schedule.
+  int32 iterations = 1;
+  // COLMAP image downsample factor used by the trainer.
+  int32 data_factor = 2;
+  // Regularization weight applied to both opacity and scale terms.
+  float floater_reg_weight = 3;
+  // Image-plane gradient threshold for Gaussian splitting or duplication.
+  float grow_grad2d = 4;
+  // Minimum opacity below which a Gaussian is pruned.
+  float prune_opa = 5;
+  // Use absolute image-plane gradients instead of averaged gradients.
+  bool absgrad = 6;
+  // 3D scale below which densification duplicates a Gaussian.
+  float grow_scale3d = 7;
+  // Maximum 3D scale; larger Gaussians are pruned.
+  float prune_scale3d = 8;
+  // Maximum image-plane scale before a Gaussian is pruned.
+  float prune_scale2d = 9;
+  // First iteration at which densification runs.
+  int32 refine_start_iter = 10;
+  // Last iteration at which densification runs.
+  int32 refine_stop_iter = 11;
+  // Number of iterations between densification passes.
+  int32 refine_every = 12;
+  // Number of iterations between opacity resets.
+  int32 reset_every = 13;
+  // Densification strategy. DEFAULT grows the Gaussian count without an upper
+  // bound; MCMC holds it at cap_max, which is the only way to fit a chosen
+  // budget on a fixed GPU.
+  Strategy strategy = 14;
+  // MCMC only: the Gaussian count to converge to. Ignored by DEFAULT.
+  int32 cap_max = 15;
+  // Spherical-harmonic degree for view-dependent colour. Lower it to spend the
+  // memory on more Gaussians instead.
+  int32 sh_degree = 16;
+  // Weight of the SSIM term in the loss; the rest is L1.
+  float ssim_lambda = 17;
+  // Packed rasterization: less GPU memory, slightly slower.
+  bool packed = 18;
+  // Optimize camera poses alongside the model.
+  bool pose_opt = 19;
+  // Segment people out of the uploaded images before training, when the upload
+  // carried no masks/ directory of its own.
+  bool run_segmentation = 20;
+}
+
+enum Strategy {
+  STRATEGY_UNSPECIFIED = 0;
+  STRATEGY_DEFAULT = 1;
+  STRATEGY_MCMC = 2;
+}
+message Job {
+  string id = 1;
+  string state = 2;
+  JobParameters parameters = 3;
+  double created_at = 4;
+  double started_at = 5;
+  double finished_at = 6;
+  string error = 7;
+}
+message ListJobsRequest {}
+message ListJobsResponse { repeated Job jobs = 1; }
+message GetJobRequest { string id = 1; }
+message StreamLogRequest { string id = 1; int64 offset = 2; }
+message LogChunk { bytes data = 1; int64 offset = 2; }
+message DownloadResultRequest { string id = 1; }
+message ResultChunk { bytes data = 1; }
+message DeleteJobRequest { string id = 1; }
+message DeleteJobResponse { string id = 1; }
