@@ -1,70 +1,120 @@
-# Gaussian Splatting server on a Jetson AGX Orin
+# Gaussian Splatting server on Linux
 
-`gsplat_server/` turns an Orin into a training appliance: clients upload a COLMAP
-model over gRPC, the Orin trains it with gsplat, and they download the resulting
-point cloud. It carries only the training half of the pipeline — clients run
-COLMAP and `scripts/cubemap_convert.sh` themselves, since gsplat's COLMAP loader
-accepts only perspective and fisheye cameras.
+`gsplat_server/` turns a Linux box with an NVIDIA GPU into a training
+appliance: clients upload a COLMAP model over gRPC, the server trains it with
+gsplat, and they download the resulting point cloud. It carries only the
+training half of the pipeline — clients run COLMAP and
+`scripts/cubemap_convert.sh` themselves, since gsplat's COLMAP loader accepts
+only perspective and fisheye cameras.
 
 | File | |
 | --- | --- |
-| `jetson.dockerfile` | arm64 image: JetPack 6 (L4T r36.4, CUDA 12.6) plus gsplat. |
-| `install_gsplat.sh` | Image installation script. |
+| `artifacts/docker/dev.dockerfile` | x86_64 image: COLMAP, the gsplat conda env, and the pipeline tools. |
+| `artifacts/docker/installers/install_gsplat.sh` | Image installation script for the gsplat env. |
 | `server.py` | The gRPC service and its job queue. |
 | `serve.sh` | Container: start the service. |
 | `run_server.sh` | Host: start the service via Docker. |
 | `client.py` | Command-line gRPC client. Requires `grpcio`. |
 | `proto/build.sh` | Generates ignored Python bindings from `proto/gsplat.proto`. |
 
+## Prerequisites
+
+* x86_64 Linux with Docker, an NVIDIA driver, and the NVIDIA Container
+  Toolkit, so `docker run --gpus all` reaches the GPU.
+* A checkout of this repo on the host, which the container runs bind-mounted at
+  `/workspace`.
+* `protoc` and the gRPC Python plugin, to generate the bindings below:
+  `sudo apt install protobuf-compiler protobuf-compiler-grpc`.
+
 ## Getting the image
 
 CI publishes it on every push to `master`:
 
 ```
-docker pull ghcr.io/mapmindai/gaussiansplatting-jetson:latest
+docker pull ghcr.io/mapmindai/gaussiansplatting:latest
 ```
 
-Building it locally has to happen on arm64 — cross-building the CUDA extensions
-under QEMU takes hours. As with the x86 image, gsplat comes from a separate
-build context so the build doesn't have to send `data/`:
+<details>
+<summary>Building it locally</summary>
+
+The submodules have to be checked out and passed in as extra build contexts, so
+the build doesn't have to send `data/`:
 
 ```
-git submodule update --init third_party/gsplat
-docker build -f artifacts/docker/jetson.dockerfile -t gaussiansplatting-jetson:dev \
+git submodule update --init third_party/gsplat third_party/colmap
+docker build -f artifacts/docker/dev.dockerfile -t easygaussiansplatting:dev \
   --build-context gsplatsrc=./third_party/gsplat \
-  --build-context colmapsrc=./third_party/colmap \
-  --build-context reposrc=. artifacts/docker
+  --build-context colmapsrc=./third_party/colmap artifacts/docker
 ```
 
-For a direct install, initialize the submodule and run the shared installer from the checkout:
+Point `DOCKER_IMAGE` at the local tag to run it instead of the published one.
+
+</details>
+
+## Generating the proto bindings
+
+`gsplat_pb2.py` and `gsplat_pb2_grpc.py` are gitignored, and the image ships
+`grpcio` but no `protoc`, so generate them in the checkout before the first
+start:
 
 ```
-git submodule update --init third_party/gsplat
-GSPLAT_DIR="$PWD/third_party/gsplat" bash artifacts/docker/installers/install_gsplat.sh
+bash gsplat_server/proto/build.sh
 ```
 
-This avoids Docker startup overhead, but Docker keeps the CUDA/Python environment reproducible and is easier to roll back.
+Rerun it whenever `proto/gsplat.proto` changes, on both the server host and any
+client machine.
 
-Two pins are worth knowing about. The image builds COLMAP from the checked-out submodule with CUDA disabled; CUDA remains available to gsplat through JetPack. `install_gsplat.sh` fetches torch,
-torchvision, and pycolmap as direct wheel URLs from NVIDIA's Jetson index,
-because PyPI's aarch64 wheels are server-Grace builds that won't run on an Orin
-(and it has no aarch64 pycolmap at all). And the CUDA extensions are compiled
-for compute capability 8.7 only, which is the Orin's — the image will not run on
-another GPU.
+<details>
+<summary>Verifying GPU access</summary>
+
+```
+docker run --rm --gpus all ghcr.io/mapmindai/gaussiansplatting:latest \
+  conda run --no-capture-output -n gsplat python3 -c \
+  "import torch, gsplat; print(torch.__version__, torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+
+The output must include `True` and the GPU's name. A missing driver or
+Container Toolkit instead ends in `RuntimeError: No CUDA GPUs are available`,
+which is also how jobs would fail.
+
+</details>
 
 ## Running the server
 
-On the Orin, from a checkout of this repo:
+From the checkout:
 
 ```
 gsplat_server/run_server.sh [port] [jobs_dir]
 ```
 
-`port` defaults to 50051 and `jobs_dir` to `data/gsplat_server`, relative to the
-checkout, which is where uploads, logs, and trained models land. The script runs
-in the foreground; wrap it in a systemd unit to start it at boot. It passes
-`--runtime nvidia`, which is how JetPack exposes the GPU; override
-`DOCKER_GPU_FLAGS` if your daemon is configured for `--gpus all` instead.
+`port` defaults to 50051 and `jobs_dir` to `data/gsplat_server`, which is where
+uploads, logs, and trained models land. Under Docker `jobs_dir` has to live
+under the checkout, because that is what the container sees. The script runs in
+the foreground; to start it at boot, wrap it in a systemd unit:
+
+```
+[Unit]
+Description=gsplat training server
+After=docker.service
+Requires=docker.service
+
+[Service]
+WorkingDirectory=/srv/EasyGaussianSplatting
+ExecStart=/srv/EasyGaussianSplatting/gsplat_server/run_server.sh 50051 data/gsplat_server
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+The unit runs as root, which is also how the container runs, so everything
+under `jobs_dir` is root-owned; a `User=` needs `docker` group membership.
+
+`run_server.sh` passes `--gpus all` (override `DOCKER_GPU_FLAGS`) and
+`--shm-size=8g`. The shared memory matters: below roughly 8g the trainer's
+dataloader workers die partway through a run with a bus error, which surfaces
+as a failed job whose log ends in `DataLoader worker ... killed by signal: Bus
+error`.
 
 Jobs run one at a time — a single training run already saturates the GPU — and
 the queue lives in memory, so a restart fails whatever was queued or training.
@@ -76,7 +126,7 @@ Finished jobs survive it.
 downloads the point cloud. The client requires Python 3 and `grpcio` and loads
 `gsplat_server/config/gsplat_train_defaults.proto.txt` for training parameters:
 ```
-gsplat_server/client.py data/pano_mapping_cubemap --server orin:50051 \
+gsplat_server/client.py data/pano_mapping_cubemap --server gsplat-host:50051 \
   --output pano.ply
 ```
 Pass `--parameters` with another text-format JobParameters file for a custom
@@ -96,7 +146,8 @@ by `grow_grad2d`, `prune_opa`, `reset_every` and `absgrad`. It is harder to
 operate: `prune_opa` also sets the opacity reset floor (gsplat resets to
 `prune_opa * 2`), so lowering it does not simply prune less -- combined with
 `reset_every` it can collapse a model to a few thousand Gaussians. See
-`doc/gsplat_parameter_sweep.md` for measured comparisons.
+[doc/gsplat_parameter_sweep.md](gsplat_parameter_sweep.md) for measured
+comparisons.
 
 The directory must hold `images/` and `sparse/`; a `masks/` directory is
 uploaded too if present, and training then skips the masked pixels (see
@@ -114,6 +165,13 @@ run_segmentation: true
 An uploaded `masks/` always wins, so the flag is a fallback rather than an
 override. Segmentation runs on the server's GPU and adds a few minutes, plus a
 one-off download of the Mask R-CNN weights on the first such job.
+
+## Other hosts
+
+* [doc/gsplat_server_orin.md](gsplat_server_orin.md) — Jetson AGX Orin: the
+  arm64 image, `--runtime nvidia`, and a direct install without Docker.
+* [doc/gsplat_server_wins.md](gsplat_server_wins.md) — Windows: the same x86
+  image under Docker Desktop, with the checkout on `D:`.
 
 ## gRPC API
 
