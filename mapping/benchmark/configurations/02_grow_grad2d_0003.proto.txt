@@ -1,0 +1,7 @@
+# Pinned against the shipped defaults, which are now MCMC.
+strategy: STRATEGY_DEFAULT
+ssim_lambda: 0.2
+packed: false
+floater_reg_weight: 0.0
+grow_grad2d: 0.0003
+prune_opa: 0.002

@@ -7,15 +7,15 @@ camera per frame).
 
 ## Running the full pipeline in one command
 
-`scripts/run_pipeline.sh <input.insv> [frame_rate] [output_size] [face_size] [gs_iterations] [gs_data_factor] [gs_floater_reg_weight]`
+`scripts/run_pipeline.sh <input.insv> [frame_rate] [output_size] [face_size] [parameters.proto.txt]`
 runs on the host and drives the container itself, chaining stitching, frame
 extraction, COLMAP reconstruction, cube-map conversion, and gsplat training
-in a single `docker run --gpus all --shm-size=1g`. `input.insv` must live under the repo
+in a single `docker run --gpus all --shm-size=8g`. `input.insv` must live under the repo
 checkout (it gets bind-mounted as `/workspace`). `frame_rate` defaults to 2,
 `output_size` to `8000x4000`, `face_size` (cube-face width/height in pixels)
-to `1024`, `gs_iterations` to `30000`, `gs_data_factor` (a COLMAP-style
-downsample factor) to `1`, and `gs_floater_reg_weight` (opacity/scale
-regularization strength) to `0.01`:
+to `1024`, and `parameters.proto.txt` to
+`gsplat_server/config/gsplat_train_defaults.proto.txt`. Pass a different
+text-format `JobParameters` file as the fifth argument to change training:
 
 ```
 scripts/run_pipeline.sh data/VID_xxx.insv 2 4000x2000
@@ -41,6 +41,7 @@ This branch is a ground-up remake of the pipeline. What's done so far:
 - [x] Script to run COLMAP reconstruction via `panorama_sfm`
 - [x] Script to convert an equirect COLMAP reconstruction to a cube-map one
 - [x] Script to train a Gaussian Splatting model from the cube-map reconstruction (gsplat)
+- [x] gRPC training server for a Jetson AGX Orin
 - [ ] Export/viewer wired to the above
 
 ## What's in the Docker image
@@ -73,6 +74,17 @@ git submodule update --init third_party/gsplat third_party/colmap
 docker build -f artifacts/docker/dev.dockerfile -t easygaussiansplatting:dev \
   --build-context gsplatsrc=./third_party/gsplat \
   --build-context colmapsrc=./third_party/colmap artifacts/docker
+```
+
+## Training on a Jetson AGX Orin
+
+`gsplat_server/` is a separate arm64 image that turns an Orin into a training
+appliance: clients stream a zipped COLMAP model over gRPC, the Orin trains it, and they
+download the point cloud. See [doc/gsplat_server.md](doc/gsplat_server.md).
+
+```
+gsplat_server/run_server.sh                     # on the Orin
+gsplat_server/client.py data/pano_mapping_cubemap --server orin:50051
 ```
 
 ## Using the tools
@@ -133,26 +145,26 @@ The cube-map model lands in `<reconstruction_dir>_cubemap/` (`images/` +
 
 ## Training a Gaussian Splatting model
 
-`scripts/gsplat_train.sh <cubemap_reconstruction_dir> [iterations] [data_factor] [floater_reg_weight]`
+`scripts/gsplat_train.sh <cubemap_reconstruction_dir> <parameters.proto.txt>`
 trains a model with [gsplat](https://github.com/nerfstudio-project/gsplat)
 from a `cubemap_convert.sh` output directory. `iterations` defaults to
 `30000`, `data_factor` (a COLMAP-style downsample factor) to `1`,
 `floater_reg_weight` (opacity/scale regularization strength) to `0.01`:
 
 ```
-docker run -it --rm --gpus all --shm-size=1g -v $(pwd):/workspace -w /workspace \
+docker run -it --rm --gpus all --shm-size=8g -v $(pwd):/workspace -w /workspace \
   ghcr.io/mapmindai/gaussiansplatting:latest \
-  scripts/gsplat_train.sh data/pano_mapping_cubemap 30000 2
+  scripts/gsplat_train.sh data/pano_mapping_cubemap gsplat_server/config/gsplat_train_defaults.proto.txt
 ```
 
-`scripts/run_gsplat.sh <cubemap_reconstruction_dir> [iterations] [data_factor] [floater_reg_weight]`
+`scripts/run_gsplat.sh <cubemap_reconstruction_dir> [parameters.proto.txt]`
 is the host-side equivalent: same arguments, but it drives the `docker run`
 itself (GPU flags, repo bind-mount, and the persistent PyTorch weight cache),
 so retraining an existing cube-map model needs no pipeline rerun. The
 directory must live under the repo checkout:
 
 ```
-scripts/run_gsplat.sh data/panorama 30000 1 0.01
+scripts/run_gsplat.sh data/panorama
 ```
 
 The trained model lands in `<cubemap_reconstruction_dir>/gsplat_output/`,

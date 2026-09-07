@@ -6,25 +6,21 @@
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-  echo "Usage: $0 <cubemap_reconstruction_dir> [iterations] [data_factor] [floater_reg_weight]" >&2
+  echo "Usage: $0 <cubemap_reconstruction_dir> [parameters.proto.txt]" >&2
   exit 1
 fi
 
 source "$(dirname "${BASH_SOURCE[0]}")/docker_common.sh"
 
 REL_CUBEMAP_DIR="$(repo_relative_path "$1")"
-ITERATIONS="${2:-30000}"
-DATA_FACTOR="${3:-1}"
-FLOATER_REG_WEIGHT="${4:-0.01}"
+PARAMETERS_FILE="${2:-gsplat_server/config/gsplat_train_defaults.proto.txt}"
 
 docker run "${DOCKER_RUN_FLAGS[@]}" \
   -e CUBEMAP_DIR="/workspace/${REL_CUBEMAP_DIR}" \
-  -e ITERATIONS="${ITERATIONS}" \
-  -e DATA_FACTOR="${DATA_FACTOR}" \
-  -e FLOATER_REG_WEIGHT="${FLOATER_REG_WEIGHT}" \
+  -e PARAMETERS_FILE="${PARAMETERS_FILE}" \
   "${DOCKER_IMAGE}" \
   bash -c 'set -euo pipefail
 scripts/segment_people.sh "$CUBEMAP_DIR"
-scripts/gsplat_train.sh "$CUBEMAP_DIR" "$ITERATIONS" "$DATA_FACTOR" "$FLOATER_REG_WEIGHT"'
+scripts/gsplat_train.sh "$CUBEMAP_DIR" "$PARAMETERS_FILE"'
 
 echo "Model written to ${REPO_ROOT}/${REL_CUBEMAP_DIR}/gsplat_output"

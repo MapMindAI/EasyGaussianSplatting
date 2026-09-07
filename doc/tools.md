@@ -57,18 +57,18 @@ scripts/cubemap_convert.sh data/pano_mapping 1024
 
 The cube-map model lands in `data/pano_mapping_cubemap`.
 
-Run `scripts/gsplat_train.sh <cubemap_reconstruction_dir> [iterations] [data_factor] [floater_reg_weight]`
+Run `scripts/gsplat_train.sh <cubemap_reconstruction_dir> <parameters.proto.txt>`
 to train a [gsplat](https://github.com/nerfstudio-project/gsplat) model from
-that cube-map reconstruction. `iterations` defaults to 30000, `data_factor`
-(a COLMAP-style downsample factor) to 1, and `floater_reg_weight`
-(opacity/scale regularization strength) to 0.01. The container needs at least
-1 GiB of shared memory for gsplat's data-loader workers:
+that cube-map reconstruction. Every training setting comes from the parameters
+file, whose schema is `gsplat_server/proto/gsplat.proto`. The container needs
+about 8 GiB of shared memory for gsplat's data-loader workers; below that they
+die mid-run with a bus error:
 
 ```
-scripts/gsplat_train.sh data/pano_mapping_cubemap 30000 2
+scripts/gsplat_train.sh data/pano_mapping_cubemap gsplat_server/config/gsplat_train_defaults.proto.txt
 ```
 
-The densification settings live in `scripts/gsplat_train_defaults.sh`, shared
+The densification settings live in `gsplat_server/config/gsplat_train_defaults.proto.txt`, shared
 with the sweep so its baseline cannot drift from what ships; `mapping/train_gsplat_with_masks.py` only attaches the masks and passes every argument through to simple_trainer. The trained model lands in `data/pano_mapping_cubemap/gsplat_output`.
 
 Person segmentation masks mirror any nested folders under the reconstruction's
@@ -83,12 +83,20 @@ sequential, and a configuration that already recorded evaluation metrics is
 skipped, so an interrupted sweep resumes where it stopped:
 
 ```
-mapping/benchmark/gsplat_sweep.sh data/panorama 30000
+mapping/benchmark/gsplat_sweep.sh data/panorama
 ```
 
-Edit the `CONFIGURATIONS` array in that script to change what is compared; each
-entry is a name, a simple_trainer subcommand (`default` or `mcmc`) and the
-flags under test. The report is generated output and is not tracked: it links
+Both this and the server-side sweep read the same parameter files from
+`mapping/benchmark/configurations/`, so add or edit a file there to change what
+is compared. To sweep on a remote GPU instead, `mapping/benchmark/gsplat_server_sweep.py`
+submits the same configurations to a training server (see `doc/gsplat_server.md`):
+
+```
+python3 mapping/benchmark/gsplat_server_sweep.py data/panorama \
+  --server host:50051 --results data/panorama/sweep_windows
+```
+
+The report is generated output and is not tracked: it links
 to point clouds and thumbnails under `data/`, so regenerate it rather than
 reading a stale copy.
 
