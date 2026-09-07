@@ -41,7 +41,7 @@ This branch is a ground-up remake of the pipeline. What's done so far:
 - [x] Script to run COLMAP reconstruction via `panorama_sfm`
 - [x] Script to convert an equirect COLMAP reconstruction to a cube-map one
 - [x] Script to train a Gaussian Splatting model from the cube-map reconstruction (gsplat)
-- [x] gRPC training server for a Jetson AGX Orin
+- [x] gRPC training server
 - [ ] Export/viewer wired to the above
 
 ## What's in the Docker image
@@ -76,15 +76,16 @@ docker build -f artifacts/docker/dev.dockerfile -t easygaussiansplatting:dev \
   --build-context colmapsrc=./third_party/colmap artifacts/docker
 ```
 
-## Training on a Jetson AGX Orin
+## Training over gRPC
 
-`gsplat_server/` is a separate arm64 image that turns an Orin into a training
-appliance: clients stream a zipped COLMAP model over gRPC, the Orin trains it, and they
-download the point cloud. See [doc/gsplat_server.md](doc/gsplat_server.md).
+`gsplat_server/` turns a GPU host into a training appliance: clients stream a
+zipped COLMAP model over gRPC, the host trains it, and they download the point
+cloud. [doc/gsplat_server.md](doc/gsplat_server.md) covers it on an x86_64
+Linux host and links the Jetson AGX Orin and Windows guides.
 
 ```
-gsplat_server/run_server.sh                     # on the Orin
-gsplat_server/client.py data/pano_mapping_cubemap --server orin:50051
+gsplat_server/run_server.sh                     # on the GPU host
+gsplat_server/client.py data/pano_mapping_cubemap --server gsplat-host:50051
 ```
 
 ## Using the tools

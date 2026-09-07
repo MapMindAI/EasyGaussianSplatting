@@ -2,7 +2,9 @@
 
 This guide runs the x86 gsplat image in Docker Desktop on a Windows PC with an
 NVIDIA GPU. The project is stored on `D:` and the server exposes gRPC on port
-`50051`.
+`50051`. [doc/gsplat_server.md](gsplat_server.md) covers the service itself —
+the client, the training parameters, and the gRPC API; only the
+Windows-specific parts are here.
 
 ## Prerequisites
 
@@ -58,8 +60,9 @@ The expected result includes `True` and the NVIDIA GPU name.
 
 ## Start the server
 
-`run_server.sh` activates the image's conda environment, points the trainer at
-the installed gsplat, and sets a shared-memory size the dataloader survives.
+`run_server.sh` sets the GPU flags and a shared-memory size the dataloader
+survives; `serve.sh` activates the image's conda environment and points the
+trainer at the installed gsplat.
 Run it from the checkout on `D:`:
 
 ```
@@ -133,4 +136,4 @@ docker stop gsplat-server
 docker start gsplat-server
 ```
 
-Jobs and results remain under `D:\EasyGaussianSplatting\gsplat_jobs`.
+Jobs and results remain under `D:\EasyGaussianSplatting\data\gsplat_server`.
