@@ -107,21 +107,23 @@ See [doc/tools.md](doc/tools.md).
 
 ```bash
 GSPLAT_HOST=192.168.11.194
+VIDEO_NAME=VID_20260904_155849_00_009
 docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
-  easygaussiansplatting:triton \
+  ghcr.io/mapmindai/gaussiansplatting:latest \
   python3 -m mapping.mapping_pipeline \
-    --video_path data/VID_20260902_113042_00_006_pano.mp4 \
-    --workspace_path data/VID_20260902_113042_00_006_reconstruction \
+    --video_path data/${VIDEO_NAME}_pano.mp4 \
+    --workspace_path data/${VIDEO_NAME}_reconstruction \
     --triton-url ${GSPLAT_HOST}:8011 --num-threads 4
 ```
 
 3. [Training a Gaussian Splatting model](doc/gsplat_server.md)
 
 ```bash
-WORKSACEP_PATH=
-gsplat_server/client.py data/VID_20260902_113042_00_006_reconstruction \
-  --server ${GSPLAT_HOST}:50051 --output pano.ply
+WORKSPACE_PATH=${VIDEO_NAME}_reconstruction
+gsplat_server/client.py data/${WORKSPACE_PATH} \
+  --parameters gsplat_server/config/gsplat_train_defaults.proto.txt \
+  --server ${GSPLAT_HOST}:50051 --output ${WORKSPACE_PATH}/gsplat.ply
 ```
 
 ## Tests

@@ -14,7 +14,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/docker_common.sh"
 
 REL_INSV="$(repo_relative_path "$1")"
 OUTPUT_VIDEO="${2:-${1%.*}_pano.mp4}"
-OUTPUT_SIZE="${3:-8000x4000}"
+OUTPUT_SIZE="${3:-4000x2000}"
 
 mkdir -p "$(dirname "${OUTPUT_VIDEO}")"
 REL_OUTPUT_VIDEO="$(repo_relative_path "${OUTPUT_VIDEO}")"
