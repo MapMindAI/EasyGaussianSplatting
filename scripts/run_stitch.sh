@@ -19,11 +19,8 @@ OUTPUT_SIZE="${3:-8000x4000}"
 mkdir -p "$(dirname "${OUTPUT_VIDEO}")"
 REL_OUTPUT_VIDEO="$(repo_relative_path "${OUTPUT_VIDEO}")"
 
-docker run -i "${DOCKER_RUN_FLAGS[@]}" \
-  -e INPUT_INSV="/workspace/${REL_INSV}" \
-  -e OUTPUT_VIDEO="/workspace/${REL_OUTPUT_VIDEO}" \
-  -e OUTPUT_SIZE="${OUTPUT_SIZE}" \
-  -e MODEL_ROOT_DIR="${MODEL_ROOT_DIR:-/EasyGaussianSplatting/data/sdk_dir}" \
-  "${DOCKER_IMAGE}" bash scripts/stitch_video.sh
+docker run "${DOCKER_RUN_FLAGS[@]}" -e MODEL_ROOT_DIR="${MODEL_ROOT_DIR:-}" \
+  "${DOCKER_IMAGE}" bash scripts/stitch_video.sh \
+  "/workspace/${REL_INSV}" "/workspace/${REL_OUTPUT_VIDEO}" "${OUTPUT_SIZE}"
 
 echo "Stitched video written to ${REPO_ROOT}/${REL_OUTPUT_VIDEO}"

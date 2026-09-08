@@ -40,7 +40,7 @@ docker run -i "${DOCKER_RUN_FLAGS[@]}" \
   -e FACE_SIZE="${FACE_SIZE}" \
   -e TRITON_URL="${TRITON_URL}" \
   -e PARAMETERS_FILE="/workspace/${REL_PARAMETERS_FILE}" \
-  -e MODEL_ROOT_DIR="${MODEL_ROOT_DIR:-/EasyGaussianSplatting/data/sdk_dir}" \
+  -e MODEL_ROOT_DIR="${MODEL_ROOT_DIR:-}" \
   "${DOCKER_IMAGE}" bash -s <<'CONTAINER'
 set -euo pipefail
 
@@ -48,7 +48,7 @@ set -euo pipefail
 export PYTHONPATH="${PWD}${PYTHONPATH:+:${PYTHONPATH}}"
 
 # --- 1. Stitch the capture into an equirectangular video --------------------
-bash scripts/stitch_video.sh
+bash scripts/stitch_video.sh "${INPUT_INSV}" "${OUTPUT_VIDEO}" "${OUTPUT_SIZE}"
 
 # --- 2. Reconstruct it as a cube-map rig ------------------------------------
 MAPPING_ARGUMENTS=(--triton-url "${TRITON_URL}")
@@ -65,8 +65,7 @@ python3 -m mapping.mapping_pipeline \
 source scripts/gsplat_env.sh
 
 python3 mapping/segment_people.py \
-  "${RECONSTRUCTION_DIR}/images" "${RECONSTRUCTION_DIR}/masks" \
-  --score-threshold 0.5 --dilation 8
+  "${RECONSTRUCTION_DIR}/images" "${RECONSTRUCTION_DIR}/masks"
 
 export PYTORCH_ALLOC_CONF="${PYTORCH_ALLOC_CONF:-expandable_segments:True}"
 python3 mapping/train_gsplat_with_masks.py default \

@@ -43,8 +43,8 @@ server serving those models — see
 [panorama_mapping.md](panorama_mapping.md), which also covers each stage and
 the pair-selection knobs. `--frame-rate` (frames/sec sampled from the video)
 defaults to 2, `--face-size` to a quarter of the video width, and `--faces` to
-`front,right,back,left,up` since the nadir usually shows whoever is carrying
-the rig — pass all six explicitly to include it:
+all six; drop `down` to leave out the nadir, which mostly shows whoever is
+carrying the rig:
 
 ```
 python3 -m mapping.mapping_pipeline \

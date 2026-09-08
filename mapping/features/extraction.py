@@ -33,14 +33,6 @@ def _keypoints_blob(keypoints):
     return blob
 
 
-def largest_camera_size(database):
-    """The largest camera dimension in the database, which the local extractor
-    takes as its input size so that no image is downscaled before detection."""
-    return max(
-        max(camera.width, camera.height) for camera in database.read_all_cameras()
-    )
-
-
 def extract_features(workspace_path, local_extractor, global_extractor, num_threads=8):
     """Extracts features for every image in `<workspace_path>/database.db`.
 

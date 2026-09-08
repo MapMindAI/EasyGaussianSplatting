@@ -1,18 +1,20 @@
 # Gaussian Splatting server on Windows Docker Desktop
 
-This guide runs the x86 gsplat image in Docker Desktop on a Windows PC with an
-NVIDIA GPU. The project is stored on `D:` and the server exposes gRPC on port
-`50051`. [doc/gsplat_server.md](gsplat_server.md) covers the service itself —
-the client, the training parameters, and the gRPC API; only the
-Windows-specific parts are here.
+This guide runs the x86 images in Docker Desktop on a Windows PC with an NVIDIA
+GPU: the Triton inference server the mapping pipeline needs, the mapping
+pipeline itself, and the gsplat training server on port `50051`. The project is
+stored on `D:`. [doc/gsplat_server.md](gsplat_server.md) covers the training
+service and [doc/panorama_mapping.md](panorama_mapping.md) the mapping stages;
+only the Windows-specific parts are here.
 
 ## Prerequisites
 
 - Windows 11 with Docker Desktop using the `desktop-linux` context.
 - NVIDIA driver with Docker GPU support.
 - SSH access to the Windows host, for example `dm@192.168.11.194`.
-- A checkout containing `gsplat_server/`, `mapping/`, and the generated proto
-  bindings.
+- A checkout containing `gsplat_server/`, `mapping/`, the generated proto
+  bindings, and — for the mapping pipeline — the `third_party/EasyTensorRT`
+  submodule, which carries the models and is around 800 MB.
 
 The Jetson image is ARM64 and must not be used on this PC. Use the x86 image:
 
@@ -21,6 +23,14 @@ ghcr.io/mapmindai/gaussiansplatting:latest
 ```
 
 ## Copy the project to `D:`
+
+Generate the ignored Python protobuf bindings and check out the models first;
+neither is in a fresh clone, and the archive below has to carry both:
+
+```
+bash gsplat_server/proto/build.sh
+git submodule update --init third_party/EasyTensorRT
+```
 
 Create an archive without local datasets or Git history, copy it to the host,
 and extract it to `D:\EasyGaussianSplatting`:
@@ -39,12 +49,6 @@ tar -xf C:\Users\49451\easy-gsplat-server.tar.gz \
   -C D:\EasyGaussianSplatting
 ```
 
-Generate the ignored Python protobuf bindings before creating the archive:
-
-```
-bash gsplat_server/proto/build.sh
-```
-
 ## Verify Docker GPU access
 
 Select Docker Desktop's Linux engine and run:
@@ -58,7 +62,56 @@ docker run --rm --gpus all ghcr.io/mapmindai/gaussiansplatting:latest \
 
 The expected result includes `True` and the NVIDIA GPU name.
 
-## Start the server
+## Start the TensorRT inference server
+
+The mapping pipeline extracts and matches learned features against a Triton
+server, which serves them out of `third_party/EasyTensorRT`. Start it first:
+
+```
+docker run -d --name tritonserver_trt --gpus all -p 8011:8001 \
+  -v D:\EasyGaussianSplatting\third_party\EasyTensorRT:/repo \
+  ghcr.io/mapmindai/tritonserver_amd64:latest \
+  bash -c "bash /repo/model_trt/convert_models.sh && tritonserver --model-repository=/repo/model_repository_trt"
+```
+
+`convert_models.sh` builds a TensorRT plan per model for this GPU into
+`model_repository_trt/<model>/1/`, so the first start takes several minutes and
+is not listening until it finishes; later starts reuse the plans. Follow it
+with `docker logs -f tritonserver_trt` and wait for:
+
+```
+Started GRPCInferenceService at 0.0.0.0:8001
+```
+
+Triton's own gRPC port is 8001, published here as 8011 because 8001 is so often
+already taken; 8011 is what this repo defaults to.
+
+Serving the ONNX models instead skips the plan build and runs slower: point
+`--model-repository` at `/repo/model_repository` and leave out the conversion
+step.
+
+## Reconstruct a capture
+
+With the inference server up, turn a stitched panorama video into the cube-map
+model the trainer takes. `data/` is excluded from the archive above, so copy the
+video to `D:\EasyGaussianSplatting\data\` first:
+
+```
+docker run --rm --gpus all -v D:\EasyGaussianSplatting:/workspace -w /workspace \
+  ghcr.io/mapmindai/gaussiansplatting:latest \
+  python3 -m mapping.mapping_pipeline \
+    --video_path data/pano.mp4 --workspace_path data/pano_mapping \
+    --triton-url host.docker.internal:8011
+```
+
+Docker Desktop maps `host.docker.internal` to the host itself, so unlike on
+Linux no `--add-host` is needed. That is the only Windows-specific part;
+[panorama_mapping.md](panorama_mapping.md) covers the stages and the options.
+
+The workspace it writes — `images/<face>/`, `database.db`, `sparse/0/` — is what
+the training service below takes.
+
+## Start the training server
 
 `run_server.sh` sets the GPU flags and a shared-memory size the dataloader
 survives; `serve.sh` activates the image's conda environment and points the

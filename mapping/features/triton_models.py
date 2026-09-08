@@ -38,6 +38,13 @@ from superpoint import SuperPoint  # noqa: E402
 # re-extracting.
 MATCHER_NUM_KEYPOINTS = 512
 
+# Longest side SuperPoint detects on. A larger image is downscaled to it and
+# its keypoints scaled back, so a cube face of any size still lands in
+# full-resolution coordinates. It is the size the TensorRT plan is built
+# around, and detecting on a 2000-pixel face instead costs several times the
+# GPU memory for detections the 512-point matcher input cannot carry anyway.
+DETECTOR_MAX_IMAGE_SIZE = 960
+
 
 @dataclass
 class LocalFeatures:
@@ -55,12 +62,11 @@ def _without_batch_axis(array, ndim):
 class LocalFeatureExtractor:
     """SuperPoint keypoints and descriptors."""
 
-    def __init__(self, triton_url, max_image_size, keypoint_threshold=0.015,
-                 model_version="1"):
+    def __init__(self, triton_url, keypoint_threshold=0.015, model_version="1"):
         self._client = SuperPoint(
             triton_url,
             model_version=model_version,
-            max_image_shape=max_image_size,
+            max_image_shape=DETECTOR_MAX_IMAGE_SIZE,
             keypoint_thresh=keypoint_threshold,
         )
 
