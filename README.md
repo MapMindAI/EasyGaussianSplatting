@@ -102,7 +102,7 @@ See [doc/tools.md](doc/tools.md).
 
 ## Reconstructing a capture
 
-1. [Stitch to video](doc/tools.md) `scripts/run_stitch.sh data/VID_xxx.insv`
+1. [Stitch to video](doc/tools.md) `scripts/run_stitch.sh data/${VIDEO_NAME}.insv`
 2. [Mapping a panorama capture](doc/panorama_mapping.md) run with video.
 
 ```bash
