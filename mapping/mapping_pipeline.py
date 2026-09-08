@@ -14,21 +14,24 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import numpy as np
 import pycolmap
 from pycolmap import logging
 
-from .features.extraction import (
-    GLOBAL_FEATURES_FILENAME,
-    extract_features,
-    largest_camera_size,
-)
+from .features.extraction import GLOBAL_FEATURES_FILENAME, extract_features
 from .features.matching import PairSelection, match_features
 from .features.triton_models import (
     FeatureMatcher,
     GlobalFeatureExtractor,
     LocalFeatureExtractor,
 )
-from .panorama_database import DEFAULT_FACES, FACE_AXES, build_database, parse_faces
+from .panorama_database import (
+    DEFAULT_FACES,
+    FACE_AXES,
+    RIG_DOWN,
+    build_database,
+    parse_faces,
+)
 
 
 # Weight each relative-rotation edge by its inlier match count instead of
@@ -60,6 +63,45 @@ def build_global_mapper_options():
     return options
 
 
+_WORLD_DOWN = np.array([0.0, 0.0, -1.0])
+# Half a turn about X, for a map solved upside down: the shortest arc has no
+# determined axis there, and every horizontal one serves equally.
+_HALF_TURN = pycolmap.Rotation3d(np.array([1.0, 0.0, 0.0, 0.0]))
+
+
+def _rotation_to_world_down(down):
+    """The shortest-arc rotation taking the unit vector `down` onto -Z."""
+    cosine = float(np.dot(down, _WORLD_DOWN))
+    if cosine < -1.0 + 1e-9:
+        return _HALF_TURN
+    quaternion = np.array([*np.cross(down, _WORLD_DOWN), 1.0 + cosine])
+    return pycolmap.Rotation3d(quaternion / np.linalg.norm(quaternion))
+
+
+def align_up_axis(reconstruction):
+    """Rotates `reconstruction` in place so that +Z points up.
+
+    Global SfM fixes the world frame on whichever image it starts from, leaving
+    the map tilted arbitrarily. Every panorama here is captured upright, so the
+    rig's own down axis is gravity: averaging it over the registered frames
+    gives gravity in world axes, and one rotation takes that to -Z. Over a real
+    capture that axis holds to half a degree per frame, which is what makes the
+    average meaningful. Positions and scale are left as the mapper solved them.
+    """
+    down = np.zeros(3)
+    for frame in reconstruction.frames.values():
+        if frame.has_pose:
+            down += frame.rig_from_world.rotation.inverse() * RIG_DOWN
+    if np.linalg.norm(down) < 1e-9:
+        logging.warning("No registered frames to read gravity from, leaving the map as solved")
+        return
+    down /= np.linalg.norm(down)
+    reconstruction.transform(
+        pycolmap.Sim3d(1.0, _rotation_to_world_down(down), np.zeros(3))
+    )
+    logging.info(f"Rotated {np.round(down, 3)} to -Z, so the map is +Z up")
+
+
 def run_global_mapping(workspace_path):
     """Reconstructs `<workspace_path>/database.db` into `sparse/`."""
     workspace_path = Path(workspace_path)
@@ -74,6 +116,9 @@ def run_global_mapping(workspace_path):
     if not reconstructions:
         raise RuntimeError("Global mapping produced no reconstruction")
     for index, model in sorted(reconstructions.items()):
+        align_up_axis(model)
+        # Rewritten over what global_mapping just wrote, which is the untilted map.
+        model.write(sparse_dir / str(index))
         logging.info(
             f"Wrote {sparse_dir / str(index)}: {model.num_reg_images()} images, "
             f"{model.num_points3D()} points"
@@ -93,11 +138,9 @@ def run_pipeline(video_path, workspace_path, triton_url, selection, frame_rate=2
     if (workspace_path / GLOBAL_FEATURES_FILENAME).exists():
         logging.info("Global-descriptor sidecar already exists, skipping extraction")
     else:
-        with pycolmap.Database.open(workspace_path / "database.db") as database:
-            max_image_size = largest_camera_size(database)
         extract_features(
             workspace_path,
-            LocalFeatureExtractor(triton_url, max_image_size, keypoint_threshold),
+            LocalFeatureExtractor(triton_url, keypoint_threshold),
             GlobalFeatureExtractor(triton_url),
             num_threads,
         )

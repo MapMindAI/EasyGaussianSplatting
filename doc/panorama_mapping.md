@@ -17,8 +17,10 @@ global SfM (GLOMAP):
    COLMAP types its descriptors table `uint8`, so the float descriptors are
    stored byte-reinterpreted under a learned-extractor tag. That is lossless
    and the mapper never reads the tag, but COLMAP's own matchers dispatch on
-   it: this database is for this pipeline, not for `colmap matcher`. Each image
-   keeps its 512 strongest detections, LightGlue's exported input size.
+   it: this database is for this pipeline, not for `colmap matcher`. Detection
+   runs on the face downscaled to 960 pixels and the keypoints are scaled back,
+   so `--face-size` sets the stored resolution rather than the detector's. Each
+   image keeps its 512 strongest detections, LightGlue's exported input size.
 3. **Matching** — LightGlue over two sets of candidate pairs: each image
    against the next `--num-sequential` images of the same cube face, and
    against its `--num-retrieval` nearest images by SALAD descriptor. Retrieval
@@ -29,7 +31,11 @@ global SfM (GLOMAP):
    a match, is what ties them together.
 4. **Global mapping** — `pycolmap.global_mapping` into `sparse/0/`. The cube
    faces' intrinsics and rig mounting come from the reprojection rather than a
-   calibration, so bundle adjustment holds both fixed.
+   calibration, so bundle adjustment holds both fixed. The solved map is then
+   rotated so `+Z` is up: global SfM fixes the world frame on whichever image it
+   starts from, but the rig is carried upright, so its own down axis is gravity
+   and averaging that over the registered frames says which way the map leans.
+   It is a rotation about the origin, so positions and scale are untouched.
 
 A re-run picks up where the last one stopped: the database is kept once it
 holds images, extraction is skipped once the sidecar is written, matching skips
@@ -70,21 +76,20 @@ configuration. Point `TRITON_URL` at `host:port` to use a server elsewhere.
 ```
 docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
-  ghcr.io/mapmindai/gaussiansplatting:latest \
+  easygaussiansplatting:triton \
   python3 -m mapping.mapping_pipeline \
-    --video_path data/VID_20260422_153814_00_004_pano.mp4 \
-    --workspace_path data/VID_20260422_153814_00_004_reconstruction \
-    --triton-url host.docker.internal:8011
+    --video_path data/VID_20260902_113042_00_006_pano.mp4 \
+    --workspace_path data/VID_20260902_113042_00_006_reconstruction \
+    --triton-url 192.168.11.194:8011 --num-threads 4
 ```
 
 `--video_path` is the stitched video and `--workspace_path` the directory to
 reconstruct into; both are required.
 `--frame-rate` (frames/sec sampled from the video) defaults to 2, `--face-size`
 (cube-face width/height in pixels) to a quarter of the video width — which
-keeps the panorama's angular resolution — and `--faces` to
-`front,right,back,left,up` — the nadir usually shows whoever is carrying the
-rig, so pass all six explicitly to include it. The face list must contain
-`front`, the rig's reference sensor. `--num-sequential`, `--num-retrieval`, and
+keeps the panorama's angular resolution — and `--faces` to all six. Drop `down`
+to leave out the nadir, which mostly shows whoever is carrying the rig. The face
+list must contain `front`, the rig's reference sensor. `--num-sequential`, `--num-retrieval`, and
 `--num-retrieval-excluded` tune pair selection; `--help` lists everything.
 
 The workspace ends up holding `images/<face>/`, `database.db`,

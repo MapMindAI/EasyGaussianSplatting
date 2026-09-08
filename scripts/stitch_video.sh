@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 # Stitch an Insta360 capture into an equirectangular video with the AI-stitch
-# settings we reconstruct from. Runs inside the container; scripts/run_stitch.sh
-# and scripts/run_pipeline.sh drive it. Reads INPUT_INSV, OUTPUT_VIDEO,
-# OUTPUT_SIZE, and MODEL_ROOT_DIR from the environment.
+# settings we reconstruct from. Runs inside the container; scripts/run_stitch.sh,
+# scripts/run_pipeline.sh, and the pipeline server drive it.
 set -euo pipefail
+
+if [ $# -ne 3 ]; then
+  echo "Usage: $0 <input.insv> <output.mp4> <output_size>" >&2
+  exit 1
+fi
+
+INPUT_INSV="$1"
+OUTPUT_VIDEO="$2"
+OUTPUT_SIZE="$3"
+# The only place the image's SDK path is spelled out; the host scripts forward
+# the variable empty when the caller has not set one.
+MODEL_ROOT_DIR="${MODEL_ROOT_DIR:-/EasyGaussianSplatting/data/sdk_dir}"
 
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:/usr/local/lib"
 

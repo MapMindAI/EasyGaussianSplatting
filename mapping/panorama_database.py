@@ -29,9 +29,10 @@ FACE_AXES = {
     "down": ((0, -1, 0), (0, 0, 1), (-1, 0, 0)),
 }
 
-# The nadir points at the ground below the rig, where whoever is carrying it
-# usually shows up, so it is left out unless asked for explicitly.
-DEFAULT_FACES = ("front", "right", "back", "left", "up")
+# Every face. The nadir shows whoever is carrying the rig, which person masking
+# takes out of training, and the ground it also sees is texture the mapper can
+# match on.
+DEFAULT_FACES = ("front", "right", "back", "left", "up", "down")
 
 # The rig's reference sensor: every other face's sensor_from_rig is expressed
 # relative to this one.
@@ -50,6 +51,12 @@ def face_rotation(face):
     # The inverse (transpose, since orthonormal) of face_to_equirect_matrix
     # rotates equirect-camera-frame vectors into this face's camera frame.
     return face_to_equirect_matrix(face).T
+
+
+# Gravity in the rig frame, which is the reference face's camera frame. The
+# panorama's own axes put +Y up, so rotating its down axis into that face gives
+# the direction an upright capture falls in -- whichever face is the reference.
+RIG_DOWN = face_rotation(REFERENCE_FACE) @ np.array([0.0, -1.0, 0.0])
 
 
 def sensor_from_rig(face):
