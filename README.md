@@ -116,7 +116,7 @@ docker run -it --rm -v $(pwd):/workspace -w /workspace \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   python3 -m mapping.mapping_pipeline \
     --video_path data/pano.mp4 --workspace_path data/pano_mapping \
-    --triton-url host.docker.internal:8001
+    --triton-url host.docker.internal:8011
 ```
 
 The reconstruction lands in `data/pano_mapping/` (`images/<face>/` +

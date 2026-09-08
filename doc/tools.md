@@ -41,7 +41,7 @@ the rig — pass all six explicitly to include it:
 ```
 python3 -m mapping.mapping_pipeline \
   --video_path data/pano.mp4 --workspace_path data/pano_mapping \
-  --triton-url host.docker.internal:8001
+  --triton-url host.docker.internal:8011
 ```
 
 The cube-map model lands in `data/pano_mapping`, ready for gsplat: the faces

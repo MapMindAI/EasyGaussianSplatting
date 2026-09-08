@@ -46,20 +46,24 @@ which ships both the model repository and the clients this repo wraps:
 
 ```
 git submodule update --init third_party/EasyTensorRT
-cd third_party/EasyTensorRT && ./run_server_onnx.sh
+cd third_party/EasyTensorRT
+docker run --gpus all --rm --name tritonserver -p 8011:8001 \
+  -v "$(pwd)":/repo ghcr.io/mapmindai/tritonserver_amd64:latest \
+  tritonserver --model-repository=/repo/model_repository
 ```
 
 The submodule carries the model weights, so expect the checkout to be around
 800 MB.
 
-`run_server_onnx.sh` serves the portable ONNX models; `run_server_trt.sh`
+The submodule's own `run_server_onnx.sh` publishes Triton's standard gRPC port
+8001, which is often already taken; the command above is that script with the
+host side moved to 8011, which is what this repo defaults to. `run_server_trt.sh`
 serves TensorRT plans instead, which it builds for your GPU on the first run
-(slow the first time, faster afterwards). Either way the server listens on
-gRPC port 8001.
+(slow the first time, faster afterwards).
 
-The host-side scripts default `TRITON_URL` to `host.docker.internal:8001` and
+The host-side scripts default `TRITON_URL` to `host.docker.internal:8011` and
 map that name to the Docker host, so a server started as above needs no
-configuration. Point `TRITON_URL` at `host:8001` to use a server elsewhere.
+configuration. Point `TRITON_URL` at `host:port` to use a server elsewhere.
 
 ## Running it
 
@@ -69,7 +73,7 @@ docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   python3 -m mapping.mapping_pipeline \
     --video_path data/pano.mp4 --workspace_path data/pano_mapping \
-    --triton-url host.docker.internal:8001
+    --triton-url host.docker.internal:8011
 ```
 
 `--video_path` is the stitched video and `--workspace_path` the directory to

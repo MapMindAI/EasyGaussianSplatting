@@ -123,8 +123,8 @@ def main():
                         help="stitched equirectangular video")
     parser.add_argument("--workspace_path", required=True,
                         help="directory to reconstruct into")
-    parser.add_argument("--triton-url", default="127.0.0.1:8001",
-                        help="Triton gRPC endpoint (default: 127.0.0.1:8001)")
+    parser.add_argument("--triton-url", default="127.0.0.1:8011",
+                        help="Triton gRPC endpoint (default: 127.0.0.1:8011)")
     parser.add_argument("--frame-rate", type=float, default=2.0,
                         help="frames per second to sample from the video (default: 2.0)")
     parser.add_argument("--face-size", type=int, default=None,
