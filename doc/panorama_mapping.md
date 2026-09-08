@@ -72,7 +72,8 @@ docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   python3 -m mapping.mapping_pipeline \
-    --video_path data/pano.mp4 --workspace_path data/pano_mapping \
+    --video_path data/VID_20260422_153814_00_004_pano.mp4 \
+    --workspace_path data/VID_20260422_153814_00_004_reconstruction \
     --triton-url host.docker.internal:8011
 ```
 

@@ -33,6 +33,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   └── train_gsplat_with_masks.py # simple_trainer entrypoint; reads JobParameters.
 ├── scripts/
 │   ├── run_pipeline.sh           # Host: the whole pipeline in one `docker run`.
+│   ├── run_stitch.sh             # Host: stitching on its own.
+│   ├── stitch_video.sh           # Container: Insta360 capture to panorama video.
 │   ├── docker_common.sh          # Shared helpers for the host-side scripts.
 │   └── gsplat_env.sh             # Container: activate the gsplat conda env.
 ├── third_party/

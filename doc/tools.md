@@ -18,9 +18,17 @@ Stitch a raw Insta360 capture into an equirectangular video:
 insta360_media_stitcher -inputs /workspace/VID_xxx.insv -output /workspace/pano.mp4 -stitch_type optflow
 ```
 
-`scripts/run_pipeline.sh` stitches with the AI-stitch settings we use for
-reconstruction (8000x4000, H.265, flowstate, direction lock), and skips the
-step when the video is already there and decodes at the requested size.
+`scripts/run_stitch.sh <input.insv> [output.mp4] [output_size]` does that from
+the host, with the AI-stitch settings we use for reconstruction (8000x4000,
+H.265, flowstate, direction lock), and skips the step when the video is already
+there and decodes at the requested size. `output.mp4` defaults to the capture's
+name with a `_pano.mp4` suffix; both paths must live under the repo checkout:
+
+```
+scripts/run_stitch.sh data/VID_xxx.insv
+```
+
+`scripts/run_pipeline.sh` runs the same stage as the first of its four.
 
 Read metadata off the source file:
 

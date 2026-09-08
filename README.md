@@ -34,6 +34,9 @@ script keeps downloaded PyTorch model weights in the persistent Docker volume
 `easygaussiansplatting-torch-cache`, so later runs reuse them.
 Existing person-segmentation masks are reused on later runs.
 
+To stitch without reconstructing, `scripts/run_stitch.sh <input.insv>` runs
+that stage on its own; see [doc/tools.md](doc/tools.md).
+
 ![COLMAP sparse reconstruction viewer](assets/reconstruction_viewer.jpg)
 
 ## Status
