@@ -35,6 +35,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   │   ├── matching.py           # Pair selection and LightGlue matching.
 │   │   └── progress.py           # Thread pool with progress logging.
 │   ├── mapping_pipeline.py       # The four mapping stages end to end.
+│   ├── mapping_pipeline_test.py  # Gravity levelling of the solved map.
 │   ├── panorama_database.py      # Panorama video to a cube-map rig database.
 │   ├── segment_people.py         # Person masks for the training images.
 │   └── train_gsplat_with_masks.py # simple_trainer entrypoint; reads JobParameters.

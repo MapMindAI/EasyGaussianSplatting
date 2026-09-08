@@ -100,13 +100,38 @@ gsplat_server/client.py data/pano_mapping --server gsplat-host:50051
 
 See [doc/tools.md](doc/tools.md).
 
+## Reconstructing a capture
+
+1. [Stitch to video](doc/tools.md) `scripts/run_stitch.sh data/VID_xxx.insv`
+2. [Mapping a panorama capture](doc/panorama_mapping.md) run with video.
+
+```bash
+GSPLAT_HOST=192.168.11.194
+docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
+  --add-host host.docker.internal:host-gateway \
+  easygaussiansplatting:triton \
+  python3 -m mapping.mapping_pipeline \
+    --video_path data/VID_20260902_113042_00_006_pano.mp4 \
+    --workspace_path data/VID_20260902_113042_00_006_reconstruction \
+    --triton-url ${GSPLAT_HOST}:8011 --num-threads 4
+```
+
+3. [Training a Gaussian Splatting model](doc/gsplat_server.md)
+
+```bash
+WORKSACEP_PATH=
+gsplat_server/client.py data/VID_20260902_113042_00_006_reconstruction \
+  --server ${GSPLAT_HOST}:50051 --output pano.ply
+```
+
 ## Tests
 
 Each `*_test.py` sits beside the module it covers, and between them they cover
 what runs without a GPU, COLMAP, or Triton: the `JobParameters` layering
 (`gsplat_server/parameters_test.py`), the training server's job store and
-archive handling (`gsplat_server/server_test.py`), and the sweep report
-generator (`mapping/benchmark/summarize_gsplat_sweep_test.py`).
+archive handling (`gsplat_server/server_test.py`), the sweep report generator
+(`mapping/benchmark/summarize_gsplat_sweep_test.py`), and the reconstruction's
+gravity levelling (`mapping/mapping_pipeline_test.py`).
 
 CI runs them on a slim Python image rather than the 20 GB pipeline one. To do
 the same locally:
@@ -126,58 +151,3 @@ Or on the host, with the proto bindings already generated (see
 uncovered: both import torch at module scope, and the former also runs the
 trainer at import time, so covering its flag building needs a `__main__`
 guard first.
-
-## Reconstructing a capture
-
-`mapping/mapping_pipeline.py` reprojects the panorama frames into a rig of
-pinhole cube faces, extracts SuperPoint and SALAD features, matches with
-LightGlue, and solves the scene with global SfM. It needs the repo checkout
-itself, for `mapping/` and the `third_party/EasyTensorRT` submodule, so mount
-the whole checkout rather than only `data/`, and it needs a Triton server
-serving those three models:
-
-```
-git submodule update --init third_party/EasyTensorRT
-```
-
-```
-docker run -it --rm -v $(pwd):/workspace -w /workspace \
-  --add-host host.docker.internal:host-gateway \
-  ghcr.io/mapmindai/gaussiansplatting:latest \
-  python3 -m mapping.mapping_pipeline \
-    --video_path data/pano.mp4 --workspace_path data/pano_mapping \
-    --triton-url host.docker.internal:8011
-```
-
-The reconstruction lands in `data/pano_mapping/` (`images/<face>/` +
-`sparse/0/`) on the host, since `/workspace` is a bind mount of your checkout.
-[doc/panorama_mapping.md](doc/panorama_mapping.md) covers serving the models,
-each stage, and the pair-selection knobs.
-
-## Training a Gaussian Splatting model
-
-The pipeline's last stage masks out people and trains a model with
-[gsplat](https://github.com/nerfstudio-project/gsplat) from the cube-map
-reconstruction. Every setting comes from the `JobParameters` file passed as
-`run_pipeline.sh`'s fifth argument: `iterations` defaults to `30000`,
-`data_factor` (a COLMAP-style downsample factor) to `1`, and
-`floater_reg_weight` (opacity/scale regularization strength) to `0.01`.
-
-The trained model lands in `<reconstruction_dir>/gsplat_output/`, including a
-final point cloud under `ply/`. The trainer also enables camera pose
-refinement, opacity/scale regularization (to suppress floaters), and
-antialiased rendering — gsplat defaults these off, but they consistently help
-on cube-map panorama captures. Export/viewer integration isn't wired yet — see
-Status.
-
-Every stage skips work already on disk, so re-running the script after a
-parameter change redoes only what is missing. To retrain alone, delete
-`gsplat_output/`.
-
-Training renders at the cube face size divided by `data_factor`, and the
-rasterizer's per-iteration buffers scale with that pixel count times the
-(growing, via densification) number of Gaussians, times one image per cube face
-per frame. On GPUs with less than ~8GB VRAM, drop `face_size` and/or raise
-`data_factor` to fit. The script also sets
-`PYTORCH_ALLOC_CONF=expandable_segments:True` to reduce allocator fragmentation
-from those buffers, which otherwise depletes VRAM before the process leaks it.
