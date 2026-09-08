@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # context (see README for the --build-context flag this requires), not the
 # default build context, so the image build doesn't have to send the whole repo.
 COPY --from=gsplatsrc . /opt/gsplat
-COPY --from=reposrc scripts/gsplat_train.sh gsplat_server/config/gsplat_train_defaults.proto.txt scripts/gsplat_env.sh /opt/easygaussiansplatting/scripts/
+COPY --from=reposrc gsplat_server/config/gsplat_train_defaults.proto.txt scripts/gsplat_env.sh /opt/easygaussiansplatting/scripts/
 COPY --from=reposrc mapping/train_gsplat_with_masks.py /opt/easygaussiansplatting/mapping/
 COPY --from=reposrc gsplat_server /opt/easygaussiansplatting/gsplat_server
 COPY --from=colmapsrc . /tmp/colmap

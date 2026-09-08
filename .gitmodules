@@ -4,3 +4,6 @@
 [submodule "third_party/colmap"]
 	path = third_party/colmap
 	url = https://github.com/colmap/colmap
+[submodule "third_party/EasyTensorRT"]
+	path = third_party/EasyTensorRT
+	url = https://github.com/MapMindAI/EasyTensorRT.git

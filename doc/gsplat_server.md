@@ -3,9 +3,9 @@
 `gsplat_server/` turns a Linux box with an NVIDIA GPU into a training
 appliance: clients upload a COLMAP model over gRPC, the server trains it with
 gsplat, and they download the resulting point cloud. It carries only the
-training half of the pipeline — clients run COLMAP and
-`scripts/cubemap_convert.sh` themselves, since gsplat's COLMAP loader accepts
-only perspective and fisheye cameras.
+training half of the pipeline — clients reconstruct their capture themselves
+(`mapping/mapping_pipeline.py`), since gsplat's COLMAP loader accepts only
+perspective and fisheye cameras.
 
 | File | |
 | --- | --- |
@@ -37,14 +37,13 @@ docker pull ghcr.io/mapmindai/gaussiansplatting:latest
 <details>
 <summary>Building it locally</summary>
 
-The submodules have to be checked out and passed in as extra build contexts, so
-the build doesn't have to send `data/`:
+The `gsplat` submodule has to be checked out and passed in as an extra build
+context, so the build doesn't have to send `data/`:
 
 ```
-git submodule update --init third_party/gsplat third_party/colmap
+git submodule update --init third_party/gsplat
 docker build -f artifacts/docker/dev.dockerfile -t easygaussiansplatting:dev \
-  --build-context gsplatsrc=./third_party/gsplat \
-  --build-context colmapsrc=./third_party/colmap artifacts/docker
+  --build-context gsplatsrc=./third_party/gsplat artifacts/docker
 ```
 
 Point `DOCKER_IMAGE` at the local tag to run it instead of the published one.
@@ -126,7 +125,7 @@ Finished jobs survive it.
 downloads the point cloud. The client requires Python 3 and `grpcio` and loads
 `gsplat_server/config/gsplat_train_defaults.proto.txt` for training parameters:
 ```
-gsplat_server/client.py data/pano_mapping_cubemap --server gsplat-host:50051 \
+gsplat_server/client.py data/pano_mapping --server gsplat-host:50051 \
   --output pano.ply
 ```
 Pass `--parameters` with another text-format JobParameters file for a custom
@@ -151,7 +150,7 @@ comparisons.
 
 The directory must hold `images/` and `sparse/`; a `masks/` directory is
 uploaded too if present, and training then skips the masked pixels (see
-`scripts/segment_people.sh`). Nothing else is uploaded, so an earlier
+`mapping/segment_people.py`). Nothing else is uploaded, so an earlier
 `gsplat_output/` in the same directory costs nothing.
 
 To mask people without segmenting them first, set `run_segmentation: true` and

@@ -22,21 +22,25 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 ├── mapping/
 │   ├── benchmark/                # Parameter sweeps and their Markdown report.
 │   │   └── configurations/       # One JobParameters file per swept configuration.
-│   ├── extract_images.py         # Frame extraction for COLMAP reconstruction.
+│   ├── features/                 # Learned features (doc/panorama_mapping.md).
+│   │   ├── triton_models.py      # SuperPoint/LightGlue/SALAD clients.
+│   │   ├── extraction.py         # Features into the database and its sidecar.
+│   │   ├── matching.py           # Pair selection and LightGlue matching.
+│   │   └── progress.py           # Thread pool with progress logging.
+│   ├── mapping_pipeline.py       # The four mapping stages end to end.
+│   ├── panorama_database.py      # Panorama video to a cube-map rig database.
 │   ├── segment_people.py         # Person masks for the training images.
-│   ├── train_gsplat_with_masks.py # simple_trainer entrypoint; reads JobParameters.
-│   └── equirect_to_cubemap.py    # Equirectangular-to-cube-map conversion.
+│   └── train_gsplat_with_masks.py # simple_trainer entrypoint; reads JobParameters.
 ├── scripts/
-│   ├── stitch_pano.sh            # Container: stitch Insta360 footage.
-│   ├── colmap_reconstruct.sh     # Container: extract frames and run COLMAP.
-│   ├── cubemap_convert.sh        # Container: convert the reconstruction.
-│   ├── segment_people.sh         # Container: write person masks.
-│   ├── gsplat_train.sh           # Container: train with gsplat.
-│   ├── gsplat_env.sh             # Container: activate the gsplat conda env.
+│   ├── run_pipeline.sh           # Host: the whole pipeline in one `docker run`.
+│   ├── run_stitch.sh             # Host: stitching on its own.
+│   ├── stitch_video.sh           # Container: Insta360 capture to panorama video.
 │   ├── docker_common.sh          # Shared helpers for the host-side scripts.
-│   ├── run_gsplat.sh             # Host: train an existing cube-map model via Docker.
-│   └── run_pipeline.sh           # Host: run the full pipeline via Docker.
-├── third_party/gsplat/           # gsplat submodule used by gsplat_train.sh.
+│   └── gsplat_env.sh             # Container: activate the gsplat conda env.
+├── third_party/
+│   ├── gsplat/                   # gsplat submodule the training stage uses.
+│   ├── colmap/                   # COLMAP source the Jetson image builds from.
+│   └── EasyTensorRT/             # Triton server and clients for the features.
 └── README.md                     # Pipeline, Docker image, and usage overview.
 ```
 

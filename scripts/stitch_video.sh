@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-# Stitch a raw Insta360 capture into an equirectangular video via insta360_media_stitcher.
-# Run inside the container (see README "Using the tools").
+# Stitch an Insta360 capture into an equirectangular video with the AI-stitch
+# settings we reconstruct from. Runs inside the container; scripts/run_stitch.sh
+# and scripts/run_pipeline.sh drive it. Reads INPUT_INSV, OUTPUT_VIDEO,
+# OUTPUT_SIZE, and MODEL_ROOT_DIR from the environment.
 set -euo pipefail
 
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:/usr/local/lib"
-
-INPUT_INSV="${INPUT_INSV:-data/VID_20260422_153814_00_004.insv}"
-OUTPUT_VIDEO="${OUTPUT_VIDEO:-data/VID_20260422_153814_00_004_pano.mp4}"
-MODEL_ROOT_DIR="${MODEL_ROOT_DIR:-/EasyGaussianSplatting/data/sdk_dir}"
-OUTPUT_SIZE="${OUTPUT_SIZE:-8000x4000}"
 
 # Exit 0 iff the video decodes a frame and matches the requested size. The
 # decode check matters even for pre-existing files: insta360_media_stitcher can
@@ -45,11 +42,6 @@ timeout 1800 insta360_media_stitcher \
   -stitch_type aistitch -enable_stitchfusion \
   -output_size "${OUTPUT_SIZE}" -bitrate 150000000 \
   -enable_h265_encoder -enable_flowstate -enable_directionlock
-
-if [ ! -s "${OUTPUT_VIDEO}" ]; then
-  echo "Stitching failed: ${OUTPUT_VIDEO} was not created" >&2
-  exit 1
-fi
 
 check_video "${OUTPUT_VIDEO}" "${OUTPUT_SIZE}" || {
   echo "Stitching failed: ${OUTPUT_VIDEO} is not a usable ${OUTPUT_SIZE} video" >&2

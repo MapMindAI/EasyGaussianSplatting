@@ -8,19 +8,27 @@ encode/decode (NVENC/NVDEC) and falls back to software encoding without it:
 docker run -it --rm --gpus all --shm-size=1g -v $(pwd)/data:/workspace ghcr.io/mapmindai/gaussiansplatting:latest bash
 ```
 
+Add `--add-host host.docker.internal:host-gateway` too if you will reconstruct
+against a Triton server on this host: Docker on Linux, unlike Mac and Windows,
+does not map that name on its own.
+
 Stitch a raw Insta360 capture into an equirectangular video:
 
 ```
 insta360_media_stitcher -inputs /workspace/VID_xxx.insv -output /workspace/pano.mp4 -stitch_type optflow
 ```
 
-Or run `scripts/stitch_pano.sh`, which wraps the AI-stitch settings we use for
-reconstruction (8000x4000, H.265, flowstate, direction lock). Override
-`INPUT_INSV`, `OUTPUT_VIDEO`, and `MODEL_ROOT_DIR` as needed:
+`scripts/run_stitch.sh <input.insv> [output.mp4] [output_size]` does that from
+the host, with the AI-stitch settings we use for reconstruction (8000x4000,
+H.265, flowstate, direction lock), and skips the step when the video is already
+there and decodes at the requested size. `output.mp4` defaults to the capture's
+name with a `_pano.mp4` suffix; both paths must live under the repo checkout:
 
 ```
-INPUT_INSV=data/VID_xxx.insv OUTPUT_VIDEO=data/pano.mp4 scripts/stitch_pano.sh
+scripts/run_stitch.sh data/VID_xxx.insv
 ```
+
+`scripts/run_pipeline.sh` runs the same stage as the first of its four.
 
 Read metadata off the source file:
 
@@ -28,48 +36,35 @@ Read metadata off the source file:
 exiftool /workspace/VID_xxx.insv
 ```
 
-Run `scripts/colmap_reconstruct.sh <video_path> [frame_rate]` to extract frames
-from the panorama video (via `mapping/extract_images.py`) and reconstruct the
-scene with COLMAP's `EQUIRECTANGULAR` camera model. `frame_rate` (frames/sec
-sampled from the video) defaults to 2. Results land next to the video, in a
-`<video_name>_mapping/` directory. Terminal output is also appended to
-`<video_name>_mapping/colmap_reconstruct.log`:
+Run `python3 -m mapping.mapping_pipeline --video_path <video> --workspace_path <dir>`
+to reconstruct the panorama video as a cube-map rig: SuperPoint and SALAD features
+into a COLMAP database, LightGlue matching, and global SfM. It needs a Triton
+server serving those models — see
+[panorama_mapping.md](panorama_mapping.md), which also covers each stage and
+the pair-selection knobs. `--frame-rate` (frames/sec sampled from the video)
+defaults to 2, `--face-size` to a quarter of the video width, and `--faces` to
+`front,right,back,left,up` since the nadir usually shows whoever is carrying
+the rig — pass all six explicitly to include it:
 
 ```
-scripts/colmap_reconstruct.sh data/pano.mp4 2
+python3 -m mapping.mapping_pipeline \
+  --video_path data/pano.mp4 --workspace_path data/pano_mapping \
+  --triton-url host.docker.internal:8011
 ```
 
-It runs `feature_extractor`, `sequential_matcher`, and `mapper` on CPU —
-COLMAP's default GPU path hard-aborts when the container has no CUDA device,
-so the script always requests `use_gpu 0`. The sparse model lands in
-`data/pano_mapping/sparse`.
+The cube-map model lands in `data/pano_mapping`, ready for gsplat: the faces
+are 90-degree-FOV `PINHOLE` cameras, which gsplat's COLMAP loader supports and
+`EQUIRECTANGULAR` it does not.
 
-Run `scripts/cubemap_convert.sh <reconstruction_dir> [face_size] [faces]` to
-turn that equirect reconstruction into a 6-face cube map (gsplat only
-supports perspective/fisheye COLMAP camera models, not `EQUIRECTANGULAR`).
-`face_size` defaults to 1024; `faces` defaults to all but `down`
-(`front,right,back,left,up`) since the nadir usually shows whoever is
-carrying the rig — pass all six explicitly to include it:
-
-```
-scripts/cubemap_convert.sh data/pano_mapping 1024
-```
-
-The cube-map model lands in `data/pano_mapping_cubemap`.
-
-Run `scripts/gsplat_train.sh <cubemap_reconstruction_dir> <parameters.proto.txt>`
-to train a [gsplat](https://github.com/nerfstudio-project/gsplat) model from
-that cube-map reconstruction. Every training setting comes from the parameters
-file, whose schema is `gsplat_server/proto/gsplat.proto`. The container needs
-about 8 GiB of shared memory for gsplat's data-loader workers; below that they
-die mid-run with a bus error:
-
-```
-scripts/gsplat_train.sh data/pano_mapping_cubemap gsplat_server/config/gsplat_train_defaults.proto.txt
-```
+`scripts/run_pipeline.sh` then masks out people and trains a
+[gsplat](https://github.com/nerfstudio-project/gsplat) model from that cube-map
+reconstruction. Every training setting comes from the parameters file, whose
+schema is `gsplat_server/proto/gsplat.proto`. The container needs about 8 GiB of
+shared memory for gsplat's data-loader workers; below that they die mid-run with
+a bus error.
 
 The densification settings live in `gsplat_server/config/gsplat_train_defaults.proto.txt`, shared
-with the sweep so its baseline cannot drift from what ships; `mapping/train_gsplat_with_masks.py` only attaches the masks and passes every argument through to simple_trainer. The trained model lands in `data/pano_mapping_cubemap/gsplat_output`.
+with the sweep so its baseline cannot drift from what ships; `mapping/train_gsplat_with_masks.py` only attaches the masks and passes every argument through to simple_trainer. The trained model lands in `data/pano_mapping/gsplat_output`.
 
 Person segmentation masks mirror any nested folders under the reconstruction's
 `images/` directory, so each mask keeps the same relative image path and adds
