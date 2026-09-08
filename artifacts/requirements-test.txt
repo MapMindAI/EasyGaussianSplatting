@@ -1,0 +1,9 @@
+# Dependencies for the tests, which need no GPU, COLMAP, or Triton.
+# grpcio-tools also carries the protoc that proto/build.sh falls back to.
+Pillow
+PyYAML
+grpcio
+grpcio-tools
+numpy
+protobuf
+pytest

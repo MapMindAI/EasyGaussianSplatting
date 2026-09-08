@@ -4,23 +4,30 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 
 ```text
 .
-├── .github/workflows/docker.yml  # Builds and publishes the Docker image.
-├── artifacts/docker/
-│   ├── dev.dockerfile            # COLMAP, Insta360 SDK, ExifTool, and gsplat.
-│   ├── jetson.dockerfile         # arm64 image: JetPack 6 CUDA and gsplat.
-│   └── installers/               # Docker image installation scripts.
+├── .github/workflows/
+│   ├── docker.yml                # Builds and publishes the Docker image.
+│   └── tests.yml                 # Runs the tests on a slim Python image.
+├── artifacts/
+│   ├── requirements-test.txt     # Test-only dependencies.
+│   └── docker/
+│       ├── dev.dockerfile        # COLMAP, Insta360 SDK, ExifTool, and gsplat.
+│       ├── jetson.dockerfile     # arm64 image: JetPack 6 CUDA and gsplat.
+│       └── installers/           # Docker image installation scripts.
 ├── data/                         # Local datasets and captures; not repo-managed (see §5).
 ├── doc/                          # Pipeline, tooling, and server guides.
 ├── gsplat_server/                # gRPC training server (see doc/gsplat_server.md).
 │   ├── server.py                 # gRPC service and job queue.
+│   ├── server_test.py            # Job store, uploads, and service preconditions.
 │   ├── serve.sh                  # Container: start the service.
 │   ├── run_server.sh             # Host: start the service via Docker.
 │   ├── client.py                 # Command-line client.
 │   ├── parameters.py             # JobParameters text-protobuf helpers.
+│   ├── parameters_test.py        # Defaults layering and round trips.
 │   ├── proto/                    # gsplat.proto and its generated bindings.
 │   └── config/                   # Shipped JobParameters defaults.
 ├── mapping/
 │   ├── benchmark/                # Parameter sweeps and their Markdown report.
+│   │   ├── summarize_gsplat_sweep_test.py # Report sections and PLY geometry.
 │   │   └── configurations/       # One JobParameters file per swept configuration.
 │   ├── features/                 # Learned features (doc/panorama_mapping.md).
 │   │   ├── triton_models.py      # SuperPoint/LightGlue/SALAD clients.
@@ -41,8 +48,13 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── gsplat/                   # gsplat submodule the training stage uses.
 │   ├── colmap/                   # COLMAP source the Jetson image builds from.
 │   └── EasyTensorRT/             # Triton server and clients for the features.
+├── conftest.py                   # Puts the repo root on sys.path for the tests.
+├── pytest.ini                    # Points pytest at the tested packages.
 └── README.md                     # Pipeline, Docker image, and usage overview.
 ```
+
+Tests sit beside the module they cover, named `<module>_test.py`, and run in
+CI on a slim Python image (see README).
 
 ## 1. Read the docs before starting a task
 

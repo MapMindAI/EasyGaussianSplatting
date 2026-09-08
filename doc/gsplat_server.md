@@ -24,7 +24,8 @@ perspective and fisheye cameras.
 * A checkout of this repo on the host, which the container runs bind-mounted at
   `/workspace`.
 * `protoc` and the gRPC Python plugin, to generate the bindings below:
-  `sudo apt install protobuf-compiler protobuf-compiler-grpc`.
+  `sudo apt install protobuf-compiler protobuf-compiler-grpc`, or
+  `pip install grpcio-tools` for the copy it bundles.
 
 ## Getting the image
 
@@ -59,6 +60,9 @@ start:
 ```
 bash gsplat_server/proto/build.sh
 ```
+
+Without `protoc` on `PATH` the script uses the one `grpcio-tools` bundles, which
+is how CI generates them.
 
 Rerun it whenever `proto/gsplat.proto` changes, on both the server host and any
 client machine.

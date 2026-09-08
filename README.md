@@ -100,6 +100,33 @@ gsplat_server/client.py data/pano_mapping --server gsplat-host:50051
 
 See [doc/tools.md](doc/tools.md).
 
+## Tests
+
+Each `*_test.py` sits beside the module it covers, and between them they cover
+what runs without a GPU, COLMAP, or Triton: the `JobParameters` layering
+(`gsplat_server/parameters_test.py`), the training server's job store and
+archive handling (`gsplat_server/server_test.py`), and the sweep report
+generator (`mapping/benchmark/summarize_gsplat_sweep_test.py`).
+
+CI runs them on a slim Python image rather than the 20 GB pipeline one. To do
+the same locally:
+
+```
+docker run --rm -v "$PWD":/workspace -w /workspace python:3.11-slim bash -c '
+    pip install -r artifacts/requirements-test.txt
+    bash gsplat_server/proto/build.sh
+    pytest'
+```
+
+Or on the host, with the proto bindings already generated (see
+[doc/gsplat_server.md](doc/gsplat_server.md)):
+`pip install -r artifacts/requirements-test.txt && pytest`.
+
+`mapping/train_gsplat_with_masks.py` and `mapping/segment_people.py` are
+uncovered: both import torch at module scope, and the former also runs the
+trainer at import time, so covering its flag building needs a `__main__`
+guard first.
+
 ## Reconstructing a capture
 
 `mapping/mapping_pipeline.py` reprojects the panorama frames into a rig of
