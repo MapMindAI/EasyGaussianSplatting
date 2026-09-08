@@ -74,13 +74,12 @@ configuration. Point `TRITON_URL` at `host:port` to use a server elsewhere.
 ## Running it
 
 ```
-docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
+docker run -it --rm -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
-  easygaussiansplatting:triton \
+  ghcr.io/mapmindai/gaussiansplatting:latest \
   python3 -m mapping.mapping_pipeline \
-    --video_path data/VID_20260902_113042_00_006_pano.mp4 \
-    --workspace_path data/VID_20260902_113042_00_006_reconstruction \
-    --triton-url 192.168.11.194:8011 --num-threads 4
+    --video_path data/pano.mp4 --workspace_path data/pano_mapping \
+    --triton-url host.docker.internal:8011
 ```
 
 `--video_path` is the stitched video and `--workspace_path` the directory to

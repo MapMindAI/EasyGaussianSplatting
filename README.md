@@ -102,55 +102,54 @@ See [doc/tools.md](doc/tools.md).
 
 ## Reconstructing a capture
 
-`mapping/mapping_pipeline.py` reprojects the panorama frames into a rig of
-pinhole cube faces, extracts SuperPoint and SALAD features, matches with
-LightGlue, and solves the scene with global SfM. It needs the repo checkout
-itself, for `mapping/` and the `third_party/EasyTensorRT` submodule, so mount
-the whole checkout rather than only `data/`, and it needs a Triton server
-serving those three models:
+1. [Stitch to video](doc/tools.md) `scripts/run_stitch.sh data/${VIDEO_NAME}.insv`
+2. [Mapping a panorama capture](doc/panorama_mapping.md) run with video.
 
-```
-git submodule update --init third_party/EasyTensorRT
-```
-
-```
-docker run -it --rm -v $(pwd):/workspace -w /workspace \
+```bash
+GSPLAT_HOST=192.168.11.194
+VIDEO_NAME=VID_20260904_155849_00_009
+docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   python3 -m mapping.mapping_pipeline \
-    --video_path data/pano.mp4 --workspace_path data/pano_mapping \
-    --triton-url host.docker.internal:8011
+    --video_path data/${VIDEO_NAME}_pano.mp4 \
+    --workspace_path data/${VIDEO_NAME}_reconstruction \
+    --triton-url ${GSPLAT_HOST}:8011 --num-threads 4
 ```
 
-The reconstruction lands in `data/pano_mapping/` (`images/<face>/` +
-`sparse/0/`) on the host, since `/workspace` is a bind mount of your checkout.
-[doc/panorama_mapping.md](doc/panorama_mapping.md) covers serving the models,
-each stage, and the pair-selection knobs.
+3. [Training a Gaussian Splatting model](doc/gsplat_server.md)
 
-## Training a Gaussian Splatting model
+```bash
+WORKSPACE_PATH=${VIDEO_NAME}_reconstruction
+gsplat_server/client.py data/${WORKSPACE_PATH} \
+  --parameters gsplat_server/config/gsplat_train_defaults.proto.txt \
+  --server ${GSPLAT_HOST}:50051 --output ${WORKSPACE_PATH}/gsplat.ply
+```
 
-The pipeline's last stage masks out people and trains a model with
-[gsplat](https://github.com/nerfstudio-project/gsplat) from the cube-map
-reconstruction. Every setting comes from the `JobParameters` file passed as
-`run_pipeline.sh`'s fifth argument: `iterations` defaults to `30000`,
-`data_factor` (a COLMAP-style downsample factor) to `1`, and
-`floater_reg_weight` (opacity/scale regularization strength) to `0.01`.
+## Tests
 
-The trained model lands in `<reconstruction_dir>/gsplat_output/`, including a
-final point cloud under `ply/`. The trainer also enables camera pose
-refinement, opacity/scale regularization (to suppress floaters), and
-antialiased rendering — gsplat defaults these off, but they consistently help
-on cube-map panorama captures. Export/viewer integration isn't wired yet — see
-Status.
+Each `*_test.py` sits beside the module it covers, and between them they cover
+what runs without a GPU, COLMAP, or Triton: the `JobParameters` layering
+(`gsplat_server/parameters_test.py`), the training server's job store and
+archive handling (`gsplat_server/server_test.py`), the sweep report generator
+(`mapping/benchmark/summarize_gsplat_sweep_test.py`), and the reconstruction's
+gravity levelling (`mapping/mapping_pipeline_test.py`).
 
-Every stage skips work already on disk, so re-running the script after a
-parameter change redoes only what is missing. To retrain alone, delete
-`gsplat_output/`.
+CI runs them on a slim Python image rather than the 20 GB pipeline one. To do
+the same locally:
 
-Training renders at the cube face size divided by `data_factor`, and the
-rasterizer's per-iteration buffers scale with that pixel count times the
-(growing, via densification) number of Gaussians, times one image per cube face
-per frame. On GPUs with less than ~8GB VRAM, drop `face_size` and/or raise
-`data_factor` to fit. The script also sets
-`PYTORCH_ALLOC_CONF=expandable_segments:True` to reduce allocator fragmentation
-from those buffers, which otherwise depletes VRAM before the process leaks it.
+```
+docker run --rm -v "$PWD":/workspace -w /workspace python:3.11-slim bash -c '
+    pip install -r artifacts/requirements-test.txt
+    bash gsplat_server/proto/build.sh
+    pytest'
+```
+
+Or on the host, with the proto bindings already generated (see
+[doc/gsplat_server.md](doc/gsplat_server.md)):
+`pip install -r artifacts/requirements-test.txt && pytest`.
+
+`mapping/train_gsplat_with_masks.py` and `mapping/segment_people.py` are
+uncovered: both import torch at module scope, and the former also runs the
+trainer at import time, so covering its flag building needs a `__main__`
+guard first.

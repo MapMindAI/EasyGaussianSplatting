@@ -5,14 +5,14 @@ on:
     branches: ["master"]
     paths:
       - ".github/workflows/docker.yml"
-      - "artifacts/**"
+      - "artifacts/docker/**"
       - "third_party/gsplat"
       - "third_party/colmap"
   pull_request:
     branches: ["master"]
     paths:
       - ".github/workflows/docker.yml"
-      - "artifacts/**"
+      - "artifacts/docker/**"
       - "third_party/gsplat"
       - "third_party/colmap"
   workflow_dispatch:

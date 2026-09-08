@@ -1,0 +1,48 @@
+name: Tests
+
+on:
+  push:
+    branches: ["master"]
+    paths:
+      - ".github/workflows/tests.yml"
+      - "gsplat_server/**"
+      - "mapping/**"
+      - "conftest.py"
+      - "pytest.ini"
+      - "artifacts/requirements-test.txt"
+  pull_request:
+    branches: ["master"]
+    paths:
+      - ".github/workflows/tests.yml"
+      - "gsplat_server/**"
+      - "mapping/**"
+      - "conftest.py"
+      - "pytest.ini"
+      - "artifacts/requirements-test.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    # The tests need no GPU, COLMAP, or Triton, so they run on a slim image
+    # rather than paying to pull the 20 GB pipeline one.
+    container: python:3.11-slim
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Install test dependencies
+        run: pip install --no-cache-dir -r artifacts/requirements-test.txt
+
+      # The bindings are gitignored, so the tests need them generated first.
+      # This image has no protoc, so the script uses grpcio-tools' copy.
+      - name: Generate the proto bindings
+        run: bash gsplat_server/proto/build.sh
+
+      - name: Run the tests
+        run: pytest -q
