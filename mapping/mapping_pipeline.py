@@ -2,9 +2,10 @@
 """Reconstruct a panorama video with learned features and global SfM.
 
 Four stages into one workspace: a cube-map rig database, SuperPoint/SALAD
-extraction, LightGlue matching, and `pycolmap.global_mapping`. Each picks up
-where a previous run stopped rather than redoing its work. The result is a
-cube-map reconstruction gsplat can train on directly.
+extraction, LightGlue matching, and `pycolmap.global_mapping`. The first three
+pick up where a previous run stopped rather than redoing their work; the
+mapping always reruns. The result is a cube-map reconstruction gsplat can train
+on directly.
 
 See doc/panorama_mapping.md for the pipeline, the models it needs served, and
 the pair-selection knobs.
@@ -25,12 +26,15 @@ from .features.triton_models import (
     GlobalFeatureExtractor,
     LocalFeatureExtractor,
 )
+from . import gps
 from .panorama_database import (
     DEFAULT_FACES,
     FACE_AXES,
+    REFERENCE_FACE,
     RIG_DOWN,
     build_database,
     parse_faces,
+    sampling_step,
 )
 
 
@@ -102,8 +106,14 @@ def align_up_axis(reconstruction):
     logging.info(f"Rotated {np.round(down, 3)} to -Z, so the map is +Z up")
 
 
-def run_global_mapping(workspace_path):
-    """Reconstructs `<workspace_path>/database.db` into `sparse/`."""
+def run_global_mapping(workspace_path, track=None, seconds_per_frame=None,
+                       gps_source=None):
+    """Reconstructs `<workspace_path>/database.db` into `sparse/`.
+
+    Levelling runs before any GPS alignment, which is then restricted to a turn
+    about the vertical so it keeps that levelling: the track's altitudes are far
+    noisier than the gravity the rig itself reports.
+    """
     workspace_path = Path(workspace_path)
     sparse_dir = workspace_path / "sparse"
     sparse_dir.mkdir(parents=True, exist_ok=True)
@@ -117,6 +127,17 @@ def run_global_mapping(workspace_path):
         raise RuntimeError("Global mapping produced no reconstruction")
     for index, model in sorted(reconstructions.items()):
         align_up_axis(model)
+        if track is not None:
+            aligned = gps.align_to_track(
+                model, track, REFERENCE_FACE, seconds_per_frame
+            )
+            # Only the first model shares the workspace's transform file, and it
+            # is the one the later stages read out of sparse/0.
+            if aligned is not None and index == 0:
+                local_to_world, residuals = aligned
+                gps.save_transform(
+                    workspace_path, local_to_world, track.epsg, residuals, gps_source
+                )
         # Rewritten over what global_mapping just wrote, which is the untilted map.
         model.write(sparse_dir / str(index))
         logging.info(
@@ -127,11 +148,25 @@ def run_global_mapping(workspace_path):
 
 def run_pipeline(video_path, workspace_path, triton_url, selection, frame_rate=2.0,
                  face_size=None, faces=DEFAULT_FACES, keypoint_threshold=0.015,
-                 match_threshold=0.2, num_threads=8):
+                 match_threshold=0.2, num_threads=8, gps_video=None):
     """Reconstructs `video_path` into `workspace_path`, and returns its
-    `sparse/0/` directory."""
+    `sparse/0/` directory.
+
+    `gps_video` is the capture carrying the GPS track -- the `.insv`, or the
+    `.lrv` proxy of it, which holds the same telemetry in a much smaller file.
+    """
     workspace_path = Path(workspace_path)
     build_database(video_path, workspace_path, frame_rate, face_size, faces)
+
+    track = None
+    seconds_per_frame = None
+    if gps_video is not None:
+        step, rate = sampling_step(video_path, frame_rate)
+        seconds_per_frame = step / rate
+        track = gps.read_track(gps_video)
+        gps.write_pose_priors(
+            workspace_path / "database.db", track, seconds_per_frame
+        )
 
     # Skipped in the caller rather than in extract_features, so a finished
     # workspace never opens a connection to the inference server.
@@ -152,12 +187,11 @@ def run_pipeline(video_path, workspace_path, triton_url, selection, frame_rate=2
         num_threads,
     )
 
-    model_dir = workspace_path / "sparse" / "0"
-    if (model_dir / "cameras.bin").exists():
-        logging.info(f"{model_dir} already exists, skipping global mapping")
-    else:
-        run_global_mapping(workspace_path)
-    return model_dir
+    # Always resolved, unlike the stages above: it is the cheap one, and it is
+    # where levelling and GPS alignment happen, so a rerun has to redo it for a
+    # changed track or a changed alignment to reach the saved model.
+    run_global_mapping(workspace_path, track, seconds_per_frame, gps_video)
+    return workspace_path / "sparse" / "0"
 
 
 def main():
@@ -193,6 +227,10 @@ def main():
                              f"(default: {PairSelection.num_retrieval_excluded})")
     parser.add_argument("--num-threads", type=int, default=8,
                         help="worker threads calling the models (default: 8)")
+    parser.add_argument("--gps-video", default=None,
+                        help="capture carrying the GPS track, the .insv or its "
+                             ".lrv proxy; aligns the map to UTM about its own centre "
+                             f"and writes {gps.TRANSFORM_FILENAME}")
     args = parser.parse_args()
     logging.info(f"Parameters: {vars(args)}")
 
@@ -211,6 +249,7 @@ def main():
         keypoint_threshold=args.keypoint_threshold,
         match_threshold=args.match_threshold,
         num_threads=args.num_threads,
+        gps_video=args.gps_video,
     )
     logging.info(f"Reconstruction written to {model_dir}")
 

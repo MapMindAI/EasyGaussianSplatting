@@ -20,7 +20,8 @@ Reconstruction infers against a Triton server, which `TRITON_URL` locates and
 keeps the panorama's angular resolution — and `parameters.proto.txt` to
 `gsplat_server/config/gsplat_train_defaults.proto.txt`. Pass a different
 text-format `JobParameters` file as the fifth argument to change training.
-Every stage skips work already on disk, so an interrupted run resumes:
+Every stage skips work already on disk, so an interrupted run resumes; only
+the sparse mapping is always redone:
 
 ```
 scripts/run_pipeline.sh data/VID_xxx.insv 2 4000x2000
@@ -87,11 +88,13 @@ See [doc/tools.md](doc/tools.md).
 ```bash
 GSPLAT_HOST=192.168.11.194
 VIDEO_NAME=VID_20260904_155849_00_009
+LRVIDEO_NAME=LRV_20260904_155849_01_009
 docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   python3 -m mapping.mapping_pipeline \
     --video_path data/${VIDEO_NAME}_pano.mp4 \
+    --gps-video data/${LRVIDEO_NAME}.lrv \
     --workspace_path data/${VIDEO_NAME}_reconstruction \
     --triton-url ${GSPLAT_HOST}:8011 --num-threads 4
 ```

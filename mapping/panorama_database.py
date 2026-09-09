@@ -113,12 +113,37 @@ def default_face_size(video_path):
     return width // 4
 
 
-def iter_panorama_frames(video_path, frame_rate):
-    """Yields every `frame_rate`-th frame per second of the video."""
+def image_name(face, frame_index):
+    """The database name of one cube face of one sampled panorama."""
+    return f"{face}/{frame_index:06d}.jpg"
+
+
+def parse_image_name(name):
+    """The face and panorama index that `image_name` encoded."""
+    face, _, index = name.partition("/")
+    return face, int(Path(index).stem)
+
+
+def sampling_step(video_path, frame_rate):
+    """Video frames between the samples below, and the video's own frame rate.
+
+    Timing a sampled frame -- which is what pairs it with a GPS fix -- needs
+    both, so the sampling is derived here rather than in the loop.
+    """
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
         sys.exit(f"Could not open {video_path}")
-    step = max(1, round((capture.get(cv2.CAP_PROP_FPS) or frame_rate) / frame_rate))
+    rate = capture.get(cv2.CAP_PROP_FPS) or frame_rate
+    capture.release()
+    return max(1, round(rate / frame_rate)), rate
+
+
+def iter_panorama_frames(video_path, frame_rate):
+    """Yields every `frame_rate`-th frame per second of the video."""
+    step, _ = sampling_step(video_path, frame_rate)
+    capture = cv2.VideoCapture(str(video_path))
+    if not capture.isOpened():
+        sys.exit(f"Could not open {video_path}")
 
     index = 0
     while capture.grab():
@@ -190,7 +215,7 @@ def build_database(video_path, workspace_path, frame_rate, face_size, faces):
             for face in faces:
                 map_x, map_y = remaps[face]
                 cv2.imwrite(
-                    str(images_dir / face / f"{frame_index:06d}.jpg"),
+                    str(images_dir / image_name(face, frame_index)),
                     cv2.remap(
                         panorama,
                         map_x,
@@ -202,7 +227,7 @@ def build_database(video_path, workspace_path, frame_rate, face_size, faces):
 
                 image_id += 1
                 image = pycolmap.Image(
-                    name=f"{face}/{frame_index:06d}.jpg",
+                    name=image_name(face, frame_index),
                     camera_id=cameras[face].camera_id,
                     image_id=image_id,
                 )
