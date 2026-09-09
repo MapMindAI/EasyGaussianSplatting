@@ -20,6 +20,7 @@ from torchvision.transforms.functional import to_tensor
 
 PERSON_LABEL = 1  # COCO
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
+LOG_EVERY = 200
 
 
 def person_mask(model, image, device, score_threshold, mask_threshold, dilation):
@@ -98,7 +99,8 @@ def main():
         )
         Image.fromarray(mask).save(mask_path)
         masked_images += int((mask == 0).any())
-        print(f"[{count}/{len(pending_image_paths)}] {mask_path}", flush=True)
+        if count % LOG_EVERY == 0 or count == len(pending_image_paths):
+            print(f"Segmented {count}/{len(pending_image_paths)} images", flush=True)
 
     print(f"Masks written to {args.mask_dir} ({masked_images} images contain people)")
 

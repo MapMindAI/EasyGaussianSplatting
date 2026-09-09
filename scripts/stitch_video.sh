@@ -46,13 +46,30 @@ fi
 
 # Bounded: the SDK has been observed to deadlock indefinitely on Vulkan device
 # init failure when a GPU is passed to the container but has no usable ICD.
-timeout 1800 insta360_media_stitcher \
+# That deadlock hangs before the first frame, so the bound only has to be
+# longer than a real stitch -- which runs about ten times the capture's length,
+# and longer again at larger output sizes.
+STITCH_TIMEOUT_SECONDS="${STITCH_TIMEOUT_SECONDS:-14400}"
+
+status=0
+timeout "${STITCH_TIMEOUT_SECONDS}" insta360_media_stitcher \
   -inputs "${INPUT_INSV}" \
   -output "${OUTPUT_VIDEO}" \
   -model_root_dir "${MODEL_ROOT_DIR}" \
   -stitch_type aistitch -enable_stitchfusion \
   -output_size "${OUTPUT_SIZE}" -bitrate 150000000 \
-  -enable_h265_encoder -enable_flowstate -enable_directionlock
+  -enable_h265_encoder -enable_flowstate -enable_directionlock || status=$?
+
+# A kill leaves the stitcher's own output silent and the half-written mp4
+# without the moov atom that makes it decodable, so name what happened.
+if [ "${status}" -eq 124 ]; then
+  echo "Stitching timed out after ${STITCH_TIMEOUT_SECONDS}s; raise" \
+       "STITCH_TIMEOUT_SECONDS to give it longer" >&2
+  exit "${status}"
+elif [ "${status}" -ne 0 ]; then
+  echo "insta360_media_stitcher exited ${status}" >&2
+  exit "${status}"
+fi
 
 check_video "${OUTPUT_VIDEO}" "${OUTPUT_SIZE}" || {
   echo "Stitching failed: ${OUTPUT_VIDEO} is not a usable ${OUTPUT_SIZE} video" >&2

@@ -70,7 +70,7 @@ ssim_lambda: 0.5
 # Packed rasterization: less GPU memory, slightly slower.
 packed: true
 # Optimize camera poses alongside the model.
-pose_opt: true
+pose_opt: false
 # Segment people out of the images before training, when the upload carried no
 # masks/ of its own. Costs a few minutes and needs the segmentation weights.
-run_segmentation: false
+run_segmentation: true

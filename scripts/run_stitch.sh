@@ -20,6 +20,7 @@ mkdir -p "$(dirname "${OUTPUT_VIDEO}")"
 REL_OUTPUT_VIDEO="$(repo_relative_path "${OUTPUT_VIDEO}")"
 
 docker run "${DOCKER_RUN_FLAGS[@]}" -e MODEL_ROOT_DIR="${MODEL_ROOT_DIR:-}" \
+  -e STITCH_TIMEOUT_SECONDS="${STITCH_TIMEOUT_SECONDS:-}" \
   "${DOCKER_IMAGE}" bash scripts/stitch_video.sh \
   "/workspace/${REL_INSV}" "/workspace/${REL_OUTPUT_VIDEO}" "${OUTPUT_SIZE}"
 
