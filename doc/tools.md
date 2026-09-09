@@ -19,7 +19,7 @@ insta360_media_stitcher -inputs /workspace/VID_xxx.insv -output /workspace/pano.
 ```
 
 `scripts/run_stitch.sh <input.insv> [output.mp4] [output_size]` does that from
-the host, with the AI-stitch settings we use for reconstruction (8000x4000,
+the host, with the AI-stitch settings we use for reconstruction (4000x2000,
 H.265, flowstate, direction lock), and skips the step when the video is already
 there and decodes at the requested size. `output.mp4` defaults to the capture's
 name with a `_pano.mp4` suffix; both paths must live under the repo checkout:
@@ -27,6 +27,12 @@ name with a `_pano.mp4` suffix; both paths must live under the repo checkout:
 ```
 scripts/run_stitch.sh data/VID_xxx.insv
 ```
+
+A stitch runs about ten times the capture's length, longer at larger output
+sizes, and is bounded at four hours to catch an SDK deadlock that hangs before
+the first frame. `STITCH_TIMEOUT_SECONDS` moves that bound. A run the bound
+kills exits 124 and leaves an mp4 with no moov atom, which nothing can decode;
+re-running restitches it, since the skip above only keeps a video that decodes.
 
 `scripts/run_pipeline.sh` runs the same stage as the first of its four.
 
