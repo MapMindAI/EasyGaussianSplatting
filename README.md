@@ -111,8 +111,8 @@ gsplat_server/client.py data/pano_mapping --server gsplat-host:50051
 ```
 
 ```bash
-WORKSPACE_PATH=${VIDEO_NAME}_reconstruction
-gsplat_server/client.py data/${WORKSPACE_PATH} \
+WORKSPACE_PATH=data/${VIDEO_NAME}_reconstruction
+gsplat_server/client.py ${WORKSPACE_PATH} \
   --parameters gsplat_server/config/gsplat_train_defaults.proto.txt \
   --server ${GSPLAT_HOST}:50051 --output ${WORKSPACE_PATH}/gsplat.ply
 ```
