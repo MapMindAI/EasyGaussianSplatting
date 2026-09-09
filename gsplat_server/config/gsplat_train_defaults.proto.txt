@@ -68,7 +68,7 @@ sh_degree: 3
 # on every metric at no cost.
 ssim_lambda: 0.5
 # Packed rasterization: less GPU memory, slightly slower.
-packed: false
+packed: true
 # Optimize camera poses alongside the model.
 pose_opt: false
 # Segment people out of the images before training, when the upload carried no
