@@ -162,17 +162,21 @@ uploaded too if present, and training then skips the masked pixels (see
 `mapping/segment_people.py`). Nothing else is uploaded, so an earlier
 `gsplat_output/` in the same directory costs nothing.
 
-To mask people without segmenting them first, set `run_segmentation: true` and
-upload no `masks/`. The server then segments the uploaded images before
+To mask people and sky without segmenting them first, set `run_segmentation: true`
+and upload no `masks/`. The server then segments the uploaded images before
 training, writing its output into the job's own directory:
 
 ```
 run_segmentation: true
 ```
 
+People and sky both come from the SegFormer model in
+`third_party/EasyTensorRT` (ADE20K classes 12 and 2), over gRPC at the
+`TRITON_URL` the server container was started with. Without it a
+`run_segmentation: true` job fails rather than masking nothing.
+
 An uploaded `masks/` always wins, so the flag is a fallback rather than an
-override. Segmentation runs on the server's GPU and adds a few minutes, plus a
-one-off download of the Mask R-CNN weights on the first such job.
+override. Segmentation adds a few minutes to a job.
 
 ## Other hosts
 
