@@ -37,6 +37,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── mapping_pipeline.py       # The four mapping stages end to end.
 │   ├── gps.py                    # Capture GPS as UTM priors and map alignment.
 │   ├── gps_test.py               # Track parsing, the fit, and the alignment.
+│   ├── gsplat_world_frame.py     # Undo gsplat's world normalization on export.
+│   ├── gsplat_world_frame_test.py # Similarity inverse and the export wiring.
 │   ├── mapping_pipeline_test.py  # Gravity levelling of the solved map.
 │   ├── panorama_database.py      # Panorama video to a cube-map rig database.
 │   ├── segment_people.py         # Person masks for the training images.

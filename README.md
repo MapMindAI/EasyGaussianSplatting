@@ -123,8 +123,9 @@ Each `*_test.py` sits beside the module it covers, and between them they cover
 what runs without a GPU, COLMAP, or Triton: the `JobParameters` layering
 (`gsplat_server/parameters_test.py`), the training server's job store and
 archive handling (`gsplat_server/server_test.py`), the sweep report generator
-(`mapping/benchmark/summarize_gsplat_sweep_test.py`), and the reconstruction's
-gravity levelling (`mapping/mapping_pipeline_test.py`).
+(`mapping/benchmark/summarize_gsplat_sweep_test.py`), the reconstruction's
+gravity levelling (`mapping/mapping_pipeline_test.py`), and the point cloud's
+return to COLMAP coordinates (`mapping/gsplat_world_frame_test.py`).
 
 CI runs them on a slim Python image rather than the 20 GB pipeline one. To do
 the same locally:

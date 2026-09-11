@@ -147,8 +147,8 @@ three frames have both a pose and a fix.
 
 The file stays in the mapping workspace. `gsplat_server/client.py` uploads
 `images/`, `sparse/` and `masks/` only, so a model trained on the server comes
-back without it; keep the workspace, or carry the file yourself, to put the
-trained model back in world coordinates.
+back in the `sparse/0/` frame but without it; keep the workspace, or carry the
+file yourself, to put the trained model back in world coordinates.
 
 `scripts/run_pipeline.sh` runs this stage between stitching and training as part
 of the whole pipeline, passing `TRITON_URL` through to it.

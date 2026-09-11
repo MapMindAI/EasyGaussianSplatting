@@ -42,9 +42,15 @@ def attach_masks(dataset_class):
 
 
 sys.path.insert(0, EXAMPLES_DIR)
-from datasets.colmap import Dataset  # noqa: E402
+import gsplat  # noqa: E402
+from datasets.colmap import Dataset, Parser  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
+from mapping.gsplat_world_frame import (  # noqa: E402
+    capture_scene_transform,
+    export_in_colmap_frame,
+)
+
 
 def number(value):
     """Recover the decimal the parameter file was written with.
@@ -119,4 +125,6 @@ def load_job_parameters():
 
 load_job_parameters()
 attach_masks(Dataset)
+capture_scene_transform(Parser)
+export_in_colmap_frame(gsplat)
 runpy.run_path(os.path.join(EXAMPLES_DIR, "simple_trainer.py"), run_name="__main__")
