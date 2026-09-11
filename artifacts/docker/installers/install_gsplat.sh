@@ -38,6 +38,10 @@ cd "${GSPLAT_DIR}"
 pip install --no-build-isolation -e .
 pip install -r examples/requirements.txt --no-build-isolation
 
+# segment_people.py calls the EasyTensorRT segmentation model over gRPC, and it
+# runs in this env for torchvision, so it needs the Triton client here too.
+pip install --no-cache-dir "tritonclient[grpc]"
+
 rm -rf build "${GSPLAT_DIR}"/*.egg-info
 pip cache purge
 conda clean -afy

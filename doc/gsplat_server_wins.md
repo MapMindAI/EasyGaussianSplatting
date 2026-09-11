@@ -126,10 +126,14 @@ To keep the server across reboots, run the same image detached instead:
 
 ```
 docker run -d --name gsplat-server --gpus all --shm-size=8g -p 50051:50051 \
+  -e TRITON_URL=host.docker.internal:8011 \
   -v D:\EasyGaussianSplatting:/workspace -w /workspace \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   gsplat_server/serve.sh /workspace/data/gsplat_server 50051
 ```
+
+`TRITON_URL` is what lets a `run_segmentation: true` job mask people and sky,
+through the `segformer` model the Triton server above serves.
 
 `--shm-size` matters: below roughly 8g the trainer's dataloader workers die
 partway through a run with a bus error, which surfaces as a failed job whose

@@ -16,5 +16,6 @@ mkdir -p "${JOBS_DIR}"
 REL_JOBS_DIR="$(repo_relative_path "${JOBS_DIR}")"
 
 docker run "${DOCKER_RUN_FLAGS[@]}" -p "${PORT}:${PORT}" \
+  -e TRITON_URL="${TRITON_URL}" \
   "${DOCKER_IMAGE}" \
   gsplat_server/serve.sh "/workspace/${REL_JOBS_DIR}" "${PORT}"

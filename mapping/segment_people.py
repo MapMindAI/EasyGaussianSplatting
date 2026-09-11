@@ -1,62 +1,65 @@
 #!/usr/bin/env python3
-"""Segment people in a COLMAP image folder and write gsplat training masks.
+"""Segment people and sky in a COLMAP image folder and write gsplat training masks.
 
-Masks are white where gsplat should supervise training and black over people,
-named "<image_name>.png" after the image they belong to (COLMAP's mask naming
-convention). Nested image folders are mirrored under the mask directory.
+Masks are white where gsplat should supervise training and black over people and
+sky, both read from the ADE20K SegFormer model in third_party/EasyTensorRT over
+gRPC. Named "<image_name>.png" after the image they belong to (COLMAP's mask
+naming convention). Nested image folders are mirrored under the mask directory.
+
+The model is reached at --triton-url, or $TRITON_URL when the flag is left out.
 """
 
 import argparse
+import os
 from pathlib import Path
 
+import cv2
 import numpy as np
-import torch
-from PIL import Image
-from torchvision.models.detection import (
-    MaskRCNN_ResNet50_FPN_V2_Weights,
-    maskrcnn_resnet50_fpn_v2,
-)
-from torchvision.transforms.functional import to_tensor
 
-PERSON_LABEL = 1  # COCO
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
 LOG_EVERY = 200
 
 
-def person_mask(model, image, device, score_threshold, mask_threshold, dilation):
-    """Return a uint8 mask: 255 where training should look, 0 over people."""
-    tensor = to_tensor(image).to(device)
-    with torch.inference_mode():
-        prediction = model([tensor])[0]
+def dilate(mask, radius):
+    """Grow a bool mask by `radius` pixels."""
+    if radius <= 0:
+        return mask
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1))
+    return cv2.dilate(mask.astype(np.uint8), kernel).astype(bool)
 
-    people = (prediction["labels"] == PERSON_LABEL) & (
-        prediction["scores"] >= score_threshold
-    )
-    height, width = tensor.shape[1:]
-    if not bool(people.any()):
-        return np.full((height, width), 255, dtype=np.uint8)
 
-    person = (prediction["masks"][people, 0].amax(0) >= mask_threshold).float()
-    if dilation > 0:
-        # Grows the mask over the soft edges the segmenter leaves behind:
-        # motion blur, hair, and the contact shadow under the feet.
-        person = torch.nn.functional.max_pool2d(
-            person[None], kernel_size=2 * dilation + 1, stride=1, padding=dilation
-        )[0]
-    return ((person < 0.5).to(torch.uint8) * 255).cpu().numpy()
+def training_mask(blocked):
+    """255 where training should look, 0 over the blocked (person or sky) pixels."""
+    return np.where(blocked, np.uint8(0), np.uint8(255))
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image_dir", type=Path)
     parser.add_argument("mask_dir", type=Path)
-    parser.add_argument("--score-threshold", type=float, default=0.5)
-    parser.add_argument("--mask-threshold", type=float, default=0.5)
+    parser.add_argument(
+        "--triton-url",
+        default=None,
+        help="Triton gRPC endpoint for the segmentation model; defaults to $TRITON_URL",
+    )
     parser.add_argument(
         "--dilation", type=int, default=8, help="pixels to grow each person mask by"
     )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
+
+    triton_url = args.triton_url or os.environ.get("TRITON_URL")
+    if not triton_url:
+        raise SystemExit("No Triton URL given; pass --triton-url or set TRITON_URL")
+    # Imported here so the mask helpers stay testable without the EasyTensorRT
+    # submodule or the Triton client installed.
+    from mapping.features.triton_models import (
+        ADE20K_PERSON_CLASS,
+        ADE20K_SKY_CLASS,
+        SemanticSegmenter,
+    )
+
+    segmenter = SemanticSegmenter(triton_url)
 
     image_paths = sorted(
         path
@@ -80,29 +83,31 @@ def main():
         print(f"Masks already exist in {args.mask_dir}; skipping segmentation")
         return
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    weights = MaskRCNN_ResNet50_FPN_V2_Weights.DEFAULT
-    model = maskrcnn_resnet50_fpn_v2(weights=weights).eval().to(device)
-
     masked_images = 0
+    sky_images = 0
     for count, image_path in enumerate(pending_image_paths, start=1):
         mask_path = args.mask_dir / f"{image_path.relative_to(args.image_dir)}.png"
         mask_path.parent.mkdir(parents=True, exist_ok=True)
-        image = Image.open(image_path).convert("RGB")
-        mask = person_mask(
-            model,
-            image,
-            device,
-            args.score_threshold,
-            args.mask_threshold,
-            args.dilation,
-        )
-        Image.fromarray(mask).save(mask_path)
-        masked_images += int((mask == 0).any())
+        image = cv2.imread(str(image_path))
+        if image is None:
+            print(f"Skipping unreadable image: {image_path}")
+            continue
+
+        classes = segmenter.classes(image)
+        sky = classes == ADE20K_SKY_CLASS
+        # The semantic person class leaves soft edges (motion blur, hair, the
+        # contact shadow) the way the instance masks did, so grow it a little.
+        people = dilate(classes == ADE20K_PERSON_CLASS, args.dilation)
+        cv2.imwrite(str(mask_path), training_mask(sky | people))
+        sky_images += int(sky.any())
+        masked_images += int((sky | people).any())
         if count % LOG_EVERY == 0 or count == len(pending_image_paths):
             print(f"Segmented {count}/{len(pending_image_paths)} images", flush=True)
 
-    print(f"Masks written to {args.mask_dir} ({masked_images} images contain people)")
+    print(
+        f"Masks written to {args.mask_dir} "
+        f"({masked_images} images masked, {sky_images} contain sky)"
+    )
 
 
 if __name__ == "__main__":
