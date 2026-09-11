@@ -132,6 +132,11 @@ downloads the point cloud. The client requires Python 3 and `grpcio` and loads
 gsplat_server/client.py data/pano_mapping --server gsplat-host:50051 \
   --output pano.ply
 ```
+The downloaded point cloud is in the uploaded `sparse/` frame: gsplat
+normalizes world space for training (rotate, recenter, rescale), and the server
+reverses that similarity on export. So a point cloud overlays the COLMAP model
+it was trained from, and `local_to_world.json` still takes it to UTM.
+
 Pass `--parameters` with another text-format JobParameters file for a custom
 run. It is layered over the shipped defaults, so it only names what it changes:
 
