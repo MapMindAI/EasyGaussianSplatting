@@ -43,7 +43,7 @@ def main():
         help="Triton gRPC endpoint for the segmentation model; defaults to $TRITON_URL",
     )
     parser.add_argument(
-        "--dilation", type=int, default=8, help="pixels to grow each person mask by"
+        "--dilation", type=int, default=1, help="pixels to grow each person mask by"
     )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
