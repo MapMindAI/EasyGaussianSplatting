@@ -62,6 +62,19 @@ message JobParameters {
   // Segment people out of the uploaded images before training, when the upload
   // carried no masks/ directory of its own.
   bool run_segmentation = 20;
+  // Mask the sky as well as the people. Only read when run_segmentation is set.
+  bool mask_sky = 21;
+  // Colour the splats are composited over, so a region no Gaussian covers --
+  // the masked sky above all -- renders as this instead of black. Left unset,
+  // gsplat renders onto black as it does without it.
+  Color background_color = 22;
+
+  message Color {
+    // Channel intensities in [0, 1].
+    float red = 1;
+    float green = 2;
+    float blue = 3;
+  }
 }
 
 enum Strategy {

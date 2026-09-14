@@ -41,8 +41,34 @@ def attach_masks(dataset_class):
     dataset_class.__getitem__ = __getitem__
 
 
+def composite_over_background(rendering, color):
+    """Rasterize onto a fixed background colour rather than onto black.
+
+    simple_trainer binds rasterization by name when it is imported, so the
+    module has to be patched before runpy loads it.
+    """
+    channels = (color.red, color.green, color.blue)
+    rasterization = rendering.rasterization
+    background = None
+
+    def rasterization_over_background(*args, **kwargs):
+        # Built once: rebuilding it per call copies host to device, which
+        # synchronizes the stream before every forward pass.
+        nonlocal background
+        viewmats = kwargs["viewmats"]
+        if background is None:
+            background = torch.tensor(channels, dtype=torch.float32, device=viewmats.device)
+        # viewmats is [..., C, 4, 4] and backgrounds [..., C, 3], one colour
+        # per camera in the batch. The viewer passes its own.
+        kwargs.setdefault("backgrounds", background.expand(viewmats.shape[:-2] + (3,)))
+        return rasterization(*args, **kwargs)
+
+    rendering.rasterization = rasterization_over_background
+
+
 sys.path.insert(0, EXAMPLES_DIR)
 import gsplat  # noqa: E402
+import gsplat.rendering  # noqa: E402
 from datasets.colmap import Dataset, Parser  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
@@ -100,7 +126,7 @@ def load_job_parameters():
     try:
         parameter_index = sys.argv.index("--job_parameters")
     except ValueError:
-        return
+        return None
     parameters = load_parameters(sys.argv[parameter_index + 1])
     flags = [
         "--data_factor", str(parameters.data_factor),
@@ -121,9 +147,12 @@ def load_job_parameters():
     # argv[1] is the strategy subcommand, which the parameters decide.
     sys.argv[1] = SUBCOMMANDS[parameters.strategy]
     sys.argv[2:2] = flags
+    return parameters
 
 
-load_job_parameters()
+parameters = load_job_parameters()
+if parameters is not None and parameters.HasField("background_color"):
+    composite_over_background(gsplat.rendering, parameters.background_color)
 attach_masks(Dataset)
 capture_scene_transform(Parser)
 export_in_colmap_frame(gsplat)

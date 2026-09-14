@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Segment people and sky in a COLMAP image folder and write gsplat training masks.
 
-Masks are white where gsplat should supervise training and black over people and
-sky, both read from the ADE20K SegFormer model in third_party/EasyTensorRT over
-gRPC. Named "<image_name>.png" after the image they belong to (COLMAP's mask
-naming convention). Nested image folders are mirrored under the mask directory.
+Masks are white where gsplat should supervise training and black over people
+and, unless --no-mask-sky is given, the sky; both are read from the ADE20K
+SegFormer model in third_party/EasyTensorRT over gRPC. Named "<image_name>.png"
+after the image they belong to (COLMAP's mask naming convention). Nested image
+folders are mirrored under the mask directory.
 
 The model is reached at --triton-url, or $TRITON_URL when the flag is left out.
 """
@@ -44,6 +45,12 @@ def main():
     )
     parser.add_argument(
         "--dilation", type=int, default=1, help="pixels to grow each person mask by"
+    )
+    parser.add_argument(
+        "--mask-sky",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="mask the sky as well as the people",
     )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
@@ -94,19 +101,22 @@ def main():
             continue
 
         classes = segmenter.classes(image)
-        sky = classes == ADE20K_SKY_CLASS
         # The semantic person class leaves soft edges (motion blur, hair, the
         # contact shadow) the way the instance masks did, so grow it a little.
-        people = dilate(classes == ADE20K_PERSON_CLASS, args.dilation)
-        cv2.imwrite(str(mask_path), training_mask(sky | people))
+        blocked = dilate(classes == ADE20K_PERSON_CLASS, args.dilation)
+        sky = classes == ADE20K_SKY_CLASS
+        if args.mask_sky:
+            blocked |= sky
+        cv2.imwrite(str(mask_path), training_mask(blocked))
         sky_images += int(sky.any())
-        masked_images += int((sky | people).any())
+        masked_images += int(blocked.any())
         if count % LOG_EVERY == 0 or count == len(pending_image_paths):
             print(f"Segmented {count}/{len(pending_image_paths)} images", flush=True)
 
+    sky_note = "" if args.mask_sky else ", left unmasked"
     print(
         f"Masks written to {args.mask_dir} "
-        f"({masked_images} images masked, {sky_images} contain sky)"
+        f"({masked_images} images masked, {sky_images} contain sky{sky_note})"
     )
 
 

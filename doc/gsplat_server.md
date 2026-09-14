@@ -181,8 +181,33 @@ People and sky both come from the SegFormer model in
 `TRITON_URL` the server container was started with. Without it a
 `run_segmentation: true` job fails rather than masking nothing.
 
+`mask_sky` selects which of the two is masked. It defaults to true: sky is at
+infinity, so the Gaussians that chase it are floaters that cost memory and blur
+the geometry below. Set it false to keep the sky and mask only people:
+
+```
+run_segmentation: true
+mask_sky: false
+```
+
 An uploaded `masks/` always wins, so the flag is a fallback rather than an
 override. Segmentation adds a few minutes to a job.
+
+### Background colour
+
+`background_color` is what the splats are composited over, so whatever no
+Gaussian covers -- the masked sky above all -- renders as that colour instead of
+black:
+
+```
+background_color { red: 0.53 green: 0.71 blue: 0.92 }
+```
+
+Channels are in `[0, 1]`. Leave the field out and gsplat renders onto black as
+before. It reaches the rasterizer for every render, so it shapes the trained
+model rather than only the preview: a background the sky is plausibly near
+leaves less for stray Gaussians to explain. The exported PLY is unaffected --
+it carries Gaussians, not a background -- so a viewer still paints its own.
 
 ## Other hosts
 

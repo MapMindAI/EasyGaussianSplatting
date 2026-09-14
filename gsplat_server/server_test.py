@@ -215,9 +215,11 @@ def test_training_command_points_at_the_job_directory(tmp_path):
 
 
 def test_segmentation_command_reads_images_and_writes_masks(tmp_path):
-    command = server.segmentation_command(tmp_path)
+    command = server.segmentation_command(tmp_path, mask_sky=True)
 
-    assert command[-2:] == [str(tmp_path / "images"), str(tmp_path / "masks")]
+    assert command[-3:] == [
+        str(tmp_path / "images"), str(tmp_path / "masks"), "--mask-sky",
+    ]
 
 
 def test_training_is_the_only_step_when_segmentation_is_off(tmp_path, parameters):
@@ -234,6 +236,16 @@ def test_segmentation_runs_before_training_when_asked_for(tmp_path, parameters):
     steps = server.job_steps({"parameters": parameters}, tmp_path)
 
     assert [name for name, _ in steps] == ["segmentation", "gsplat training"]
+
+
+@pytest.mark.parametrize("mask_sky, flag", [(True, "--mask-sky"), (False, "--no-mask-sky")])
+def test_job_steps_passes_the_sky_choice_to_segmentation(tmp_path, parameters, mask_sky, flag):
+    parameters["run_segmentation"] = True
+    parameters["mask_sky"] = mask_sky
+
+    (_, command), _ = server.job_steps({"parameters": parameters}, tmp_path)
+
+    assert command[-1] == flag
 
 
 def test_an_uploaded_masks_directory_is_never_overwritten(tmp_path, parameters):
