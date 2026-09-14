@@ -1,10 +1,14 @@
 """Tests for the grouping, scale fitting, and sampling behind DA3 depth."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from mapping.triton.generate_depth import (
     camera_groups,
+    depth_debug_path,
+    depth_overlay,
     fit_depth_scale,
     group_images,
     observed_depths,
@@ -41,6 +45,16 @@ class Image:
 
     def get_observation_points2D(self):
         return self._observations
+
+
+class CallablePoseImage(Image):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._camera_from_world = self.cam_from_world
+        del self.cam_from_world
+
+    def cam_from_world(self):
+        return self._camera_from_world
 
 
 class Reconstruction:
@@ -164,6 +178,29 @@ def test_supervised_points_returns_nothing_when_every_pixel_is_rejected():
     assert rows.shape == (0, 3)
 
 
+def test_depth_overlay_colours_depth_without_changing_image_shape():
+    image = np.full((4, 4, 3), 100, dtype=np.uint8)
+    depth = np.arange(1, 17, dtype=np.float32).reshape(4, 4)
+
+    overlay = depth_overlay(image, depth)
+
+    assert overlay.shape == image.shape
+    assert overlay.dtype == np.uint8
+    assert not np.array_equal(overlay, image)
+
+
+def test_depth_overlay_leaves_the_image_unchanged_at_zero_alpha():
+    image = np.full((2, 2, 3), 100, dtype=np.uint8)
+
+    assert np.array_equal(depth_overlay(image, np.ones((2, 2)), alpha=0.0), image)
+
+
+def test_depth_debug_path_replaces_the_image_suffix_with_depth_postfix():
+    assert depth_debug_path(Path("debug"), "front/000001.jpg") == Path(
+        "debug/front/000001_depth.png"
+    )
+
+
 # --- COLMAP observations ---------------------------------------------------
 
 
@@ -184,3 +221,14 @@ def test_observed_depths_gives_an_image_without_observations_empty_arrays():
     points, depths = observed_depths(Reconstruction(Image("a.jpg")))["a.jpg"]
 
     assert points.shape == (0, 2) and depths.shape == (0,)
+
+
+def test_observed_depths_accepts_callable_camera_from_world():
+    reconstruction = Reconstruction(
+        CallablePoseImage("a.jpg", observations=[Point2D((10.0, 20.0), 7)]),
+        points3D={7: Point3D((1.0, 2.0, 30.0))},
+    )
+
+    _, depths = observed_depths(reconstruction)["a.jpg"]
+
+    assert depths.tolist() == [30.0]

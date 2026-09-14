@@ -22,6 +22,7 @@ The model is reached at --triton-url, or $TRITON_URL when the flag is left out.
 import argparse
 from pathlib import Path
 
+import cv2
 import numpy as np
 
 from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
@@ -101,6 +102,25 @@ def supervised_points(depth, confidence, mask, count, min_confidence, generator)
     ).astype(np.float32)
 
 
+def depth_overlay(image, depth, alpha=0.5):
+    """A colourized `depth` map blended over its source BGR `image`."""
+    valid = np.isfinite(depth) & (depth > 0)
+    normalized = np.zeros(depth.shape, dtype=np.uint8)
+    if valid.any():
+        low, high = np.percentile(depth[valid], (2, 98))
+        if high > low:
+            normalized[valid] = np.clip(
+                (depth[valid] - low) * 255 / (high - low), 0, 255
+            ).astype(np.uint8)
+    colours = cv2.applyColorMap(normalized, cv2.COLORMAP_TURBO)
+    return cv2.addWeighted(image, 1.0 - alpha, colours, alpha, 0.0)
+
+
+def depth_debug_path(debug_dir, name):
+    path = Path(name)
+    return debug_dir / path.with_name(f"{path.stem}_depth.png")
+
+
 def observed_depths(reconstruction):
     """Each image's observed COLMAP points, as name -> ((P, 2) xy, (P,) depth).
 
@@ -109,13 +129,16 @@ def observed_depths(reconstruction):
     """
     observations = {}
     for image in reconstruction.images.values():
-        cam_from_world = np.asarray(image.cam_from_world.matrix(), dtype=np.float64)
+        camera_from_world = image.cam_from_world
+        if callable(camera_from_world):
+            camera_from_world = camera_from_world()
+        camera_from_world = np.asarray(camera_from_world.matrix(), dtype=np.float64)
         coordinates = []
         depths = []
         for point2D in image.get_observation_points2D():
             xyz = np.asarray(reconstruction.points3D[point2D.point3D_id].xyz, dtype=np.float64)
             coordinates.append(point2D.xy)
-            depths.append(cam_from_world[2, :3] @ xyz + cam_from_world[2, 3])
+            depths.append(camera_from_world[2, :3] @ xyz + camera_from_world[2, 3])
         observations[image.name] = (
             np.asarray(coordinates, dtype=np.float64).reshape(-1, 2),
             np.asarray(depths, dtype=np.float64).reshape(-1),
@@ -149,6 +172,12 @@ def main():
         "--mask-dir", type=Path, default=None, help="skip pixels these masks block"
     )
     parser.add_argument(
+        "--debug-dir",
+        type=Path,
+        default=None,
+        help="write colourized depth overlays over the source images here",
+    )
+    parser.add_argument(
         "--num-threads", type=int, default=4, help="worker threads running inference"
     )
     parser.add_argument("--overwrite", action="store_true")
@@ -158,7 +187,6 @@ def main():
 
     # Deferred so the helpers above stay testable without pycolmap, the
     # EasyTensorRT submodule, or the Triton client installed.
-    import cv2
     import pycolmap
 
     from mapping.triton.progress import map_with_progress
@@ -177,7 +205,14 @@ def main():
         group
         for group in groups
         if args.overwrite
-        or not all((args.depth_dir / f"{name}.npy").exists() for name in group)
+        or not all(
+            (args.depth_dir / f"{name}.npy").exists()
+            and (
+                args.debug_dir is None
+                or depth_debug_path(args.debug_dir, name).exists()
+            )
+            for name in group
+        )
     ]
     if not pending_groups:
         print(f"Depths already exist in {args.depth_dir}; skipping depth generation")
@@ -225,6 +260,8 @@ def main():
         return [
             (
                 name,
+                image,
+                depth * scale,
                 supervised_points(
                     depth * scale,
                     confidence,
@@ -234,8 +271,8 @@ def main():
                     generator,
                 ),
             )
-            for name, depth, confidence in zip(
-                group, result["depth_list"], result["depth_conf_list"]
+            for name, image, depth, confidence in zip(
+                group, images, result["depth_list"], result["depth_conf_list"]
             )
         ], None
 
@@ -250,10 +287,14 @@ def main():
         if failure is not None:
             skipped[failure] += 1
             continue
-        for name, rows in rows_by_name:
+        for name, image, depth, rows in rows_by_name:
             output_path = args.depth_dir / f"{name}.npy"
             output_path.parent.mkdir(parents=True, exist_ok=True)
             np.save(output_path, rows)
+            if args.debug_dir is not None:
+                overlay_path = depth_debug_path(args.debug_dir, name)
+                overlay_path.parent.mkdir(parents=True, exist_ok=True)
+                cv2.imwrite(str(overlay_path), depth_overlay(image, depth))
             written.add(name)
 
     print(
@@ -261,6 +302,8 @@ def main():
         f"{skipped[UNSCALED]} groups skipped for lack of points, "
         f"{skipped[UNREADABLE]} for unreadable images)"
     )
+    if args.debug_dir is not None:
+        print(f"Depth overlays written to {args.debug_dir}")
 
 
 if __name__ == "__main__":
