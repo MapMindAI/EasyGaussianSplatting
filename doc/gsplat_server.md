@@ -165,7 +165,7 @@ comparisons.
 
 The directory must hold `images/` and `sparse/`; a `masks/` directory is
 uploaded too if present, and training then skips the masked pixels (see
-`mapping/segment_people.py`). Nothing else is uploaded, so an earlier
+`mapping/triton/segment_people.py`). Nothing else is uploaded, so an earlier
 `gsplat_output/` in the same directory costs nothing.
 
 To mask people and sky without segmenting them first, set `run_segmentation: true`
@@ -191,7 +191,53 @@ mask_sky: false
 ```
 
 An uploaded `masks/` always wins, so the flag is a fallback rather than an
-override. Segmentation adds a few minutes to a job.
+override. Segmentation adds a few minutes to a job: it runs inference on
+`segment_people.py --num-threads` worker threads, through the same helper the
+feature stages use.
+
+### Depth supervision
+
+`run_depth: true` predicts depth for the uploaded images with Depth Anything 3
+and adds gsplat's depth term to the loss, weighted by `depth_lambda`:
+
+```
+run_depth: true
+depth_lambda: 0.01
+```
+
+It runs after segmentation and before training, writing `depths/` into the job
+directory. An uploaded `depths/` always wins, the same way `masks/` does.
+
+DA3 takes a fixed number of views at once, so `generate_depth.py` groups the
+model's images by camera and splits each camera into consecutive groups of five
+-- for the cube-map rig, neighbouring frames of one face. The served model's
+input shape fixes that count, so it is a constant rather than a flag: changing
+it means deploying a different model (see `third_party/EasyTensorRT`).
+
+Each group is reconstructed in its own arbitrary scale, which is the part worth
+understanding: the depth DA3 returns is not in the input model's units, and a
+different group gets a different scale. So each group's depth is fitted to the
+COLMAP points its own images already observe, by the median ratio between the
+two, before anything is written. A group whose images carry fewer than 20 such
+points is skipped rather than written at a guessed scale, and the stage reports
+how many it skipped.
+
+What lands in `depths/` is one `<image_name>.npy` per image holding `(M, 3)`
+float32 rows of `(x, y, depth)`: the sampled pixels worth supervising rather
+than a dense map, which is the difference between megabytes and gigabytes. `x`
+and `y` are normalized to `[0, 1]`, so `data_factor` cannot desynchronize them
+from the images the trainer loads; the trainer scales them back and converts
+depth into gsplat's normalized world.
+
+Three limits to know. gsplat's depth term is an L1 on *inverse* depth, so
+near-field error dominates and far geometry is barely constrained. The term is
+not masked: `masks/` gates the L1 and SSIM terms only, so depth supervision is
+confined to the masked-in pixels here instead, when the segmentation stage has
+written masks by the time depth runs. And depth is predicted on the uploaded
+images as they are, so a camera with distortion parameters would have its depth
+registered against the raw image while training renders the undistorted one --
+the cube-map rig registers `PINHOLE`, which COLMAP leaves undistorted, so this
+does not arise today.
 
 ### Background colour
 

@@ -7,18 +7,21 @@ SegFormer model in third_party/EasyTensorRT over gRPC. Named "<image_name>.png"
 after the image they belong to (COLMAP's mask naming convention). Nested image
 folders are mirrored under the mask directory.
 
-The model is reached at --triton-url, or $TRITON_URL when the flag is left out.
+The model is reached at --triton-url, or $TRITON_URL when the flag is left out,
+with inference on --num-threads worker threads.
 """
 
 import argparse
-import os
 from pathlib import Path
 
 import cv2
 import numpy as np
 
+from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
+
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
-LOG_EVERY = 200
+# Images per progress log line.
+_LOG_EVERY = 200
 
 
 def dilate(mask, radius):
@@ -38,11 +41,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image_dir", type=Path)
     parser.add_argument("mask_dir", type=Path)
-    parser.add_argument(
-        "--triton-url",
-        default=None,
-        help="Triton gRPC endpoint for the segmentation model; defaults to $TRITON_URL",
-    )
+    add_endpoint_argument(parser, "segmentation model")
     parser.add_argument(
         "--dilation", type=int, default=1, help="pixels to grow each person mask by"
     )
@@ -52,22 +51,13 @@ def main():
         default=True,
         help="mask the sky as well as the people",
     )
+    parser.add_argument(
+        "--num-threads", type=int, default=8, help="worker threads running inference"
+    )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
-    triton_url = args.triton_url or os.environ.get("TRITON_URL")
-    if not triton_url:
-        raise SystemExit("No Triton URL given; pass --triton-url or set TRITON_URL")
-    # Imported here so the mask helpers stay testable without the EasyTensorRT
-    # submodule or the Triton client installed.
-    from mapping.features.triton_models import (
-        ADE20K_PERSON_CLASS,
-        ADE20K_SKY_CLASS,
-        SemanticSegmenter,
-    )
-
-    segmenter = SemanticSegmenter(triton_url)
-
+    triton_url = resolve_endpoint(args.triton_url)
     image_paths = sorted(
         path
         for path in args.image_dir.rglob("*")
@@ -90,15 +80,26 @@ def main():
         print(f"Masks already exist in {args.mask_dir}; skipping segmentation")
         return
 
-    masked_images = 0
-    sky_images = 0
-    for count, image_path in enumerate(pending_image_paths, start=1):
+    # Deferred so the mask helpers stay testable without the EasyTensorRT
+    # submodule, the Triton client, or pycolmap installed, and so a run with
+    # nothing to do never reaches for Triton.
+    from mapping.triton.progress import map_with_progress
+    from mapping.triton.clients import (
+        ADE20K_PERSON_CLASS,
+        ADE20K_SKY_CLASS,
+        SemanticSegmenter,
+    )
+
+    segmenter = SemanticSegmenter(triton_url)
+
+    def segment(image_path):
+        """Writes one image's mask; returns whether it blocked anything and had sky."""
         mask_path = args.mask_dir / f"{image_path.relative_to(args.image_dir)}.png"
         mask_path.parent.mkdir(parents=True, exist_ok=True)
         image = cv2.imread(str(image_path))
         if image is None:
-            print(f"Skipping unreadable image: {image_path}")
-            continue
+            print(f"Skipping unreadable image: {image_path}", flush=True)
+            return False, False
 
         classes = segmenter.classes(image)
         # The semantic person class leaves soft edges (motion blur, hair, the
@@ -108,10 +109,15 @@ def main():
         if args.mask_sky:
             blocked |= sky
         cv2.imwrite(str(mask_path), training_mask(blocked))
-        sky_images += int(sky.any())
-        masked_images += int(blocked.any())
-        if count % LOG_EVERY == 0 or count == len(pending_image_paths):
-            print(f"Segmented {count}/{len(pending_image_paths)} images", flush=True)
+        return bool(blocked.any()), bool(sky.any())
+
+    masked_images = 0
+    sky_images = 0
+    for blocked_any, sky_any in map_with_progress(
+        segment, pending_image_paths, "Segmented", args.num_threads, _LOG_EVERY
+    ):
+        masked_images += blocked_any
+        sky_images += sky_any
 
     sky_note = "" if args.mask_sky else ", left unmasked"
     print(

@@ -7,13 +7,13 @@ import numpy as np
 import pycolmap
 import pytest
 
-# features.triton_models refuses to import without the EasyTensorRT submodule,
+# triton.clients refuses to import without the EasyTensorRT submodule,
 # and reaching it needs a Triton endpoint. The levelling touches neither.
-_triton_models = types.ModuleType("mapping.features.triton_models")
+_clients = types.ModuleType("mapping.triton.clients")
 for _name in ("FeatureMatcher", "GlobalFeatureExtractor", "LocalFeatureExtractor",
               "LocalFeatures"):
-    setattr(_triton_models, _name, type(_name, (), {}))
-sys.modules.setdefault("mapping.features.triton_models", _triton_models)
+    setattr(_clients, _name, type(_name, (), {}))
+sys.modules.setdefault("mapping.triton.clients", _clients)
 
 from mapping.mapping_pipeline import (  # noqa: E402
     _rotation_to_world_down,

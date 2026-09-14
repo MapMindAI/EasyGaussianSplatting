@@ -64,7 +64,7 @@ python3 -m mapping.mapping_pipeline \
 # pycolmap lives in the base env.
 source scripts/gsplat_env.sh
 
-python3 mapping/segment_people.py \
+python3 mapping/triton/segment_people.py \
   "${RECONSTRUCTION_DIR}/images" "${RECONSTRUCTION_DIR}/masks"
 
 export PYTORCH_ALLOC_CONF="${PYTORCH_ALLOC_CONF:-expandable_segments:True}"

@@ -19,9 +19,9 @@ import numpy as np
 import pycolmap
 from pycolmap import logging
 
-from .features.extraction import GLOBAL_FEATURES_FILENAME, extract_features
-from .features.matching import PairSelection, match_features
-from .features.triton_models import (
+from .triton.extraction import GLOBAL_FEATURES_FILENAME, extract_features
+from .triton.matching import PairSelection, match_features
+from .triton.clients import (
     FeatureMatcher,
     GlobalFeatureExtractor,
     LocalFeatureExtractor,

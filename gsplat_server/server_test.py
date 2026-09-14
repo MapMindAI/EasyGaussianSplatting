@@ -248,6 +248,33 @@ def test_job_steps_passes_the_sky_choice_to_segmentation(tmp_path, parameters, m
     assert command[-1] == flag
 
 
+def test_depth_runs_between_segmentation_and_training(tmp_path, parameters):
+    parameters["run_segmentation"] = True
+    parameters["run_depth"] = True
+
+    steps = server.job_steps({"parameters": parameters}, tmp_path)
+
+    assert [name for name, _ in steps] == ["segmentation", "depth", "gsplat training"]
+
+
+def test_depth_reads_the_model_and_writes_beside_it(tmp_path, parameters):
+    command = server.depth_command(tmp_path)
+
+    assert str(server.DEPTH_ENTRYPOINT) in command
+    assert str(tmp_path / "depths") in command
+    assert command[-2:] == ["--mask-dir", str(tmp_path / "masks")]
+
+
+def test_an_uploaded_depths_directory_is_never_overwritten(tmp_path, parameters):
+    parameters["run_segmentation"] = False
+    parameters["run_depth"] = True
+    (tmp_path / "model" / "depths").mkdir(parents=True)
+
+    steps = server.job_steps({"parameters": parameters}, tmp_path)
+
+    assert [name for name, _ in steps] == ["gsplat training"]
+
+
 def test_an_uploaded_masks_directory_is_never_overwritten(tmp_path, parameters):
     parameters["run_segmentation"] = True
     (tmp_path / "model" / "masks").mkdir(parents=True)

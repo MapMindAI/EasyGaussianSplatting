@@ -21,7 +21,8 @@ from gsplat_server.proto import gsplat_pb2, gsplat_pb2_grpc
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRAIN_ENTRYPOINT = REPO_ROOT / "mapping" / "train_gsplat_with_masks.py"
-SEGMENT_ENTRYPOINT = REPO_ROOT / "mapping" / "segment_people.py"
+SEGMENT_ENTRYPOINT = REPO_ROOT / "mapping" / "triton" / "segment_people.py"
+DEPTH_ENTRYPOINT = REPO_ROOT / "mapping" / "triton" / "generate_depth.py"
 QUEUED, RUNNING, SUCCEEDED, FAILED = "queued", "running", "succeeded", "failed"
 
 
@@ -138,11 +139,21 @@ def segmentation_command(model_directory, mask_sky):
     ]
 
 
+def depth_command(model_directory):
+    return [
+        "python3", str(DEPTH_ENTRYPOINT),
+        str(model_directory), str(model_directory / "depths"),
+        "--mask-dir", str(model_directory / "masks"),
+    ]
+
+
 def job_steps(job, directory):
     """The commands to run for a job, in order.
 
-    Segmentation only runs when asked for and when the upload brought no masks
-    of its own, so an uploaded masks/ is never overwritten.
+    Segmentation and depth only run when asked for and when the upload brought
+    no masks or depths of its own, so an uploaded directory is never
+    overwritten. Depth follows segmentation, which gives it the masks that say
+    which pixels are worth predicting for.
     """
     model_directory = directory / "model"
     parameters = parameters_from_dict(job["parameters"])
@@ -151,6 +162,8 @@ def job_steps(job, directory):
         steps.append(
             ("segmentation", segmentation_command(model_directory, parameters.mask_sky))
         )
+    if parameters.run_depth and not (model_directory / "depths").is_dir():
+        steps.append(("depth", depth_command(model_directory)))
     steps.append(("gsplat training", training_command(directory)))
     return steps
 

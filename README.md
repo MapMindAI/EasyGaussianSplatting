@@ -126,7 +126,8 @@ archive handling (`gsplat_server/server_test.py`), the sweep report generator
 (`mapping/benchmark/summarize_gsplat_sweep_test.py`), the reconstruction's
 gravity levelling (`mapping/mapping_pipeline_test.py`), the point cloud's
 return to COLMAP coordinates (`mapping/gsplat_world_frame_test.py`), and the
-training-mask helpers (`mapping/segment_people_test.py`).
+training-mask helpers (`mapping/triton/segment_people_test.py`), and the
+depth grouping and scale fit (`mapping/triton/generate_depth_test.py`).
 
 CI runs them on a slim Python image rather than the 20 GB pipeline one. To do
 the same locally:
@@ -144,8 +145,8 @@ Or on the host, with the proto bindings already generated (see
 
 `mapping/train_gsplat_with_masks.py` is uncovered: it runs the trainer at
 import time, so covering its flag building needs a `__main__` guard first.
-`mapping/segment_people.py` is covered only for its mask helpers; the rest drives
-a Triton server.
+`mapping/triton/segment_people.py` and `mapping/triton/generate_depth.py` are
+covered only for their pure helpers; the rest drives a Triton server.
 
 ## Status
 

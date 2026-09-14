@@ -1,4 +1,4 @@
-"""Undo gsplat's world normalization on exported Gaussian parameters.
+"""gsplat's world normalization: the scale it applies, and undoing it on export.
 
 gsplat's COLMAP parser trains in a similarity-normalized frame (see
 `third_party/gsplat/examples/datasets/colmap.py`), but `simple_trainer` exports
@@ -65,6 +65,15 @@ def _quaternion_product(left, right):
     )
 
 
+def similarity_scale(transform):
+    """The uniform scale a similarity applies.
+
+    A similarity's linear part is `scale * rotation`, so the determinant
+    recovers the scale and stripping it leaves a pure rotation.
+    """
+    return float(abs(np.linalg.det(transform[:3, :3])) ** (1.0 / 3.0))
+
+
 def restore_colmap_coordinates(transform, means, scales, quats):
     """Map Gaussian parameters from gsplat's normalized frame back to COLMAP's.
 
@@ -73,9 +82,7 @@ def restore_colmap_coordinates(transform, means, scales, quats):
     exported arrays and `scales` (N, 3) the log-scales the PLY stores.
     """
     inverse = np.linalg.inv(transform)
-    # A similarity's linear part is `scale * rotation`; the determinant recovers
-    # the uniform scale, and stripping it leaves the inverse's rotation.
-    scale = float(abs(np.linalg.det(transform[:3, :3])) ** (1.0 / 3.0))
+    scale = similarity_scale(transform)
     orientation = _rotation_quaternion(inverse[:3, :3] * scale)
     means = np.asarray(means) @ inverse[:3, :3].T + inverse[:3, 3]
     scales = np.asarray(scales) - math.log(scale)

@@ -75,9 +75,18 @@ pose_opt: false
 # masks/ of its own. Costs a few minutes and needs the segmentation weights.
 run_segmentation: true
 # Mask the sky along with the people. Only read when run_segmentation is set.
-# Sky is masked by default: it is at infinity, so the Gaussians that chase it
-# are floaters that cost memory and blur the geometry below.
-mask_sky: true
-# Colour the splats are composited over, in [0, 1] per channel. Left out,
-# gsplat renders onto black. See doc/gsplat_server.md.
-# background_color { red: 0.53 green: 0.71 blue: 0.92 }
+# Left on, the sky is masked out: it is at infinity, so the Gaussians that chase
+# it are floaters that cost memory and blur the geometry below. It is off here
+# because background_color now gives the sky something to render as.
+mask_sky: false
+# Predict depth with Depth Anything 3 and supervise training on it, when the
+# upload carried no depths/ of its own. Off by default: it costs another pass
+# over the images and needs the depth model served alongside the others.
+run_depth: false
+# Weight of the depth term in the loss. gsplat's own default, which is tuned
+# for the sparse SfM depths rather than the denser ones generate_depth.py
+# writes, so lower it if depth starts to dominate the photometric terms.
+depth_lambda: 0.01
+# Colour the splats are composited over, in [0, 1] per channel. Leave it out
+# and gsplat renders onto black instead. See doc/gsplat_server.md.
+background_color { red: 1.0 green: 1.0 blue: 1.0 }

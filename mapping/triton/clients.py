@@ -1,4 +1,4 @@
-"""SuperPoint, LightGlue, SALAD, and SegFormer clients backed by a Triton server.
+"""SuperPoint, LightGlue, SALAD, SegFormer, and DA3 clients backed by a Triton server.
 
 Thin adapters over the clients vendored in
 `third_party/EasyTensorRT/triton_client`, which import each other by bare
@@ -26,6 +26,7 @@ if not (_TRITON_CLIENT_DIR / "superpoint.py").is_file():
 if str(_TRITON_CLIENT_DIR) not in sys.path:
     sys.path.insert(0, str(_TRITON_CLIENT_DIR))
 
+from depthanything3 import DepthAnything3  # noqa: E402
 from lightglue import LightGlue  # noqa: E402
 from salad import SaladClient  # noqa: E402
 from segformer import SegformerClient  # noqa: E402
@@ -149,6 +150,30 @@ class SemanticSegmenter:
     def classes(self, image_bgr) -> np.ndarray:
         """A (H, W) uint8 array of ADE20K class indices."""
         return self._client.run(image_bgr)
+
+
+class DepthEstimator:
+    """Depth for a fixed-size group of views, via the Triton Depth Anything 3 model."""
+
+    def __init__(self, triton_url, expected_num_images, model_version="1"):
+        self._client = DepthAnything3(
+            triton_url=triton_url,
+            model_version=model_version,
+            expected_num_images=expected_num_images,
+        )
+
+    def run(self, images_bgr):
+        """`depth_list` and `depth_conf_list`, one (H, W) array per input image.
+
+        The depths share one arbitrary scale across the group; DA3's own
+        intrinsics and extrinsics are dropped, since the caller already has the
+        COLMAP poses these views were reconstructed with.
+        """
+        result = self._client.run(images_bgr)
+        return {
+            "depth_list": result["depth_list"],
+            "depth_conf_list": result["depth_conf_list"],
+        }
 
 
 def _padded_block(features):

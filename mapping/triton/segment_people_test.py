@@ -1,6 +1,6 @@
 import numpy as np
 
-from mapping.segment_people import dilate, training_mask
+from mapping.triton.segment_people import dilate, training_mask
 
 
 def test_training_mask_is_white_where_nothing_is_blocked():
