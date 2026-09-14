@@ -77,6 +77,8 @@ message Job {
   double started_at = 5;
   double finished_at = 6;
   string error = 7;
+  // Jobs the worker trains before this one; 0 unless the job is queued.
+  int32 queue_position = 8;
 }
 message ListJobsRequest {}
 message ListJobsResponse { repeated Job jobs = 1; }

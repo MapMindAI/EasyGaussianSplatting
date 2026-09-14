@@ -108,6 +108,35 @@ def test_remove_deletes_the_directory_and_the_index_entry(store, parameters):
     assert store.get(job["id"]) is None
 
 
+def test_queue_position_counts_the_jobs_the_worker_takes_first(store, parameters):
+    running = store.create(parameters)
+    store.update(running, queued_at=1.0, state=server.RUNNING)
+    first = store.create(parameters)
+    store.update(first, queued_at=2.0)
+    second = store.create(parameters)
+    store.update(second, queued_at=3.0)
+
+    assert store.queue_position(running) == 0
+    assert store.queue_position(first) == 1
+    assert store.queue_position(second) == 2
+
+
+def test_queue_position_ignores_a_job_that_is_still_uploading(store, parameters):
+    uploading = store.create(parameters)
+    waiting = store.create(parameters)
+    store.update(waiting, queued_at=1.0)
+
+    assert store.queue_position(waiting) == 0
+    assert store.queue_position(uploading) == 0
+
+
+def test_queue_position_is_zero_once_a_job_finishes(store, parameters):
+    job = store.create(parameters)
+    store.update(job, queued_at=1.0, state=server.SUCCEEDED)
+
+    assert store.queue_position(job) == 0
+
+
 # --- extract_model --------------------------------------------------------
 
 
@@ -220,7 +249,7 @@ def test_as_proto_maps_unset_timestamps_to_zero(store, parameters):
     job = store.create(parameters)
     store.update(job, created_at=1.5)
 
-    proto = server.as_proto(job)
+    proto = server.as_proto(job, 0)
 
     assert (proto.id, proto.state) == (job["id"], server.QUEUED)
     assert proto.created_at == pytest.approx(1.5)

@@ -121,12 +121,18 @@ error`.
 
 Jobs run one at a time — a single training run already saturates the GPU — and
 the queue lives in memory, so a restart fails whatever was queued or training.
-Finished jobs survive it.
+Finished jobs survive it. A queued job carries its `queue_position`: the jobs
+the worker trains before it. The clock for that is `queued_at`, stamped when
+the upload finishes and the job reaches the worker, not `created_at`, which is
+stamped when the upload starts — so a slow upload does not appear to hold up
+jobs submitted after it.
 
 ## Submitting a model
 
 `client.py` zips a reconstruction, uploads it, follows the training log, and
-downloads the point cloud. The client requires Python 3 and `grpcio` and loads
+downloads the point cloud. While the job is queued it prints `Queued behind N
+jobs` from the server's `queue_position`, so a wait behind another run is
+visible rather than silent. The client requires Python 3 and `grpcio` and loads
 `gsplat_server/config/gsplat_train_defaults.proto.txt` for training parameters:
 ```
 gsplat_server/client.py data/pano_mapping --server gsplat-host:50051 \
@@ -191,7 +197,7 @@ override. Segmentation adds a few minutes to a job.
 | --- | --- |
 | `SubmitJob` (client stream) | First message has parameters; remaining messages carry zip chunks. |
 | `ListJobs` | Every job, oldest first. |
-| `GetJob` | One job and its state. |
+| `GetJob` | One job, its state, and its queue position. |
 | `StreamLog` | Training log chunks from a byte offset. |
 | `DownloadResult` | Streams the trained point cloud once the job succeeds. |
 | `DeleteJob` | Drop a finished job and its files. |

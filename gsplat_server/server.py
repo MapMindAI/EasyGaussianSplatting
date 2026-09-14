@@ -43,7 +43,8 @@ class JobStore:
     def create(self, parameters):
         job = {"id": uuid.uuid4().hex[:12], "state": QUEUED,
                "parameters": parameters, "created_at": time.time(),
-               "started_at": None, "finished_at": None, "error": None}
+               "queued_at": None, "started_at": None, "finished_at": None,
+               "error": None}
         self.directory(job["id"]).mkdir(parents=True)
         self.update(job)
         return job
@@ -65,6 +66,16 @@ class JobStore:
         with self.lock:
             return sorted(self.jobs.values(), key=lambda job: job["created_at"])
 
+    def queue_position(self, job):
+        """Jobs the worker trains before this one; 0 unless this one is waiting."""
+        if job["state"] != QUEUED or job["queued_at"] is None:
+            return 0
+        with self.lock:
+            return sum(1 for other in self.jobs.values()
+                       if other["state"] == RUNNING
+                       or (other["state"] == QUEUED
+                           and scheduled_at(other) < job["queued_at"]))
+
     def remove(self, job):
         # The index entry is dropped only once the files are gone, so a job
         # whose directory survives stays listed instead of leaking silently:
@@ -75,6 +86,12 @@ class JobStore:
             raise OSError(f"job directory survived deletion: {directory}")
         with self.lock:
             del self.jobs[job["id"]]
+
+
+def scheduled_at(job):
+    # A job still uploading has not reached the worker, so it sorts behind
+    # everything rather than counting against another client's wait.
+    return job["queued_at"] if job["queued_at"] is not None else float("inf")
 
 
 def extract_model(archive_path, destination):
@@ -180,16 +197,20 @@ def write_upload(requests, store, context):
     return job
 
 
-def as_proto(job):
+def as_proto(job, queue_position):
     return gsplat_pb2.Job(id=job["id"], state=job["state"],
                           parameters=parameters_from_dict(job["parameters"]),
                           created_at=job["created_at"], started_at=job["started_at"] or 0,
-                          finished_at=job["finished_at"] or 0, error=job["error"] or "")
+                          finished_at=job["finished_at"] or 0, error=job["error"] or "",
+                          queue_position=queue_position)
 
 
 class GsplatService(gsplat_pb2_grpc.GsplatServiceServicer):
     def __init__(self, store, pending):
         self.store, self.pending = store, pending
+
+    def _proto(self, job):
+        return as_proto(job, self.store.queue_position(job))
 
     def _job(self, job_id, context):
         job = self.store.get(job_id)
@@ -208,14 +229,15 @@ class GsplatService(gsplat_pb2_grpc.GsplatServiceServicer):
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
         finally:
             archive_path.unlink(missing_ok=True)
+        self.store.update(job, queued_at=time.time())
         self.pending.put(job)
-        return as_proto(job)
+        return self._proto(job)
 
     def ListJobs(self, request, context):
-        return gsplat_pb2.ListJobsResponse(jobs=[as_proto(job) for job in self.store.list()])
+        return gsplat_pb2.ListJobsResponse(jobs=[self._proto(job) for job in self.store.list()])
 
     def GetJob(self, request, context):
-        return as_proto(self._job(request.id, context))
+        return self._proto(self._job(request.id, context))
 
     def StreamLog(self, request, context):
         self._job(request.id, context)
