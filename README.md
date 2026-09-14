@@ -124,8 +124,9 @@ what runs without a GPU, COLMAP, or Triton: the `JobParameters` layering
 (`gsplat_server/parameters_test.py`), the training server's job store and
 archive handling (`gsplat_server/server_test.py`), the sweep report generator
 (`mapping/benchmark/summarize_gsplat_sweep_test.py`), the reconstruction's
-gravity levelling (`mapping/mapping_pipeline_test.py`), and the point cloud's
-return to COLMAP coordinates (`mapping/gsplat_world_frame_test.py`).
+gravity levelling (`mapping/mapping_pipeline_test.py`), the point cloud's
+return to COLMAP coordinates (`mapping/gsplat_world_frame_test.py`), and the
+training-mask helpers (`mapping/segment_people_test.py`).
 
 CI runs them on a slim Python image rather than the 20 GB pipeline one. To do
 the same locally:
@@ -141,10 +142,10 @@ Or on the host, with the proto bindings already generated (see
 [doc/gsplat_server.md](doc/gsplat_server.md)):
 `pip install -r artifacts/requirements-test.txt && pytest`.
 
-`mapping/train_gsplat_with_masks.py` and `mapping/segment_people.py` are
-uncovered: both import torch at module scope, and the former also runs the
-trainer at import time, so covering its flag building needs a `__main__`
-guard first.
+`mapping/train_gsplat_with_masks.py` is uncovered: it runs the trainer at
+import time, so covering its flag building needs a `__main__` guard first.
+`mapping/segment_people.py` is covered only for its mask helpers; the rest drives
+a Triton server.
 
 ## Status
 

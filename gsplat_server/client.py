@@ -49,11 +49,19 @@ def write_to_stdout(text):
 def follow(stub, job_id, on_log=write_to_stdout, poll_seconds=5):
     """Poll a job to completion, passing each new slice of its log to on_log."""
     offset = 0
+    reported_position = None
     while True:
         job = stub.GetJob(gsplat_pb2.GetJobRequest(id=job_id))
-        for chunk in stub.StreamLog(gsplat_pb2.StreamLogRequest(id=job_id, offset=offset)):
-            offset = chunk.offset
-            on_log(chunk.data.decode("utf-8", "replace"))
+        if job.state == "queued":
+            # The log does not exist until the job starts, so skip StreamLog.
+            if job.queue_position != reported_position:
+                plural = "" if job.queue_position == 1 else "s"
+                on_log(f"Queued behind {job.queue_position} job{plural}\n")
+                reported_position = job.queue_position
+        else:
+            for chunk in stub.StreamLog(gsplat_pb2.StreamLogRequest(id=job_id, offset=offset)):
+                offset = chunk.offset
+                on_log(chunk.data.decode("utf-8", "replace"))
         if job.state in ("succeeded", "failed"):
             return job
         time.sleep(poll_seconds)

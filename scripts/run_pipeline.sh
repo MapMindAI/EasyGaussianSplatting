@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The whole pipeline in one command: stitch an Insta360 capture into an
 # equirectangular video, reconstruct it as a cube-map rig with learned features
-# and global SfM, mask out people, and train a Gaussian Splatting model. Runs
+# and global SfM, mask out people and sky, and train a Gaussian Splatting model. Runs
 # on the host (not inside the container) and drives one `docker run` through
 # every stage.
 #
@@ -59,7 +59,7 @@ python3 -m mapping.mapping_pipeline \
   --video_path "${OUTPUT_VIDEO}" --workspace_path "${RECONSTRUCTION_DIR}" \
   "${MAPPING_ARGUMENTS[@]}"
 
-# --- 3. Mask out people, then train ----------------------------------------
+# --- 3. Mask out people and sky, then train --------------------------------
 # Both need the gsplat conda env, which the mapping stage above must not use:
 # pycolmap lives in the base env.
 source scripts/gsplat_env.sh

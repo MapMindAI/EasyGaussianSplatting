@@ -108,6 +108,35 @@ def test_remove_deletes_the_directory_and_the_index_entry(store, parameters):
     assert store.get(job["id"]) is None
 
 
+def test_queue_position_counts_the_jobs_the_worker_takes_first(store, parameters):
+    running = store.create(parameters)
+    store.update(running, queued_at=1.0, state=server.RUNNING)
+    first = store.create(parameters)
+    store.update(first, queued_at=2.0)
+    second = store.create(parameters)
+    store.update(second, queued_at=3.0)
+
+    assert store.queue_position(running) == 0
+    assert store.queue_position(first) == 1
+    assert store.queue_position(second) == 2
+
+
+def test_queue_position_ignores_a_job_that_is_still_uploading(store, parameters):
+    uploading = store.create(parameters)
+    waiting = store.create(parameters)
+    store.update(waiting, queued_at=1.0)
+
+    assert store.queue_position(waiting) == 0
+    assert store.queue_position(uploading) == 0
+
+
+def test_queue_position_is_zero_once_a_job_finishes(store, parameters):
+    job = store.create(parameters)
+    store.update(job, queued_at=1.0, state=server.SUCCEEDED)
+
+    assert store.queue_position(job) == 0
+
+
 # --- extract_model --------------------------------------------------------
 
 
@@ -186,9 +215,11 @@ def test_training_command_points_at_the_job_directory(tmp_path):
 
 
 def test_segmentation_command_reads_images_and_writes_masks(tmp_path):
-    command = server.segmentation_command(tmp_path)
+    command = server.segmentation_command(tmp_path, mask_sky=True)
 
-    assert command[-2:] == [str(tmp_path / "images"), str(tmp_path / "masks")]
+    assert command[-3:] == [
+        str(tmp_path / "images"), str(tmp_path / "masks"), "--mask-sky",
+    ]
 
 
 def test_training_is_the_only_step_when_segmentation_is_off(tmp_path, parameters):
@@ -207,6 +238,16 @@ def test_segmentation_runs_before_training_when_asked_for(tmp_path, parameters):
     assert [name for name, _ in steps] == ["segmentation", "gsplat training"]
 
 
+@pytest.mark.parametrize("mask_sky, flag", [(True, "--mask-sky"), (False, "--no-mask-sky")])
+def test_job_steps_passes_the_sky_choice_to_segmentation(tmp_path, parameters, mask_sky, flag):
+    parameters["run_segmentation"] = True
+    parameters["mask_sky"] = mask_sky
+
+    (_, command), _ = server.job_steps({"parameters": parameters}, tmp_path)
+
+    assert command[-1] == flag
+
+
 def test_an_uploaded_masks_directory_is_never_overwritten(tmp_path, parameters):
     parameters["run_segmentation"] = True
     (tmp_path / "model" / "masks").mkdir(parents=True)
@@ -220,7 +261,7 @@ def test_as_proto_maps_unset_timestamps_to_zero(store, parameters):
     job = store.create(parameters)
     store.update(job, created_at=1.5)
 
-    proto = server.as_proto(job)
+    proto = server.as_proto(job, 0)
 
     assert (proto.id, proto.state) == (job["id"], server.QUEUED)
     assert proto.created_at == pytest.approx(1.5)
