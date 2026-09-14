@@ -40,6 +40,8 @@ that stage on its own; see [doc/tools.md](doc/tools.md).
 
 ![COLMAP sparse reconstruction viewer](assets/reconstruction_viewer.png)
 
+![GS reconstruction viewer](assets/reconstruction_gs_viewer.png)
+
 ## Getting the image
 
 Pull the image CI publishes on every push to `master`:
