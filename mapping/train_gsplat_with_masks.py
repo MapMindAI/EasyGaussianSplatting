@@ -44,7 +44,9 @@ def attach_masks(dataset_class):
 def attach_depths(dataset_class):
     """Supply the depth supervision simple_trainer's --depth_loss consumes.
 
-    Its own source is the sparse COLMAP points; this replaces them with what
+    Its own source is the sparse COLMAP points, which it looks up in
+    parser.point_indices -- a dict with no entry at all for a cube face SfM
+    barely covered. That path is switched off and answered here with what
     generate_depth.py wrote, which is denser and covers the textureless surfaces
     SfM never triangulated. The file stores x and y normalized and depth in the
     COLMAP frame, so both are put into the frame the renderer works in here:
@@ -55,15 +57,15 @@ def attach_depths(dataset_class):
     original_getitem = dataset_class.__getitem__
 
     def __getitem__(self, item):
+        self.load_depths = False
         data = original_getitem(self, item)
         image_name = self.parser.image_names[self.indices[item]]
         depth_path = os.path.join(self.parser.data_dir, "depths", f"{image_name}.npy")
-        if not os.path.exists(depth_path):
-            return data
-
-        rows = np.load(depth_path)
-        if rows.size == 0:
-            return data
+        rows = (
+            np.load(depth_path)
+            if os.path.exists(depth_path)
+            else np.zeros((0, 3), dtype=np.float32)
+        )
 
         assert self.patch_size is None, "depths are not cropped along with patches"
         height, width = data["image"].shape[:2]
@@ -74,6 +76,21 @@ def attach_depths(dataset_class):
         return data
 
     dataset_class.__getitem__ = __getitem__
+
+
+def skip_empty_depth_loss(losses_module):
+    """Leave the depth term out for an image generate_depth.py wrote nothing for.
+
+    An L1 over no points averages over nothing: NaN, which sticks in the weights.
+    """
+    original_loss = losses_module.depth_l1_loss
+
+    def depth_l1_loss(pred_depth, gt_depth, *args, **kwargs):
+        if gt_depth.numel() == 0:
+            return pred_depth.new_zeros(())
+        return original_loss(pred_depth, gt_depth, *args, **kwargs)
+
+    losses_module.depth_l1_loss = depth_l1_loss
 
 
 def composite_over_background(rendering, color):
@@ -103,6 +120,7 @@ def composite_over_background(rendering, color):
 
 sys.path.insert(0, EXAMPLES_DIR)
 import gsplat  # noqa: E402
+import gsplat.losses  # noqa: E402
 import gsplat.rendering  # noqa: E402
 from datasets.colmap import Dataset, Parser  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
@@ -194,6 +212,7 @@ if parameters is not None and parameters.HasField("background_color"):
 attach_masks(Dataset)
 if parameters is not None and parameters.run_depth:
     attach_depths(Dataset)
+    skip_empty_depth_loss(gsplat.losses)
 capture_scene_transform(Parser)
 export_in_colmap_frame(gsplat)
 runpy.run_path(os.path.join(EXAMPLES_DIR, "simple_trainer.py"), run_name="__main__")

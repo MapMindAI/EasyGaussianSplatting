@@ -225,7 +225,9 @@ different group gets a different scale. So each group's depth is fitted to the
 COLMAP points its own images already observe, by the median ratio between the
 two, before anything is written. A group whose images carry fewer than 20 such
 points is skipped rather than written at a guessed scale, and the stage reports
-how many it skipped.
+how many it skipped. An image left without rows trains without a depth term:
+gsplat's own sparse-point depths do not stand in for them, since the images it
+skips are the ones SfM barely covered anyway.
 
 What lands in `depths/` is one `<image_name>.npy` per image holding `(M, 3)`
 float32 rows of `(x, y, depth)`: the sampled pixels worth supervising rather
