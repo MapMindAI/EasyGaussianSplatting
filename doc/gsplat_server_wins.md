@@ -49,6 +49,33 @@ tar -xf C:\Users\49451\easy-gsplat-server.tar.gz \
   -C D:\EasyGaussianSplatting
 ```
 
+## Update the checkout
+
+Later updates come over Git rather than another archive. Point the copy on `D:`
+at the remote once:
+
+```
+cd /d D:\EasyGaussianSplatting
+git init -b <branch>
+git remote add origin https://github.com/MapMindAI/EasyGaussianSplatting
+git fetch --depth 1 origin <branch>
+git checkout -f -B <branch> origin/<branch>
+```
+
+`git pull` is enough from then on. Untracked content -- `data/`, the job
+directory, the generated proto bindings, `third_party/EasyTensorRT` and its
+built TensorRT plans -- is left alone by both.
+
+`.gitattributes` holds the checkout at LF. Git for Windows would otherwise
+write CRLF, which the Linux container reads as a syntax error in every `.sh`.
+A checkout made before that file existed needs, once:
+
+```
+git config core.autocrlf false
+git add --renormalize .
+git checkout -f -- .
+```
+
 ## Verify Docker GPU access
 
 Select Docker Desktop's Linux engine and run:
