@@ -11,7 +11,7 @@ only the Windows-specific parts are here.
 
 - Windows 11 with Docker Desktop using the `desktop-linux` context.
 - NVIDIA driver with Docker GPU support.
-- SSH access to the Windows host, for example `dm@192.168.11.194`.
+- SSH access to the Windows host, for example `dm@192.168.11.194` (pwd: 0731).
 - A checkout containing `gsplat_server/`, `mapping/`, the generated proto
   bindings, and — for the mapping pipeline — the `third_party/EasyTensorRT`
   submodule, which carries the models and is around 800 MB.
