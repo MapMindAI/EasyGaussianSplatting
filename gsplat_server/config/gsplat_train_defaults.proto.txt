@@ -79,10 +79,11 @@ run_segmentation: true
 # it are floaters that cost memory and blur the geometry below. It is off here
 # because background_color now gives the sky something to render as.
 mask_sky: false
+# TODO: depth loss still need more work
 # Predict depth with Depth Anything 3 and supervise training on it, when the
 # upload carried no depths/ of its own. Off by default: it costs another pass
 # over the images and needs the depth model served alongside the others.
-run_depth: true
+run_depth: false
 # Weight of the depth term in the loss. gsplat's own default, which is tuned
 # for the sparse SfM depths rather than the denser ones generate_depth.py
 # writes, so lower it if depth starts to dominate the photometric terms.
