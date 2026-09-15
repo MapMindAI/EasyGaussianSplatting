@@ -77,38 +77,40 @@ with the sweep so its baseline cannot drift from what ships; `mapping/train_gspl
 Two stages under `mapping/triton/` annotate a reconstruction before training,
 both against the Triton server that already serves the mapping features (see
 [panorama_mapping.md](panorama_mapping.md)). `--triton-url` locates it, or
-`$TRITON_URL` when the flag is left out. Run both in the container, which is
-where `pycolmap` and `tritonclient` are installed, mounting the repo at
-`/workspace` so `data/` and `mapping/` both come along. Use the image's default
-`python3`: the gsplat env has no `tritonclient`.
+`$TRITON_URL` when the flag is left out. Run segmentation in the gsplat env,
+which has torchvision and `tritonclient`; depth uses the image's default
+`python3`, which has pycolmap. Mount the repo at `/workspace` so `data/` and
+`mapping/` both come along.
 
 `segment_people.py` writes the training masks -- white where gsplat should
 supervise, black over people and sky:
 
 ```bash
 GSPLAT_HOST=192.168.11.194
-VIDEO_NAME=VID_20260422_153814_00_004
+VIDEO_NAME=VID_20260904_155849_00_009
 WORKSPACE_PATH=data/${VIDEO_NAME}_reconstruction
 DOCKER_RUN="docker run --rm -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest"
 
-${DOCKER_RUN} python3 -m mapping.triton.segment_people \
+${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.triton.segment_people \
   ${WORKSPACE_PATH}/images ${WORKSPACE_PATH}/masks \
-  --debug-dir ${WORKSPACE_PATH}/debug \
+  --debug-dir ${WORKSPACE_PATH}/debug --no-mask-sky \
   --triton-url ${GSPLAT_HOST}:8011
 ```
 
 `scripts/run_pipeline.sh` runs this with its defaults; run it by hand to change
-them. `--no-mask-sky` masks people only, `--dilation` grows each person mask (1
+them. People use torchvision Mask R-CNN. `--no-mask-sky` masks people only and
+does not call SegFormer; otherwise SegFormer supplies sky masks. `--dilation` grows each person mask (1
 pixel), and `--num-threads` sets how many images infer at once (4). Masks mirror
 any nested folders under `images/`, so each keeps the image's relative path and
 adds `.png` to its filename. Existing masks are kept unless `--overwrite` is
 given. SegFormer runs a 512-pixel model on overlapping tiles, so masks retain
 the image's local detail; large images take proportionally longer to segment.
 
-`--debug-dir` additionally writes each image under its whole label map, one
-colour per class, which is how you see why a pixel was masked or missed.
+`--debug-dir` additionally writes each image with people in red over the source
+image; when sky is enabled, it also washes the SegFormer label map over it.
+It also writes `label_colours.png`, the exact ADE20K label-index colour legend.
 
 Adding it to an already-segmented directory re-runs the images whose overlay is
 missing, so the masks do not have to be thrown away to get the views.

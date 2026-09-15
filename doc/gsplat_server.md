@@ -127,6 +127,12 @@ the upload finishes and the job reaches the worker, not `created_at`, which is
 stamped when the upload starts — so a slow upload does not appear to hold up
 jobs submitted after it.
 
+Stop queued work and terminate the active job without restarting the service:
+
+```
+gsplat_server/client.py --server gsplat-host:50051 --stop-all
+```
+
 ## Submitting a model
 
 `client.py` zips a reconstruction, uploads it, follows the training log, and
@@ -176,10 +182,9 @@ training, writing its output into the job's own directory:
 run_segmentation: true
 ```
 
-People and sky both come from the SegFormer model in
-`third_party/EasyTensorRT` (ADE20K classes 12 and 2), over gRPC at the
-`TRITON_URL` the server container was started with. Without it a
-`run_segmentation: true` job fails rather than masking nothing.
+People come from torchvision's COCO-trained Mask R-CNN. When `mask_sky` is
+true, sky comes from the SegFormer model in `third_party/EasyTensorRT` (ADE20K
+class 2), over gRPC at `TRITON_URL`. A person-only job needs no Triton server.
 
 `mask_sky` selects which of the two is masked. It defaults to true: sky is at
 infinity, so the Gaussians that chase it are floaters that cost memory and blur
@@ -272,3 +277,4 @@ it carries Gaussians, not a background -- so a viewer still paints its own.
 | `StreamLog` | Training log chunks from a byte offset. |
 | `DownloadResult` | Streams the trained point cloud once the job succeeds. |
 | `DeleteJob` | Drop a finished job and its files. |
+| `StopAllJobs` | Stop the running job and fail queued jobs. |

@@ -34,7 +34,9 @@ def store(tmp_path):
 
 @pytest.fixture
 def parameters():
-    return parameters_to_dict(load_default_parameters())
+    values = parameters_to_dict(load_default_parameters())
+    values["run_depth"] = False
+    return values
 
 
 def write_archive(path, names):
@@ -345,7 +347,7 @@ def test_an_upload_without_parameters_is_refused(store):
 
 @pytest.fixture
 def service(store):
-    return server.GsplatService(store, queue.Queue())
+    return server.GsplatService(store, queue.Queue(), server.JobRunner(store))
 
 
 def test_get_job_reports_an_unknown_id_as_not_found(service):
@@ -372,6 +374,38 @@ def test_a_queued_job_cannot_be_deleted(service, store, parameters):
 
     assert error.value.code == grpc.StatusCode.FAILED_PRECONDITION
     assert store.get(job["id"]) is not None
+
+
+def test_stop_all_fails_queued_jobs(service, store, parameters):
+    job = store.create(parameters)
+
+    response = service.StopAllJobs(gsplat_pb2.StopAllJobsRequest(), FakeContext())
+
+    assert response.queued_jobs == 1
+    assert not response.running_job
+    assert store.get(job["id"])["state"] == server.FAILED
+    assert store.get(job["id"])["error"] == "stopped by request"
+
+
+def test_stop_all_terminates_the_running_process(service, store, parameters, monkeypatch):
+    class Process:
+        pid = 123
+
+        def poll(self):
+            return None
+
+    job = store.create(parameters)
+    store.update(job, state=server.RUNNING)
+    service.runner.process = Process()
+    service.runner.active_job_id = job["id"]
+    terminated = []
+    monkeypatch.setattr(server.os, "killpg", lambda process_id, signal: terminated.append((process_id, signal)))
+
+    response = service.StopAllJobs(gsplat_pb2.StopAllJobsRequest(), FakeContext())
+
+    assert response.running_job
+    assert terminated == [(123, server.signal.SIGTERM)]
+    assert job["id"] in service.runner.stopped_job_ids
 
 
 def test_a_finished_job_is_deleted(service, store, parameters):

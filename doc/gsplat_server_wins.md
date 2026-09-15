@@ -83,6 +83,10 @@ with `docker logs -f tritonserver_trt` and wait for:
 Started GRPCInferenceService at 0.0.0.0:8001
 ```
 
+SegFormer uses two GPU instances so concurrent segmentation requests can run
+without waiting on one execution context. Keep DA3 at one instance: it is much
+larger and may exhaust the GPU memory when duplicated.
+
 Triton's own gRPC port is 8001, published here as 8011 because 8001 is so often
 already taken; 8011 is what this repo defaults to.
 
@@ -132,8 +136,8 @@ docker run -d --name gsplat-server --gpus all --shm-size=8g -p 50051:50051 \
   gsplat_server/serve.sh /workspace/data/gsplat_server 50051
 ```
 
-`TRITON_URL` is what lets a `run_segmentation: true` job mask people and sky,
-through the `segformer` model the Triton server above serves.
+`TRITON_URL` is needed only when a `run_segmentation: true` job masks sky
+through the SegFormer model. Person masking uses torchvision Mask R-CNN locally.
 
 `--shm-size` matters: below roughly 8g the trainer's dataloader workers die
 partway through a run with a bus error, which surfaces as a failed job whose

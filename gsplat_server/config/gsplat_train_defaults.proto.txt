@@ -82,7 +82,7 @@ mask_sky: false
 # Predict depth with Depth Anything 3 and supervise training on it, when the
 # upload carried no depths/ of its own. Off by default: it costs another pass
 # over the images and needs the depth model served alongside the others.
-run_depth: false
+run_depth: true
 # Weight of the depth term in the loss. gsplat's own default, which is tuned
 # for the sparse SfM depths rather than the denser ones generate_depth.py
 # writes, so lower it if depth starts to dominate the photometric terms.

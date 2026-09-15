@@ -9,6 +9,7 @@ service GsplatService {
   rpc StreamLog(StreamLogRequest) returns (stream LogChunk);
   rpc DownloadResult(DownloadResultRequest) returns (stream ResultChunk);
   rpc DeleteJob(DeleteJobRequest) returns (DeleteJobResponse);
+  rpc StopAllJobs(StopAllJobsRequest) returns (StopAllJobsResponse);
 }
 
 message SubmitJobRequest {
@@ -107,3 +108,8 @@ message DownloadResultRequest { string id = 1; }
 message ResultChunk { bytes data = 1; }
 message DeleteJobRequest { string id = 1; }
 message DeleteJobResponse { string id = 1; }
+message StopAllJobsRequest {}
+message StopAllJobsResponse {
+  int32 queued_jobs = 1;
+  bool running_job = 2;
+}

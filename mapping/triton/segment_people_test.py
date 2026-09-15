@@ -1,9 +1,12 @@
 import numpy as np
 
 from mapping.triton.segment_people import (
+    ADE20K_NUM_CLASSES,
     CLASS_COLOURS,
     dilate,
+    label_colour_legend,
     label_overlay,
+    person_overlay,
     training_mask,
 )
 
@@ -54,8 +57,27 @@ def test_label_overlay_leaves_the_image_alone_at_zero_alpha():
     assert np.array_equal(label_overlay(image, classes, alpha=0.0), image)
 
 
+def test_person_overlay_marks_people_in_red():
+    image = np.zeros((1, 2, 3), dtype=np.uint8)
+    people = np.array([[True, False]])
+
+    overlay = person_overlay(image, people, alpha=1.0)
+
+    assert overlay.tolist() == [[[0, 0, 255], [0, 0, 0]]]
+
+
 def test_every_class_keeps_one_colour_and_neighbours_differ():
     assert CLASS_COLOURS.shape == (256, 3)
     # Distinguishable by eye is the whole point, so no two of the labels this
     # stage acts on may collide.
     assert not np.array_equal(CLASS_COLOURS[2], CLASS_COLOURS[12])
+
+
+def test_label_colour_legend_uses_the_overlay_palette_for_every_label():
+    columns = 10
+    legend = label_colour_legend(columns)
+
+    assert legend.shape == (30 + 15 * 28, columns * 100, 3)
+    assert np.array_equal(legend[34, 4], CLASS_COLOURS[0])
+    row, column = divmod(ADE20K_NUM_CLASSES - 1, columns)
+    assert np.array_equal(legend[30 + row * 28 + 4, column * 100 + 4], CLASS_COLOURS[149])
