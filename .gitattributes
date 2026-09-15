@@ -1,0 +1,3 @@
+# The Windows host checks this repo out and bind-mounts it into a Linux
+# container, where a CRLF shell script is a syntax error.
+* text=auto eol=lf

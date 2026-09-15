@@ -29,10 +29,14 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── benchmark/                # Parameter sweeps and their Markdown report.
 │   │   ├── summarize_gsplat_sweep_test.py # Report sections and PLY geometry.
 │   │   └── configurations/       # One JobParameters file per swept configuration.
-│   ├── features/                 # Learned features (doc/panorama_mapping.md).
-│   │   ├── triton_models.py      # SuperPoint/LightGlue/SALAD clients.
+│   ├── triton/                   # Everything served by Triton.
+│   │   ├── clients.py      # SuperPoint/LightGlue/SALAD/SegFormer/DA3 clients.
 │   │   ├── extraction.py         # Features into the database and its sidecar.
 │   │   ├── matching.py           # Pair selection and LightGlue matching.
+│   │   ├── segment_people.py     # Person and sky masks for the training images.
+│   │   ├── segment_people_test.py # Mask helpers and the sky toggle.
+│   │   ├── generate_depth.py     # DA3 depth, grouped by camera and scaled to COLMAP.
+│   │   ├── generate_depth_test.py # Grouping, scale fitting, and sampling.
 │   │   └── progress.py           # Thread pool with progress logging.
 │   ├── mapping_pipeline.py       # The four mapping stages end to end.
 │   ├── gps.py                    # Capture GPS as UTM priors and map alignment.
@@ -41,7 +45,6 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── gsplat_world_frame_test.py # Similarity inverse and the export wiring.
 │   ├── mapping_pipeline_test.py  # Gravity levelling of the solved map.
 │   ├── panorama_database.py      # Panorama video to a cube-map rig database.
-│   ├── segment_people.py         # Person and sky masks for the training images.
 │   └── train_gsplat_with_masks.py # simple_trainer entrypoint; reads JobParameters.
 ├── scripts/
 │   ├── run_pipeline.sh           # Host: the whole pipeline in one `docker run`.

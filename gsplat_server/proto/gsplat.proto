@@ -9,6 +9,7 @@ service GsplatService {
   rpc StreamLog(StreamLogRequest) returns (stream LogChunk);
   rpc DownloadResult(DownloadResultRequest) returns (stream ResultChunk);
   rpc DeleteJob(DeleteJobRequest) returns (DeleteJobResponse);
+  rpc StopAllJobs(StopAllJobsRequest) returns (StopAllJobsResponse);
 }
 
 message SubmitJobRequest {
@@ -68,6 +69,11 @@ message JobParameters {
   // the masked sky above all -- renders as this instead of black. Left unset,
   // gsplat renders onto black as it does without it.
   Color background_color = 22;
+  // Predict depth for the uploaded images with Depth Anything 3 and supervise
+  // training on it, when the upload carried no depths/ directory of its own.
+  bool run_depth = 23;
+  // Weight of the depth term in the loss. Only read when run_depth is set.
+  float depth_lambda = 24;
 
   message Color {
     // Channel intensities in [0, 1].
@@ -102,3 +108,8 @@ message DownloadResultRequest { string id = 1; }
 message ResultChunk { bytes data = 1; }
 message DeleteJobRequest { string id = 1; }
 message DeleteJobResponse { string id = 1; }
+message StopAllJobsRequest {}
+message StopAllJobsResponse {
+  int32 queued_jobs = 1;
+  bool running_job = 2;
+}

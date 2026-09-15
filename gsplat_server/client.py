@@ -94,14 +94,27 @@ def fetch(stub, job_id, output_path):
     print(f"Point cloud written to {output_path}")
 
 
+def stop_all(stub):
+    result = stub.StopAllJobs(gsplat_pb2.StopAllJobsRequest())
+    running = " and stopped the running job" if result.running_job else ""
+    print(f"Stopped {result.queued_jobs} queued job(s){running}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("model_dir", type=Path)
+    parser.add_argument("model_dir", type=Path, nargs="?")
     parser.add_argument("--server", default="localhost:50051", help="gRPC host:port")
     parser.add_argument("--output", type=Path, help="output PLY path")
     parser.add_argument("--parameters", type=Path, help="text-protobuf training parameters")
+    parser.add_argument("--stop-all", action="store_true", help="stop queued and running jobs")
     args = parser.parse_args()
-    submit(connect(args.server), args)
+    stub = connect(args.server)
+    if args.stop_all:
+        stop_all(stub)
+        return
+    if args.model_dir is None:
+        parser.error("model_dir is required unless --stop-all is used")
+    submit(stub, args)
 
 
 if __name__ == "__main__":

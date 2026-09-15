@@ -5,6 +5,7 @@ import json
 import os
 import queue
 import shutil
+import signal
 import stat
 import subprocess
 import threading
@@ -21,7 +22,8 @@ from gsplat_server.proto import gsplat_pb2, gsplat_pb2_grpc
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRAIN_ENTRYPOINT = REPO_ROOT / "mapping" / "train_gsplat_with_masks.py"
-SEGMENT_ENTRYPOINT = REPO_ROOT / "mapping" / "segment_people.py"
+SEGMENT_ENTRYPOINT = REPO_ROOT / "mapping" / "triton" / "segment_people.py"
+DEPTH_ENTRYPOINT = REPO_ROOT / "mapping" / "triton" / "generate_depth.py"
 QUEUED, RUNNING, SUCCEEDED, FAILED = "queued", "running", "succeeded", "failed"
 
 
@@ -138,11 +140,21 @@ def segmentation_command(model_directory, mask_sky):
     ]
 
 
+def depth_command(model_directory):
+    return [
+        "python3", str(DEPTH_ENTRYPOINT),
+        str(model_directory), str(model_directory / "depths"),
+        "--mask-dir", str(model_directory / "masks"),
+    ]
+
+
 def job_steps(job, directory):
     """The commands to run for a job, in order.
 
-    Segmentation only runs when asked for and when the upload brought no masks
-    of its own, so an uploaded masks/ is never overwritten.
+    Segmentation and depth only run when asked for and when the upload brought
+    no masks or depths of its own, so an uploaded directory is never
+    overwritten. Depth follows segmentation, which gives it the masks that say
+    which pixels are worth predicting for.
     """
     model_directory = directory / "model"
     parameters = parameters_from_dict(job["parameters"])
@@ -151,27 +163,74 @@ def job_steps(job, directory):
         steps.append(
             ("segmentation", segmentation_command(model_directory, parameters.mask_sky))
         )
+    if parameters.run_depth and not (model_directory / "depths").is_dir():
+        steps.append(("depth", depth_command(model_directory)))
     steps.append(("gsplat training", training_command(directory)))
     return steps
 
 
-def train(store, job):
-    store.update(job, state=RUNNING, started_at=time.time())
-    directory = store.directory(job["id"])
-    with (directory / "train.log").open("wb") as log:
-        for step, command in job_steps(job, directory):
-            returncode = subprocess.call(command, stdout=log, stderr=subprocess.STDOUT)
-            if returncode != 0:
-                break
-    error = None if returncode == 0 else f"{step} exited {returncode}"
-    if returncode == 0 and result_ply(directory) is None:
-        error, returncode = "training wrote no point cloud", 1
-    store.update(
-        job,
-        state=SUCCEEDED if returncode == 0 else FAILED,
-        finished_at=time.time(),
-        error=error,
-    )
+class JobRunner:
+    def __init__(self, store):
+        self.store, self.lock = store, threading.Lock()
+        self.process, self.active_job_id, self.stopped_job_ids = None, None, set()
+
+    def run(self, job):
+        with self.lock:
+            if job["state"] != QUEUED:
+                return
+            self.store.update(job, state=RUNNING, started_at=time.time())
+        directory = self.store.directory(job["id"])
+        with (directory / "train.log").open("wb") as log:
+            for step, command in job_steps(job, directory):
+                with self.lock:
+                    process = subprocess.Popen(
+                        command,
+                        stdout=log,
+                        stderr=subprocess.STDOUT,
+                        start_new_session=True,
+                    )
+                    self.process, self.active_job_id = process, job["id"]
+                returncode = process.wait()
+                with self.lock:
+                    self.process, self.active_job_id = None, None
+                if returncode != 0:
+                    break
+        with self.lock:
+            stopped = job["id"] in self.stopped_job_ids
+            self.stopped_job_ids.discard(job["id"])
+        error = "stopped by request" if stopped else None
+        if not stopped and returncode != 0:
+            error = f"{step} exited {returncode}"
+        if returncode == 0 and result_ply(directory) is None:
+            error, returncode = "training wrote no point cloud", 1
+        self.store.update(
+            job,
+            state=SUCCEEDED if returncode == 0 and not stopped else FAILED,
+            finished_at=time.time(),
+            error=error,
+        )
+
+    def stop_all(self):
+        with self.lock:
+            process = self.process
+            running = self.active_job_id is not None
+            if running:
+                self.stopped_job_ids.add(self.active_job_id)
+            if process is not None and process.poll() is None:
+                os.killpg(process.pid, signal.SIGTERM)
+        queued = [job for job in self.store.list() if job["state"] == QUEUED]
+        with self.lock:
+            self.stopped_job_ids.update(
+                job["id"] for job in self.store.list() if job["state"] == RUNNING
+            )
+        for job in queued:
+            self.store.update(
+                job,
+                state=FAILED,
+                finished_at=time.time(),
+                error="stopped by request",
+            )
+        return len(queued), running
 
 
 def write_upload(requests, store, context):
@@ -209,8 +268,8 @@ def as_proto(job, queue_position):
 
 
 class GsplatService(gsplat_pb2_grpc.GsplatServiceServicer):
-    def __init__(self, store, pending):
-        self.store, self.pending = store, pending
+    def __init__(self, store, pending, runner):
+        self.store, self.pending, self.runner = store, pending, runner
 
     def _proto(self, job):
         return as_proto(job, self.store.queue_position(job))
@@ -276,6 +335,13 @@ class GsplatService(gsplat_pb2_grpc.GsplatServiceServicer):
             context.abort(grpc.StatusCode.INTERNAL, str(error))
         return gsplat_pb2.DeleteJobResponse(id=request.id)
 
+    def StopAllJobs(self, request, context):
+        queued_jobs, running_job = self.runner.stop_all()
+        return gsplat_pb2.StopAllJobsResponse(
+            queued_jobs=queued_jobs,
+            running_job=running_job,
+        )
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -285,13 +351,16 @@ def main():
     args = parser.parse_args()
     args.jobs_dir.mkdir(parents=True, exist_ok=True)
     store, pending = JobStore(args.jobs_dir), queue.Queue()
+    runner = JobRunner(store)
 
     def worker():
         while True:
-            train(store, pending.get())
+            runner.run(pending.get())
     threading.Thread(target=worker, daemon=True).start()
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=8))
-    gsplat_pb2_grpc.add_GsplatServiceServicer_to_server(GsplatService(store, pending), server)
+    gsplat_pb2_grpc.add_GsplatServiceServicer_to_server(
+        GsplatService(store, pending, runner), server
+    )
     server.add_insecure_port(f"{args.host}:{args.port}")
     server.start()
     print(f"gsplat gRPC server listening on {args.host}:{args.port}", flush=True)

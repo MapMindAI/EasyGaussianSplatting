@@ -72,9 +72,84 @@ a bus error.
 The densification settings live in `gsplat_server/config/gsplat_train_defaults.proto.txt`, shared
 with the sweep so its baseline cannot drift from what ships; `mapping/train_gsplat_with_masks.py` only attaches the masks and passes every argument through to simple_trainer. The trained model lands in `data/pano_mapping/gsplat_output`.
 
-Person segmentation masks mirror any nested folders under the reconstruction's
-`images/` directory, so each mask keeps the same relative image path and adds
-`.png` to the image filename.
+## Masks and depth from Triton
+
+Two stages under `mapping/triton/` annotate a reconstruction before training,
+both against the Triton server that already serves the mapping features (see
+[panorama_mapping.md](panorama_mapping.md)). `--triton-url` locates it, or
+`$TRITON_URL` when the flag is left out. Run segmentation in the gsplat env,
+which has torchvision and `tritonclient`; depth uses the image's default
+`python3`, which has pycolmap. Mount the repo at `/workspace` so `data/` and
+`mapping/` both come along.
+
+`segment_people.py` writes the training masks -- white where gsplat should
+supervise, black over people and sky:
+
+```bash
+GSPLAT_HOST=192.168.11.194
+VIDEO_NAME=VID_20260904_155849_00_009
+WORKSPACE_PATH=data/${VIDEO_NAME}_reconstruction
+DOCKER_RUN="docker run --rm -v $(pwd):/workspace -w /workspace \
+  --add-host host.docker.internal:host-gateway \
+  ghcr.io/mapmindai/gaussiansplatting:latest"
+
+${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.triton.segment_people \
+  ${WORKSPACE_PATH}/images ${WORKSPACE_PATH}/masks \
+  --debug-dir ${WORKSPACE_PATH}/debug --no-mask-sky \
+  --triton-url ${GSPLAT_HOST}:8011
+```
+
+`scripts/run_pipeline.sh` runs this with its defaults; run it by hand to change
+them. People use torchvision Mask R-CNN. `--no-mask-sky` masks people only and
+does not call SegFormer; otherwise SegFormer supplies sky masks. `--dilation` grows each person mask (1
+pixel), and `--num-threads` sets how many images infer at once (4). Masks mirror
+any nested folders under `images/`, so each keeps the image's relative path and
+adds `.png` to its filename. Existing masks are kept unless `--overwrite` is
+given. SegFormer runs a 512-pixel model on overlapping tiles, so masks retain
+the image's local detail; large images take proportionally longer to segment.
+
+`--debug-dir` additionally writes each image with people in red over the source
+image; when sky is enabled, it also washes the SegFormer label map over it.
+It also writes `label_colours.png`, the exact ADE20K label-index colour legend.
+
+Adding it to an already-segmented directory re-runs the images whose overlay is
+missing, so the masks do not have to be thrown away to get the views.
+
+`generate_depth.py` predicts depth with Depth Anything 3. It is not part of
+`run_pipeline.sh`, so run it yourself, after segmentation so the masks can gate
+what it samples:
+
+```bash
+${DOCKER_RUN} python3 -m mapping.triton.generate_depth \
+  ${WORKSPACE_PATH} ${WORKSPACE_PATH}/depths \
+  --mask-dir ${WORKSPACE_PATH}/masks \
+  --debug-dir ${WORKSPACE_PATH}/debug \
+  --triton-url ${GSPLAT_HOST}:8011
+```
+
+It reads `images/` and `sparse/` from the model directory, groups each camera's
+images into consecutive groups of five (the served model's input shape), and
+fits each group to the scale of the COLMAP points its images already observe --
+DA3's own scale is arbitrary and differs per group. A group carrying too few of
+those points is skipped rather than written at a guessed scale.
+`--samples-per-image` (4096) sets how many pixels each `.npy` keeps,
+`--min-confidence` (2.0) the DA3 confidence floor.
+`--debug-dir <directory>` writes a colourized depth overlay over every source
+image, preserving nested image paths and adding `_depth.png` to the filename.
+[gsplat_server.md](gsplat_server.md#depth-supervision) covers the file format
+and the limits of the depth term.
+
+Training reads `depths/` only when the parameters file sets `run_depth: true`,
+which adds gsplat's depth term weighted by `depth_lambda`:
+
+```
+run_depth: true
+depth_lambda: 0.01
+```
+
+Neither stage runs from the parameters file locally -- `run_segmentation` and
+`run_depth` only tell the server to run them (see
+[gsplat_server.md](gsplat_server.md#submitting-a-model)).
 
 ## Comparing parameter configurations
 

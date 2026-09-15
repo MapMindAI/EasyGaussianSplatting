@@ -127,6 +127,12 @@ the upload finishes and the job reaches the worker, not `created_at`, which is
 stamped when the upload starts — so a slow upload does not appear to hold up
 jobs submitted after it.
 
+Stop queued work and terminate the active job without restarting the service:
+
+```
+gsplat_server/client.py --server gsplat-host:50051 --stop-all
+```
+
 ## Submitting a model
 
 `client.py` zips a reconstruction, uploads it, follows the training log, and
@@ -165,7 +171,7 @@ comparisons.
 
 The directory must hold `images/` and `sparse/`; a `masks/` directory is
 uploaded too if present, and training then skips the masked pixels (see
-`mapping/segment_people.py`). Nothing else is uploaded, so an earlier
+`mapping/triton/segment_people.py`). Nothing else is uploaded, so an earlier
 `gsplat_output/` in the same directory costs nothing.
 
 To mask people and sky without segmenting them first, set `run_segmentation: true`
@@ -176,10 +182,9 @@ training, writing its output into the job's own directory:
 run_segmentation: true
 ```
 
-People and sky both come from the SegFormer model in
-`third_party/EasyTensorRT` (ADE20K classes 12 and 2), over gRPC at the
-`TRITON_URL` the server container was started with. Without it a
-`run_segmentation: true` job fails rather than masking nothing.
+People come from torchvision's COCO-trained Mask R-CNN. When `mask_sky` is
+true, sky comes from the SegFormer model in `third_party/EasyTensorRT` (ADE20K
+class 2), over gRPC at `TRITON_URL`. A person-only job needs no Triton server.
 
 `mask_sky` selects which of the two is masked. It defaults to true: sky is at
 infinity, so the Gaussians that chase it are floaters that cost memory and blur
@@ -191,7 +196,58 @@ mask_sky: false
 ```
 
 An uploaded `masks/` always wins, so the flag is a fallback rather than an
-override. Segmentation adds a few minutes to a job.
+override. Segmentation adds a few minutes to a job: it runs inference on
+`segment_people.py --num-threads` worker threads, through the same helper the
+feature stages use.
+
+### Depth supervision
+
+`run_depth: true` predicts depth for the uploaded images with Depth Anything 3
+and adds gsplat's depth term to the loss, weighted by `depth_lambda`:
+
+```
+run_depth: true
+depth_lambda: 0.01
+```
+
+It runs after segmentation and before training, writing `depths/` into the job
+directory. An uploaded `depths/` always wins, the same way `masks/` does.
+
+DA3 takes a fixed number of views at once, so `generate_depth.py` groups the
+model's images by camera and splits each camera into consecutive groups of five
+-- for the cube-map rig, neighbouring frames of one face. The served model's
+input shape fixes that count, so it is a constant rather than a flag: changing
+it means deploying a different model (see `third_party/EasyTensorRT`).
+
+Each group is reconstructed in its own arbitrary scale, which is the part worth
+understanding: the depth DA3 returns is not in the input model's units, and a
+different group gets a different scale. So each group's depth is fitted to the
+COLMAP points its own images already observe, by the median ratio between the
+two, before anything is written. A group whose images carry fewer than 20 such
+points is skipped rather than written at a guessed scale, and the stage reports
+how many it skipped. An image left without rows trains without a depth term:
+gsplat's own sparse-point depths do not stand in for them, since the images it
+skips are the ones SfM barely covered anyway.
+
+What lands in `depths/` is one `<image_name>.npy` per image holding `(M, 3)`
+float32 rows of `(x, y, depth)`: the sampled pixels worth supervising rather
+than a dense map, which is the difference between megabytes and gigabytes. `x`
+and `y` are normalized to `[0, 1]`, so `data_factor` cannot desynchronize them
+from the images the trainer loads; the trainer scales them back and converts
+depth into gsplat's normalized world.
+
+Three limits to know. gsplat's depth term is an L1 on *inverse* depth, so
+near-field error dominates and far geometry is barely constrained -- and a
+pixel no Gaussian covers yet renders a depth near zero, whose disparity would
+bury every other term, so those are left out of it until geometry reaches
+them. The term is
+not masked: `masks/` gates the L1 and SSIM terms only, so depth supervision is
+confined to the masked-in pixels here instead, when the segmentation stage has
+written masks by the time depth runs. And depth is predicted on the uploaded
+images as they are, so a camera with distortion parameters would have its depth
+registered against the raw image while training renders the undistorted one --
+the cube-map rig registers `PINHOLE`, which COLMAP leaves undistorted, so this
+does not arise today.
 
 ### Background colour
 
@@ -226,3 +282,4 @@ it carries Gaussians, not a background -- so a viewer still paints its own.
 | `StreamLog` | Training log chunks from a byte offset. |
 | `DownloadResult` | Streams the trained point cloud once the job succeeds. |
 | `DeleteJob` | Drop a finished job and its files. |
+| `StopAllJobs` | Stop the running job and fail queued jobs. |

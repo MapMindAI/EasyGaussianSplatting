@@ -11,7 +11,7 @@ only the Windows-specific parts are here.
 
 - Windows 11 with Docker Desktop using the `desktop-linux` context.
 - NVIDIA driver with Docker GPU support.
-- SSH access to the Windows host, for example `dm@192.168.11.194`.
+- SSH access to the Windows host, for example `dm@192.168.11.194` (pwd: 0731).
 - A checkout containing `gsplat_server/`, `mapping/`, the generated proto
   bindings, and — for the mapping pipeline — the `third_party/EasyTensorRT`
   submodule, which carries the models and is around 800 MB.
@@ -49,6 +49,33 @@ tar -xf C:\Users\49451\easy-gsplat-server.tar.gz \
   -C D:\EasyGaussianSplatting
 ```
 
+## Update the checkout
+
+Later updates come over Git rather than another archive. Point the copy on `D:`
+at the remote once:
+
+```
+cd /d D:\EasyGaussianSplatting
+git init -b <branch>
+git remote add origin https://github.com/MapMindAI/EasyGaussianSplatting
+git fetch --depth 1 origin <branch>
+git checkout -f -B <branch> origin/<branch>
+```
+
+`git pull` is enough from then on. Untracked content -- `data/`, the job
+directory, the generated proto bindings, `third_party/EasyTensorRT` and its
+built TensorRT plans -- is left alone by both.
+
+`.gitattributes` holds the checkout at LF. Git for Windows would otherwise
+write CRLF, which the Linux container reads as a syntax error in every `.sh`.
+A checkout made before that file existed needs, once:
+
+```
+git config core.autocrlf false
+git add --renormalize .
+git checkout -f -- .
+```
+
 ## Verify Docker GPU access
 
 Select Docker Desktop's Linux engine and run:
@@ -82,6 +109,10 @@ with `docker logs -f tritonserver_trt` and wait for:
 ```
 Started GRPCInferenceService at 0.0.0.0:8001
 ```
+
+SegFormer uses two GPU instances so concurrent segmentation requests can run
+without waiting on one execution context. Keep DA3 at one instance: it is much
+larger and may exhaust the GPU memory when duplicated.
 
 Triton's own gRPC port is 8001, published here as 8011 because 8001 is so often
 already taken; 8011 is what this repo defaults to.
@@ -132,8 +163,8 @@ docker run -d --name gsplat-server --gpus all --shm-size=8g -p 50051:50051 \
   gsplat_server/serve.sh /workspace/data/gsplat_server 50051
 ```
 
-`TRITON_URL` is what lets a `run_segmentation: true` job mask people and sky,
-through the `segformer` model the Triton server above serves.
+`TRITON_URL` is needed only when a `run_segmentation: true` job masks sky
+through the SegFormer model. Person masking uses torchvision Mask R-CNN locally.
 
 `--shm-size` matters: below roughly 8g the trainer's dataloader workers die
 partway through a run with a bus error, which surfaces as a failed job whose

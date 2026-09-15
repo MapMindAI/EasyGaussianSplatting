@@ -34,7 +34,9 @@ def store(tmp_path):
 
 @pytest.fixture
 def parameters():
-    return parameters_to_dict(load_default_parameters())
+    values = parameters_to_dict(load_default_parameters())
+    values["run_depth"] = False
+    return values
 
 
 def write_archive(path, names):
@@ -248,6 +250,33 @@ def test_job_steps_passes_the_sky_choice_to_segmentation(tmp_path, parameters, m
     assert command[-1] == flag
 
 
+def test_depth_runs_between_segmentation_and_training(tmp_path, parameters):
+    parameters["run_segmentation"] = True
+    parameters["run_depth"] = True
+
+    steps = server.job_steps({"parameters": parameters}, tmp_path)
+
+    assert [name for name, _ in steps] == ["segmentation", "depth", "gsplat training"]
+
+
+def test_depth_reads_the_model_and_writes_beside_it(tmp_path, parameters):
+    command = server.depth_command(tmp_path)
+
+    assert str(server.DEPTH_ENTRYPOINT) in command
+    assert str(tmp_path / "depths") in command
+    assert command[-2:] == ["--mask-dir", str(tmp_path / "masks")]
+
+
+def test_an_uploaded_depths_directory_is_never_overwritten(tmp_path, parameters):
+    parameters["run_segmentation"] = False
+    parameters["run_depth"] = True
+    (tmp_path / "model" / "depths").mkdir(parents=True)
+
+    steps = server.job_steps({"parameters": parameters}, tmp_path)
+
+    assert [name for name, _ in steps] == ["gsplat training"]
+
+
 def test_an_uploaded_masks_directory_is_never_overwritten(tmp_path, parameters):
     parameters["run_segmentation"] = True
     (tmp_path / "model" / "masks").mkdir(parents=True)
@@ -318,7 +347,7 @@ def test_an_upload_without_parameters_is_refused(store):
 
 @pytest.fixture
 def service(store):
-    return server.GsplatService(store, queue.Queue())
+    return server.GsplatService(store, queue.Queue(), server.JobRunner(store))
 
 
 def test_get_job_reports_an_unknown_id_as_not_found(service):
@@ -345,6 +374,38 @@ def test_a_queued_job_cannot_be_deleted(service, store, parameters):
 
     assert error.value.code == grpc.StatusCode.FAILED_PRECONDITION
     assert store.get(job["id"]) is not None
+
+
+def test_stop_all_fails_queued_jobs(service, store, parameters):
+    job = store.create(parameters)
+
+    response = service.StopAllJobs(gsplat_pb2.StopAllJobsRequest(), FakeContext())
+
+    assert response.queued_jobs == 1
+    assert not response.running_job
+    assert store.get(job["id"])["state"] == server.FAILED
+    assert store.get(job["id"])["error"] == "stopped by request"
+
+
+def test_stop_all_terminates_the_running_process(service, store, parameters, monkeypatch):
+    class Process:
+        pid = 123
+
+        def poll(self):
+            return None
+
+    job = store.create(parameters)
+    store.update(job, state=server.RUNNING)
+    service.runner.process = Process()
+    service.runner.active_job_id = job["id"]
+    terminated = []
+    monkeypatch.setattr(server.os, "killpg", lambda process_id, signal: terminated.append((process_id, signal)))
+
+    response = service.StopAllJobs(gsplat_pb2.StopAllJobsRequest(), FakeContext())
+
+    assert response.running_job
+    assert terminated == [(123, server.signal.SIGTERM)]
+    assert job["id"] in service.runner.stopped_job_ids
 
 
 def test_a_finished_job_is_deleted(service, store, parameters):

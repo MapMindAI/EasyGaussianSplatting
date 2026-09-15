@@ -19,7 +19,7 @@ from pycolmap import logging
 
 from .extraction import GLOBAL_FEATURES_FILENAME, read_global_features
 from .progress import map_with_progress
-from .triton_models import LocalFeatures
+from .clients import LocalFeatures
 
 # Image pairs per progress log line.
 _LOG_EVERY = 1000

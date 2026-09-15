@@ -41,6 +41,70 @@ def attach_masks(dataset_class):
     dataset_class.__getitem__ = __getitem__
 
 
+def attach_depths(dataset_class):
+    """Supply the depth supervision simple_trainer's --depth_loss consumes.
+
+    Its own source is the sparse COLMAP points, which it looks up in
+    parser.point_indices -- a dict with no entry at all for a cube face SfM
+    barely covered. That path is switched off and answered here with what
+    generate_depth.py wrote, which is denser and covers the textureless surfaces
+    SfM never triangulated. The file stores x and y normalized and depth in the
+    COLMAP frame, so both are put into the frame the renderer works in here:
+    pixels of the image as loaded, and the parser's normalized world. The scale
+    comes off the parser rather than a module global so it survives a dataloader
+    worker that re-imports instead of forking.
+    """
+    original_getitem = dataset_class.__getitem__
+
+    def __getitem__(self, item):
+        self.load_depths = False
+        data = original_getitem(self, item)
+        image_name = self.parser.image_names[self.indices[item]]
+        depth_path = os.path.join(self.parser.data_dir, "depths", f"{image_name}.npy")
+        rows = (
+            np.load(depth_path)
+            if os.path.exists(depth_path)
+            else np.zeros((0, 3), dtype=np.float32)
+        )
+
+        assert self.patch_size is None, "depths are not cropped along with patches"
+        height, width = data["image"].shape[:2]
+        points = rows[:, :2] * np.array([width - 1, height - 1], dtype=np.float32)
+        data["points"] = torch.from_numpy(points).float()
+        scale = similarity_scale(self.parser.transform)
+        data["depths"] = torch.from_numpy(rows[:, 2] * scale).float()
+        return data
+
+    dataset_class.__getitem__ = __getitem__
+
+
+# Rendered depth below this fraction of the scene scale means the ray hit
+# nothing, not that the surface is that close.
+UNRENDERED_DEPTH = 1e-3
+
+
+def guard_depth_loss(losses_module):
+    """Supervise depth only where the render has geometry to supervise.
+
+    The term is an L1 on inverse depth, and simple_trainer adds it for every
+    sample once --depth_loss is on. A pixel no Gaussian covers yet renders a
+    depth near zero, and its disparity buries every other term; an image
+    generate_depth.py skipped averages over no points at all, which is NaN.
+    Both reach the weights on the next step and stay there.
+    """
+    original_loss = losses_module.depth_l1_loss
+
+    def depth_l1_loss(pred_depth, gt_depth, scene_scale=1.0, **kwargs):
+        rendered = pred_depth > UNRENDERED_DEPTH * scene_scale
+        if not rendered.any():
+            return pred_depth.new_zeros(())
+        return original_loss(
+            pred_depth[rendered], gt_depth[rendered], scene_scale=scene_scale, **kwargs
+        )
+
+    losses_module.depth_l1_loss = depth_l1_loss
+
+
 def composite_over_background(rendering, color):
     """Rasterize onto a fixed background colour rather than onto black.
 
@@ -68,6 +132,7 @@ def composite_over_background(rendering, color):
 
 sys.path.insert(0, EXAMPLES_DIR)
 import gsplat  # noqa: E402
+import gsplat.losses  # noqa: E402
 import gsplat.rendering  # noqa: E402
 from datasets.colmap import Dataset, Parser  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
@@ -75,6 +140,7 @@ from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
     capture_scene_transform,
     export_in_colmap_frame,
+    similarity_scale,
 )
 
 
@@ -140,6 +206,8 @@ def load_job_parameters():
         "--ssim_lambda", number(parameters.ssim_lambda),
         "--pose_opt" if parameters.pose_opt else "--no-pose_opt",
     ]
+    if parameters.run_depth:
+        flags += ["--depth_loss", "--depth_lambda", number(parameters.depth_lambda)]
     if parameters.packed:
         flags.append("--packed")
     flags += strategy_flags(parameters)
@@ -154,6 +222,9 @@ parameters = load_job_parameters()
 if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)
 attach_masks(Dataset)
+if parameters is not None and parameters.run_depth:
+    attach_depths(Dataset)
+    guard_depth_loss(gsplat.losses)
 capture_scene_transform(Parser)
 export_in_colmap_frame(gsplat)
 runpy.run_path(os.path.join(EXAMPLES_DIR, "simple_trainer.py"), run_name="__main__")
