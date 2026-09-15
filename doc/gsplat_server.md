@@ -237,7 +237,10 @@ from the images the trainer loads; the trainer scales them back and converts
 depth into gsplat's normalized world.
 
 Three limits to know. gsplat's depth term is an L1 on *inverse* depth, so
-near-field error dominates and far geometry is barely constrained. The term is
+near-field error dominates and far geometry is barely constrained -- and a
+pixel no Gaussian covers yet renders a depth near zero, whose disparity would
+bury every other term, so those are left out of it until geometry reaches
+them. The term is
 not masked: `masks/` gates the L1 and SSIM terms only, so depth supervision is
 confined to the masked-in pixels here instead, when the segmentation stage has
 written masks by the time depth runs. And depth is predicted on the uploaded

@@ -78,17 +78,29 @@ def attach_depths(dataset_class):
     dataset_class.__getitem__ = __getitem__
 
 
-def skip_empty_depth_loss(losses_module):
-    """Leave the depth term out for an image generate_depth.py wrote nothing for.
+# Rendered depth below this fraction of the scene scale means the ray hit
+# nothing, not that the surface is that close.
+UNRENDERED_DEPTH = 1e-3
 
-    An L1 over no points averages over nothing: NaN, which sticks in the weights.
+
+def guard_depth_loss(losses_module):
+    """Supervise depth only where the render has geometry to supervise.
+
+    The term is an L1 on inverse depth, and simple_trainer adds it for every
+    sample once --depth_loss is on. A pixel no Gaussian covers yet renders a
+    depth near zero, and its disparity buries every other term; an image
+    generate_depth.py skipped averages over no points at all, which is NaN.
+    Both reach the weights on the next step and stay there.
     """
     original_loss = losses_module.depth_l1_loss
 
-    def depth_l1_loss(pred_depth, gt_depth, *args, **kwargs):
-        if gt_depth.numel() == 0:
+    def depth_l1_loss(pred_depth, gt_depth, scene_scale=1.0, **kwargs):
+        rendered = pred_depth > UNRENDERED_DEPTH * scene_scale
+        if not rendered.any():
             return pred_depth.new_zeros(())
-        return original_loss(pred_depth, gt_depth, *args, **kwargs)
+        return original_loss(
+            pred_depth[rendered], gt_depth[rendered], scene_scale=scene_scale, **kwargs
+        )
 
     losses_module.depth_l1_loss = depth_l1_loss
 
@@ -212,7 +224,7 @@ if parameters is not None and parameters.HasField("background_color"):
 attach_masks(Dataset)
 if parameters is not None and parameters.run_depth:
     attach_depths(Dataset)
-    skip_empty_depth_loss(gsplat.losses)
+    guard_depth_loss(gsplat.losses)
 capture_scene_transform(Parser)
 export_in_colmap_frame(gsplat)
 runpy.run_path(os.path.join(EXAMPLES_DIR, "simple_trainer.py"), run_name="__main__")
