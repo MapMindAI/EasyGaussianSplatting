@@ -122,15 +122,15 @@ step.
 
 ## Reconstruct a capture
 
-With the inference server up, turn a stitched panorama video into the cube-map
+With the inference server up, turn stitched panorama videos into the cube-map
 model the trainer takes. `data/` is excluded from the archive above, so copy the
-video to `D:\EasyGaussianSplatting\data\` first:
+videos and their LRV files to `D:\EasyGaussianSplatting\data\pano_mapping\` first:
 
 ```
 docker run --rm --gpus all -v D:\EasyGaussianSplatting:/workspace -w /workspace \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   python3 -m mapping.mapping_pipeline \
-    --video_path data/pano.mp4 --workspace_path data/pano_mapping \
+    --workspace_path data/pano_mapping \
     --triton-url host.docker.internal:8011
 ```
 

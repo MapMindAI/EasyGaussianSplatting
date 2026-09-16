@@ -18,14 +18,14 @@ Stitch a raw Insta360 capture into an equirectangular video:
 insta360_media_stitcher -inputs /workspace/VID_xxx.insv -output /workspace/pano.mp4 -stitch_type optflow
 ```
 
-`scripts/run_stitch.sh <input.insv> [output.mp4] [output_size]` does that from
-the host, with the AI-stitch settings we use for reconstruction (4000x2000,
-H.265, flowstate, direction lock), and skips the step when the video is already
-there and decodes at the requested size. `output.mp4` defaults to the capture's
-name with a `_pano.mp4` suffix; both paths must live under the repo checkout:
+`scripts/run_stitch.sh <workspace> [output_size]` stitches every INSV under a
+workspace from the host, with the AI-stitch settings we use for reconstruction
+(4000x2000, H.265, flowstate, direction lock). Each MP4 is written beside its
+INSV with the same name, which lets the mapping pipeline find it and its LRV.
+The workspace must live under the repo checkout:
 
 ```
-scripts/run_stitch.sh data/VID_xxx.insv
+scripts/run_stitch.sh data/pano_mapping
 ```
 
 A stitch runs about ten times the capture's length, longer at larger output
@@ -42,8 +42,8 @@ Read metadata off the source file:
 exiftool /workspace/VID_xxx.insv
 ```
 
-Run `python3 -m mapping.mapping_pipeline --video_path <video> --workspace_path <dir>`
-to reconstruct the panorama video as a cube-map rig: SuperPoint and SALAD features
+Run `python3 -m mapping.mapping_pipeline --workspace_path <dir>` to reconstruct
+every MP4 under the workspace as a cube-map rig: SuperPoint and SALAD features
 into a COLMAP database, LightGlue matching, and global SfM. It needs a Triton
 server serving those models — see
 [panorama_mapping.md](panorama_mapping.md), which also covers each stage and
@@ -54,7 +54,7 @@ carrying the rig:
 
 ```
 python3 -m mapping.mapping_pipeline \
-  --video_path data/pano.mp4 --workspace_path data/pano_mapping \
+  --workspace_path data/pano_mapping \
   --triton-url host.docker.internal:8011
 ```
 

@@ -34,7 +34,6 @@ from .panorama_database import (
     RIG_DOWN,
     build_database,
     parse_faces,
-    sampling_step,
 )
 
 
@@ -146,27 +145,63 @@ def run_global_mapping(workspace_path, track=None, seconds_per_frame=None,
         )
 
 
-def run_pipeline(video_path, workspace_path, triton_url, selection, frame_rate=2.0,
+def discover_videos(workspace_path):
+    """MP4 videos under the mapping workspace, in reproducible path order."""
+    return sorted(
+        path for path in Path(workspace_path).rglob("*")
+        if path.is_file() and path.suffix.lower() == ".mp4"
+    )
+
+
+def capture_key(path):
+    """The timestamp and sequence shared by a VID/LRV capture pair."""
+    parts = Path(path).stem.split("_")
+    if len(parts) != 5 or parts[0] not in {"VID", "LRV"}:
+        return None
+    return parts[1], parts[2], parts[4]
+
+
+def find_lrv(video_path, search_path=None):
+    """The matching LRV under `search_path`, or beside `video_path` by default."""
+    key = capture_key(video_path)
+    if key is None:
+        return None
+    search_path = Path(search_path) if search_path is not None else video_path.parent
+    matches = [
+        path for path in search_path.rglob("*")
+        if path.is_file() and path.suffix.lower() == ".lrv" and capture_key(path) == key
+    ]
+    if len(matches) > 1:
+        raise RuntimeError(f"Multiple LRV files match {video_path}: {matches}")
+    return matches[0] if matches else None
+
+
+def run_pipeline(workspace_path, triton_url, selection, frame_rate=2.0,
                  face_size=None, faces=DEFAULT_FACES, keypoint_threshold=0.015,
-                 match_threshold=0.2, num_threads=8, gps_video=None):
-    """Reconstructs `video_path` into `workspace_path`, and returns its
-    `sparse/0/` directory.
-
-    `gps_video` is the capture carrying the GPS track -- the `.insv`, or the
-    `.lrv` proxy of it, which holds the same telemetry in a much smaller file.
-    """
+                 match_threshold=0.2, num_threads=8):
+    """Reconstructs all MP4 videos under `workspace_path` into `sparse/0/`."""
     workspace_path = Path(workspace_path)
-    build_database(video_path, workspace_path, frame_rate, face_size, faces)
+    video_paths = discover_videos(workspace_path)
+    if not video_paths:
+        raise RuntimeError(f"No MP4 videos found under {workspace_path}")
+    videos = build_database(video_paths, workspace_path, frame_rate, face_size, faces)
 
-    track = None
-    seconds_per_frame = None
-    if gps_video is not None:
-        step, rate = sampling_step(video_path, frame_rate)
-        seconds_per_frame = step / rate
-        track = gps.read_track(gps_video)
-        gps.write_pose_priors(
-            workspace_path / "database.db", track, seconds_per_frame
-        )
+    tracks = []
+    for video in videos:
+        lrv_path = find_lrv(video.path, workspace_path)
+        if lrv_path is None:
+            logging.warning(f"No matching LRV for {video.path}; skipping GPS alignment")
+            continue
+        tracks.append((
+            video.start_frame_index,
+            video.stop_frame_index,
+            gps.read_track(lrv_path),
+            video.seconds_per_frame,
+            lrv_path,
+        ))
+    track = gps.CaptureTracks(tracks) if tracks else None
+    if track is not None:
+        gps.write_pose_priors(workspace_path / "database.db", track, None)
 
     # Skipped in the caller rather than in extract_features, so a finished
     # workspace never opens a connection to the inference server.
@@ -190,16 +225,15 @@ def run_pipeline(video_path, workspace_path, triton_url, selection, frame_rate=2
     # Always resolved, unlike the stages above: it is the cheap one, and it is
     # where levelling and GPS alignment happen, so a rerun has to redo it for a
     # changed track or a changed alignment to reach the saved model.
-    run_global_mapping(workspace_path, track, seconds_per_frame, gps_video)
+    source = ", ".join(map(str, track.sources)) if track is not None else None
+    run_global_mapping(workspace_path, track, None, source)
     return workspace_path / "sparse" / "0"
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--video_path", required=True,
-                        help="stitched equirectangular video")
     parser.add_argument("--workspace_path", required=True,
-                        help="directory to reconstruct into")
+                        help="directory containing MP4 videos and reconstruction output")
     parser.add_argument("--triton-url", default="127.0.0.1:8011",
                         help="Triton gRPC endpoint (default: 127.0.0.1:8011)")
     parser.add_argument("--frame-rate", type=float, default=2.0,
@@ -227,15 +261,10 @@ def main():
                              f"(default: {PairSelection.num_retrieval_excluded})")
     parser.add_argument("--num-threads", type=int, default=8,
                         help="worker threads calling the models (default: 8)")
-    parser.add_argument("--gps-video", default=None,
-                        help="capture carrying the GPS track, the .insv or its "
-                             ".lrv proxy; aligns the map to UTM about its own centre "
-                             f"and writes {gps.TRANSFORM_FILENAME}")
     args = parser.parse_args()
     logging.info(f"Parameters: {vars(args)}")
 
     model_dir = run_pipeline(
-        args.video_path,
         args.workspace_path,
         args.triton_url,
         PairSelection(
@@ -249,7 +278,6 @@ def main():
         keypoint_threshold=args.keypoint_threshold,
         match_threshold=args.match_threshold,
         num_threads=args.num_threads,
-        gps_video=args.gps_video,
     )
     logging.info(f"Reconstruction written to {model_dir}")
 

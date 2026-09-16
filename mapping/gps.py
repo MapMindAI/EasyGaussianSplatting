@@ -173,8 +173,8 @@ def read_fixes(video_path):
         str(video_path),
     )
     fixes = parse_fixes(output, capture_start(video_path))
-    # Fatal, unlike a track too sparse to fit: --gps-video is opt-in, so a
-    # capture with no track at all is the wrong file rather than a bad fix.
+    # A matched LRV is expected to carry telemetry, unlike a sparse track that
+    # merely lacks enough fixes to fit.
     if not fixes:
         raise RuntimeError(f"{video_path} carries no GPS track")
     return fixes
@@ -220,6 +220,27 @@ class GpsTrack:
         ])
 
 
+class CaptureTracks:
+    """GPS tracks assigned to the contiguous frame ranges of input videos."""
+
+    def __init__(self, tracks):
+        self.tracks = tracks
+        epsgs = {track.epsg for _, _, track, _, _ in tracks}
+        if len(epsgs) != 1:
+            raise ValueError(f"GPS videos span UTM zones: {sorted(epsgs)}")
+        self.epsg = epsgs.pop()
+
+    @property
+    def sources(self):
+        return [source for _, _, _, _, source in self.tracks]
+
+    def position_at_frame(self, frame_index):
+        for start, stop, track, seconds_per_frame, _ in self.tracks:
+            if start <= frame_index < stop:
+                return track.position_at((frame_index - start) * seconds_per_frame)
+        return None
+
+
 def read_track(video_path):
     track = GpsTrack(read_fixes(video_path))
     logging.info(
@@ -232,6 +253,8 @@ def read_track(video_path):
 def position_of(track, image_name, seconds_per_frame):
     """Where the track puts a database image, or None if it cannot place it."""
     _, index = parse_image_name(image_name)
+    if isinstance(track, CaptureTracks):
+        return track.position_at_frame(index)
     return track.position_at(index * seconds_per_frame)
 
 

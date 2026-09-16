@@ -9,6 +9,7 @@ panorama instead of one per face, and holds the faces' relative orientations
 at their exact values.
 """
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
@@ -156,25 +157,54 @@ def iter_panorama_frames(video_path, frame_rate):
     capture.release()
 
 
-def build_database(video_path, workspace_path, frame_rate, face_size, faces):
+@dataclass(frozen=True)
+class SampledVideo:
+    path: Path
+    start_frame_index: int
+    stop_frame_index: int
+    seconds_per_frame: float
+
+
+def sampled_videos(video_paths, frame_rate):
+    """The contiguous frame-index range and timing of each input video."""
+    frame_index = 0
+    videos = []
+    for video_path in video_paths:
+        step, rate = sampling_step(video_path, frame_rate)
+        capture = cv2.VideoCapture(str(video_path))
+        frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        capture.release()
+        sample_count = (frame_count - 1) // step + 1 if frame_count else 0
+        videos.append(SampledVideo(
+            Path(video_path), frame_index, frame_index + sample_count, step / rate,
+        ))
+        frame_index += sample_count
+    return videos
+
+
+def build_database(video_paths, workspace_path, frame_rate, face_size, faces):
     """Writes `<workspace_path>/images/<face>/` and a `database.db` holding one
     camera per face, the rig mounting them, and one frame per panorama. A
-    `face_size` of None takes `default_face_size(video_path)`.
+    `face_size` of None takes the first video's `default_face_size`.
 
     Returns without touching anything if the database already holds images:
     later stages write their own output into that same file, so rebuilding it
     would throw their work away.
     """
+    video_paths = [Path(video_path) for video_path in video_paths]
+    if not video_paths:
+        raise ValueError("At least one panorama video is required")
+    videos = sampled_videos(video_paths, frame_rate)
     workspace_path = Path(workspace_path)
     database_path = workspace_path / "database.db"
     if database_path.exists():
         with pycolmap.Database.open(database_path) as database:
             if database.num_images():
                 logging.info(f"{database_path} already holds images, keeping it")
-                return
+                return videos
 
     if face_size is None:
-        face_size = default_face_size(video_path)
+        face_size = default_face_size(video_paths[0])
 
     images_dir = workspace_path / "images"
     for face in faces:
@@ -201,46 +231,50 @@ def build_database(video_path, workspace_path, frame_rate, face_size, faces):
             database.write_camera(camera, use_camera_id=True)
         database.write_rig(rig, use_rig_id=True)
 
-        for frame_index, panorama in enumerate(iter_panorama_frames(video_path, frame_rate)):
-            if not remaps:
-                height, width = panorama.shape[:2]
-                remaps = {
-                    face: build_remap(face, face_size, width, height) for face in faces
-                }
-                logging.info(f"Panorama frames are {width}x{height}")
+        for video in videos:
+            remaps = {}
+            for local_index, panorama in enumerate(iter_panorama_frames(video.path, frame_rate)):
+                frame_index = video.start_frame_index + local_index
+                if not remaps:
+                    height, width = panorama.shape[:2]
+                    remaps = {
+                        face: build_remap(face, face_size, width, height) for face in faces
+                    }
+                    logging.info(f"Panorama frames are {width}x{height}")
 
-            frame = pycolmap.Frame()
-            frame.frame_id = frame_index + 1
-            frame.rig_id = rig.rig_id
-            for face in faces:
-                map_x, map_y = remaps[face]
-                cv2.imwrite(
-                    str(images_dir / image_name(face, frame_index)),
-                    cv2.remap(
-                        panorama,
-                        map_x,
-                        map_y,
-                        cv2.INTER_LINEAR,
-                        borderMode=cv2.BORDER_WRAP,
-                    ),
-                )
+                frame = pycolmap.Frame()
+                frame.frame_id = frame_index + 1
+                frame.rig_id = rig.rig_id
+                for face in faces:
+                    map_x, map_y = remaps[face]
+                    cv2.imwrite(
+                        str(images_dir / image_name(face, frame_index)),
+                        cv2.remap(
+                            panorama,
+                            map_x,
+                            map_y,
+                            cv2.INTER_LINEAR,
+                            borderMode=cv2.BORDER_WRAP,
+                        ),
+                    )
 
-                image_id += 1
-                image = pycolmap.Image(
-                    name=image_name(face, frame_index),
-                    camera_id=cameras[face].camera_id,
-                    image_id=image_id,
-                )
-                database.write_image(image, use_image_id=True)
-                frame.add_data_id(image.data_id)
-            database.write_frame(frame, use_frame_id=True)
+                    image_id += 1
+                    image = pycolmap.Image(
+                        name=image_name(face, frame_index),
+                        camera_id=cameras[face].camera_id,
+                        image_id=image_id,
+                    )
+                    database.write_image(image, use_image_id=True)
+                    frame.add_data_id(image.data_id)
+                database.write_frame(frame, use_frame_id=True)
 
     if image_id == 0:
-        sys.exit(f"Extracted no frames from {video_path}")
+        sys.exit(f"Extracted no frames from {', '.join(map(str, video_paths))}")
     logging.info(
         f"Registered {image_id // len(faces)} panorama frames x {len(faces)} faces "
         f"in {database_path}"
     )
+    return videos
 
 
 def parse_faces(value):

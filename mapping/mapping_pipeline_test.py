@@ -18,10 +18,32 @@ sys.modules.setdefault("mapping.triton.clients", _clients)
 from mapping.mapping_pipeline import (  # noqa: E402
     _rotation_to_world_down,
     align_up_axis,
+    discover_videos,
+    find_lrv,
 )
 from mapping.panorama_database import RIG_DOWN  # noqa: E402
 
 WORLD_DOWN = np.array([0.0, 0.0, -1.0])
+
+
+def test_discovers_mp4_videos_under_the_workspace_in_path_order(tmp_path):
+    (tmp_path / "second.mp4").touch()
+    nested = tmp_path / "captures"
+    nested.mkdir()
+    (nested / "first.MP4").touch()
+    (tmp_path / "not-a-video.lrv").touch()
+
+    assert discover_videos(tmp_path) == [nested / "first.MP4", tmp_path / "second.mp4"]
+
+
+def test_finds_the_lrv_with_the_same_capture_timestamp_and_sequence(tmp_path):
+    video = tmp_path / "VID_20260904_155849_00_009.mp4"
+    video.touch()
+    lrv = tmp_path / "LRV_20260904_155849_01_009.lrv"
+    lrv.touch()
+    (tmp_path / "LRV_20260904_155849_01_010.lrv").touch()
+
+    assert find_lrv(video) == lrv
 
 
 class Frame:
