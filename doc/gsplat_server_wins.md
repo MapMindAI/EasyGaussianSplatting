@@ -153,7 +153,7 @@ it needs neither WSL nor a local protobuf installation:
 
 ```
 cd /d D:\EasyGaussianSplatting
-docker run --rm -v D:\EasyGaussianSplatting:/workspace -w /workspace ghcr.io/mapmindai/gaussiansplatting:latest bash -lc "pip install --no-cache-dir grpcio-tools && bash gsplat_server/proto/build.sh"
+docker run --rm -v D:\EasyGaussianSplatting:/workspace -w /workspace ghcr.io/mapmindai/gaussiansplatting:latest bash -lc "pip install --no-cache-dir grpcio-tools==1.83.1 && bash gsplat_server/proto/build.sh"
 ```
 
 Start the server in the foreground:
