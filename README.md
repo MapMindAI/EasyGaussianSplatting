@@ -118,15 +118,15 @@ gsplat_server/client.py ${WORKSPACE_PATH} \
 4. Extract a TSDF mesh from the trained Gaussian Splatting model.
 
 ```bash
-docker run --rm --gpus all -v "$(pwd)":/workspace -w /workspace \
-  ghcr.io/mapmindai/gaussiansplatting:latest \
-  conda run --no-capture-output -n gsplat python3 -m mapping.tsdf.pipeline \
-    ${WORKSPACE_PATH} --model-path ${WORKSPACE_PATH}/gsplat.ply
+bash mapping/tsdf/run_pipeline.sh \
+  ${WORKSPACE_PATH} ${WORKSPACE_PATH}/gsplat.ply
 ```
 
 This writes `${WORKSPACE_PATH}/tsdf/mesh.ply` in the cube-map reconstruction's
-COLMAP frame. See [doc/tools.md](doc/tools.md#tsdf-mesh-from-a-gaussian-splat)
-for mesh-resolution options.
+COLMAP frame. It runs the TSDF stage in a dedicated image built from
+`python:3.11-slim` with the official `open3d==0.19.0` wheel. See
+[doc/tools.md](doc/tools.md#tsdf-mesh-from-a-gaussian-splat) for mesh-resolution
+options.
 
 ## Tests
 

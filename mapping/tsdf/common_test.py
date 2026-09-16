@@ -1,12 +1,18 @@
 import numpy as np
 import pytest
 
-from mapping.tsdf.common import depth_path, latest_point_cloud, valid_depth
-from mapping.tsdf.render_depth import _camera_matrix, _world_to_camera
+from mapping.tsdf.common import (
+    camera_manifest_path,
+    depth_path,
+    latest_point_cloud,
+    valid_depth,
+)
+from mapping.tsdf.render_depth import _camera_matrix, _read_ply, _world_to_camera
 
 
 def test_depth_path_keeps_cube_face_directory(tmp_path):
     assert depth_path(tmp_path, "front/frame.png") == tmp_path / "front/frame.npy"
+    assert camera_manifest_path(tmp_path) == tmp_path / "cameras.json"
 
 
 def test_valid_depth_requires_coverage_and_a_positive_finite_distance():
@@ -47,3 +53,18 @@ def test_cube_camera_matrix_and_pose_keep_colmap_conventions():
         [[100.0, 0.0, 50.0], [0.0, 101.0, 51.0], [0.0, 0.0, 1.0]],
     )
     assert np.array_equal(_world_to_camera(_Image())[:3], np.arange(12).reshape(3, 4))
+
+
+def test_reads_the_binary_gsplat_ply_layout_without_plyfile(tmp_path):
+    names = ["x", "y", "z", "opacity", "scale_0", "scale_1", "scale_2"]
+    names += [f"rot_{index}" for index in range(4)]
+    header = "ply\nformat binary_little_endian 1.0\nelement vertex 1\n"
+    header += "".join(f"property float {name}\n" for name in names) + "end_header\n"
+    path = tmp_path / "point_cloud_1.ply"
+    path.write_bytes(header.encode() + np.arange(len(names), dtype="<f4").tobytes())
+
+    read_names, values = _read_ply(path)
+
+    assert read_names == names
+    assert values.shape == (1, len(names))
+    assert values[0, -1] == len(names) - 1

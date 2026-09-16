@@ -22,6 +22,11 @@ def depth_path(depth_directory, image_name):
     return Path(depth_directory) / Path(image_name).with_suffix(".npy")
 
 
+def camera_manifest_path(depth_directory):
+    """Return the camera metadata stored beside rendered depths."""
+    return Path(depth_directory) / "cameras.json"
+
+
 def valid_depth(depth, alpha, minimum_alpha):
     """Keep finite, positive expected-hit distances with enough coverage."""
     return np.isfinite(depth) & (depth > 0) & (alpha >= minimum_alpha)
