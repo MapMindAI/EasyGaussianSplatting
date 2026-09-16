@@ -35,8 +35,8 @@ script keeps downloaded PyTorch model weights in the persistent Docker volume
 `easygaussiansplatting-torch-cache`, so later runs reuse them.
 Existing person-segmentation masks are reused on later runs.
 
-To stitch without reconstructing, `scripts/run_stitch.sh <input.insv>` runs
-that stage on its own; see [doc/tools.md](doc/tools.md).
+To stitch without reconstructing, `scripts/run_stitch.sh <workspace>` stitches
+every INSV under that workspace; see [doc/tools.md](doc/tools.md).
 
 ![COLMAP sparse reconstruction viewer](assets/reconstruction_viewer.png)
 
@@ -84,20 +84,17 @@ See [doc/tools.md](doc/tools.md).
 
 ## Reconstructing a capture
 
-1. [Stitch to video](doc/tools.md) `scripts/run_stitch.sh data/${VIDEO_NAME}.insv`
-2. [Mapping a panorama capture](doc/panorama_mapping.md) run with video.
+1. [Stitch to video](doc/tools.md) into the mapping workspace `scripts/run_stitch.sh ${WORKSPACE_PATH}`.
+2. [Mapping a panorama capture](doc/panorama_mapping.md).
 
 ```bash
 GSPLAT_HOST=192.168.11.194
-VIDEO_NAME=VID_20260904_155849_00_009
-LRVIDEO_NAME=LRV_20260904_155849_01_009
+WORKSPACE_PATH=data/VID_20260904_153909
 docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   python3 -m mapping.mapping_pipeline \
-    --video_path data/${VIDEO_NAME}_pano.mp4 \
-    --gps-video data/${LRVIDEO_NAME}.lrv \
-    --workspace_path data/${VIDEO_NAME}_reconstruction \
+    --workspace_path ${WORKSPACE_PATH} \
     --triton-url ${GSPLAT_HOST}:8011 --num-threads 4
 ```
 
@@ -113,7 +110,6 @@ gsplat_server/client.py data/pano_mapping --server gsplat-host:50051
 ```
 
 ```bash
-WORKSPACE_PATH=data/${VIDEO_NAME}_reconstruction
 gsplat_server/client.py ${WORKSPACE_PATH} \
   --parameters gsplat_server/config/gsplat_train_defaults.proto.txt \
   --server ${GSPLAT_HOST}:50051 --output ${WORKSPACE_PATH}/gsplat.ply
@@ -160,4 +156,4 @@ This branch is a ground-up remake of the pipeline. What's done so far:
       SuperPoint/LightGlue/SALAD features and global SfM
 - [x] Script to train a Gaussian Splatting model from the cube-map reconstruction (gsplat)
 - [x] gRPC training server
-- [ ] Export/viewer wired to the above
+- [x] Export/viewer wired to the above

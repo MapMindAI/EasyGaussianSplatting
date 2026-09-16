@@ -25,11 +25,11 @@ FACE_SIZE="${4:-}"
 PARAMETERS_FILE="${5:-${REPO_ROOT}/gsplat_server/config/gsplat_train_defaults.proto.txt}"
 REL_PARAMETERS_FILE="$(repo_relative_path "${PARAMETERS_FILE}")"
 REL_OUTPUT_DIR="${REL_INSV%.*}_reconstruction"
-REL_OUTPUT_VIDEO="${REL_OUTPUT_DIR}/pano.mp4"
 # The mapping workspace: images/<face>/, database.db, and sparse/0/.
-REL_RECONSTRUCTION_DIR="${REL_OUTPUT_VIDEO%.*}_mapping"
+REL_RECONSTRUCTION_DIR="${REL_OUTPUT_DIR}/pano_mapping"
+REL_OUTPUT_VIDEO="${REL_RECONSTRUCTION_DIR}/pano.mp4"
 
-mkdir -p "${REPO_ROOT}/${REL_OUTPUT_DIR}"
+mkdir -p "${REPO_ROOT}/${REL_RECONSTRUCTION_DIR}"
 
 docker run -i "${DOCKER_RUN_FLAGS[@]}" \
   -e INPUT_INSV="/workspace/${REL_INSV}" \
@@ -56,7 +56,7 @@ if [ -n "${FRAME_RATE}" ]; then MAPPING_ARGUMENTS+=(--frame-rate "${FRAME_RATE}"
 if [ -n "${FACE_SIZE}" ]; then MAPPING_ARGUMENTS+=(--face-size "${FACE_SIZE}"); fi
 
 python3 -m mapping.mapping_pipeline \
-  --video_path "${OUTPUT_VIDEO}" --workspace_path "${RECONSTRUCTION_DIR}" \
+  --workspace_path "${RECONSTRUCTION_DIR}" \
   "${MAPPING_ARGUMENTS[@]}"
 
 # --- 3. Mask out people and sky, then train --------------------------------

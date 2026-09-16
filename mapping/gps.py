@@ -29,6 +29,10 @@ VERTICAL_STANDARD_DEVIATION = 10.0
 # A fix this far from a sampled frame is not evidence about where it was.
 MAX_INTERPOLATION_GAP = 2.0
 
+# A static track jitters by its horizontal GPS uncertainty and cannot determine
+# a map's scale or heading.
+MINIMUM_HORIZONTAL_SPREAD_METRES = 10.0
+
 # The floor keeps a tight fit from discarding frames over centimetres of noise.
 OUTLIER_RESIDUAL_FACTOR = 3.0
 OUTLIER_RESIDUAL_FLOOR = 2.0
@@ -173,8 +177,8 @@ def read_fixes(video_path):
         str(video_path),
     )
     fixes = parse_fixes(output, capture_start(video_path))
-    # Fatal, unlike a track too sparse to fit: --gps-video is opt-in, so a
-    # capture with no track at all is the wrong file rather than a bad fix.
+    # A matched LRV is expected to carry telemetry, unlike a sparse track that
+    # merely lacks enough fixes to fit.
     if not fixes:
         raise RuntimeError(f"{video_path} carries no GPS track")
     return fixes
@@ -220,6 +224,27 @@ class GpsTrack:
         ])
 
 
+class CaptureTracks:
+    """GPS tracks assigned to the contiguous frame ranges of input videos."""
+
+    def __init__(self, tracks):
+        self.tracks = tracks
+        epsgs = {track.epsg for _, _, track, _, _ in tracks}
+        if len(epsgs) != 1:
+            raise ValueError(f"GPS videos span UTM zones: {sorted(epsgs)}")
+        self.epsg = epsgs.pop()
+
+    @property
+    def sources(self):
+        return [source for _, _, _, _, source in self.tracks]
+
+    def position_at_frame(self, frame_index):
+        for start, stop, track, seconds_per_frame, _ in self.tracks:
+            if start <= frame_index < stop:
+                return track.position_at((frame_index - start) * seconds_per_frame)
+        return None
+
+
 def read_track(video_path):
     track = GpsTrack(read_fixes(video_path))
     logging.info(
@@ -232,6 +257,8 @@ def read_track(video_path):
 def position_of(track, image_name, seconds_per_frame):
     """Where the track puts a database image, or None if it cannot place it."""
     _, index = parse_image_name(image_name)
+    if isinstance(track, CaptureTracks):
+        return track.position_at_frame(index)
     return track.position_at(index * seconds_per_frame)
 
 
@@ -347,6 +374,11 @@ def paired_positions(images, track, seconds_per_frame):
     return np.array(map_positions), np.array(world_positions)
 
 
+def horizontal_spread(positions):
+    """Largest horizontal displacement from the first GPS measurement."""
+    return float(np.max(np.linalg.norm(positions[:, :2] - positions[0, :2], axis=1)))
+
+
 def align_to_track(reconstruction, track, reference_face, seconds_per_frame):
     """Puts `reconstruction` in UTM metres about its own centre, in place.
 
@@ -364,6 +396,14 @@ def align_to_track(reconstruction, track, reference_face, seconds_per_frame):
     if len(map_positions) < 3:
         logging.warning(
             f"Only {len(map_positions)} frames have both a pose and a GPS fix, "
+            "leaving the map unaligned"
+        )
+        return None
+    spread = horizontal_spread(world_positions)
+    if spread < MINIMUM_HORIZONTAL_SPREAD_METRES:
+        logging.warning(
+            f"GPS positions span {spread:.1f} m, below the "
+            f"{MINIMUM_HORIZONTAL_SPREAD_METRES:.1f} m alignment minimum; "
             "leaving the map unaligned"
         )
         return None

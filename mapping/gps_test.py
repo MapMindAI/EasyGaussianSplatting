@@ -368,6 +368,18 @@ def test_too_few_placed_frames_leaves_the_map_alone():
     assert reconstruction.applied == []
 
 
+def test_static_gps_leaves_the_map_unaligned():
+    track = track_from(*[(float(index), 0.0, 0.0, 5.0) for index in range(8)])
+    images = [
+        Image(f"front/{index:06d}.jpg", [float(index), 0.0, 0.0])
+        for index in range(8)
+    ]
+    reconstruction = Reconstruction(*images)
+
+    assert gps.align_to_track(reconstruction, track, "front", 1.0) is None
+    assert reconstruction.applied == []
+
+
 def test_frames_the_track_cannot_place_are_left_out():
     track, images = straight_run()
     # A sample far past the end of the track has no fix to pair with.

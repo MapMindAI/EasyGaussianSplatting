@@ -80,33 +80,35 @@ docker run -it --rm -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   python3 -m mapping.mapping_pipeline \
-    --video_path data/pano.mp4 --workspace_path data/pano_mapping \
+    --workspace_path data/pano_mapping \
     --triton-url host.docker.internal:8011
 ```
 
-`--video_path` is the stitched video and `--workspace_path` the directory to
-reconstruct into; both are required.
+`--workspace_path` contains the stitched MP4 videos and receives the
+reconstruction. Every MP4 under it is sampled into one cube-map rig.
 `--frame-rate` (frames/sec sampled from the video) defaults to 2, `--face-size`
 (cube-face width/height in pixels) to a quarter of the video width — which
 keeps the panorama's angular resolution — and `--faces` to all six. Drop `down`
 to leave out the nadir, which mostly shows whoever is carrying the rig. The face
 list must contain `front`, the rig's reference sensor. `--num-sequential`, `--num-retrieval`, and
-`--num-retrieval-excluded` tune pair selection; `--gps-video` georeferences the
-result, below; `--help` lists everything.
+`--num-retrieval-excluded` tune pair selection; `--help` lists everything.
 
 The workspace ends up holding `images/<face>/`, `database.db`,
 `global_features.npz`, and `sparse/0/`, which is what gsplat trains on.
 
 ## Georeferencing with the capture's GPS
 
-`--gps-video` points at the capture carrying the GPS track -- the `.insv`, or
-the `.lrv` proxy of it, which holds the same telemetry in a file a tenth the
-size:
+Each `VID_<timestamp>_<camera>_<sequence>.mp4` automatically takes GPS from
+the `LRV_<timestamp>_<camera>_<sequence>.lrv` under the workspace; the camera number may
+differ, as it does in Insta360's paired files:
 
 ```
-    --video_path data/VID_xxx_pano.mp4 --workspace_path data/VID_xxx_mapping \
-    --gps-video data/LRV_xxx.lrv
+VID_20260904_155849_00_009.mp4
+LRV_20260904_155849_01_009.lrv
 ```
+
+Videos without a matching LRV still reconstruct but do not receive GPS priors
+or contribute to GPS alignment.
 
 Insta360 writes about one WGS84 fix a second. exiftool reads them, and each is
 projected into the capture's UTM zone and written to `database.db` as a COLMAP
@@ -121,6 +123,8 @@ scale, heading and position. That fit is restricted to a turn about the vertical
 so it cannot undo the levelling: a track's altitudes wander over ten metres
 where its horizontal fixes are good to a few, so the rig's own gravity is the
 better vertical. The worst-fitting frames are dropped and the fit repeated once.
+GPS positions must span at least 10 m horizontally; otherwise, as for an indoor
+capture with stationary fixes, the map stays unaligned.
 
 The result is metric, +Z up, and centred on the map's own middle, so it stays
 near the origin whatever UTM zone it came from. `local_to_world.json` records
