@@ -82,8 +82,21 @@ ssim_lambda: 0.5
 # Packed rasterization: less GPU memory, slightly slower.
 packed: true
 
+# Gaussian learning rates. These match simple_trainer's defaults.
+# Positions are scaled by the scene size internally, so keep means_lr small.
+means_lr: 0.00016
+scales_lr: 0.005
+opacities_lr: 0.05
+quats_lr: 0.001
+# Degree-zero spherical harmonics control base colour; higher degrees control
+# view-dependent detail and train more slowly.
+sh0_lr: 0.0025
+shN_lr: 0.000125
+
 # Optimize camera poses alongside the model.
 pose_opt: false
+# Learning rate for camera-pose optimization. Only read when pose_opt is set.
+pose_opt_lr: 0.00001
 # Segment people out of the images before training, when the upload carried no
 # masks/ of its own. Costs a few minutes and needs the segmentation weights.
 run_segmentation: true

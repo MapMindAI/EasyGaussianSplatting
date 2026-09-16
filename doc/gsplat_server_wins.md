@@ -156,6 +156,7 @@ gsplat_server/run_server.sh 50051 data/gsplat_server
 To keep the server across reboots, run the same image detached instead:
 
 ```
+cd /d D:\EasyGaussianSplatting
 docker run -d --name gsplat-server --gpus all --shm-size=8g -p 50051:50051 \
   -e TRITON_URL=host.docker.internal:8011 \
   -v D:\EasyGaussianSplatting:/workspace -w /workspace \
