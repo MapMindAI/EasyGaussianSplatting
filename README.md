@@ -156,4 +156,4 @@ This branch is a ground-up remake of the pipeline. What's done so far:
       SuperPoint/LightGlue/SALAD features and global SfM
 - [x] Script to train a Gaussian Splatting model from the cube-map reconstruction (gsplat)
 - [x] gRPC training server
-- [ ] Export/viewer wired to the above
+- [x] Export/viewer wired to the above
