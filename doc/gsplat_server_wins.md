@@ -12,9 +12,9 @@ only the Windows-specific parts are here.
 - Windows 11 with Docker Desktop using the `desktop-linux` context.
 - NVIDIA driver with Docker GPU support.
 - SSH access to the Windows host, for example `dm@192.168.11.194` (pwd: 0731).
-- A checkout containing `gsplat_server/`, `mapping/`, the generated proto
-  bindings, and — for the mapping pipeline — the `third_party/EasyTensorRT`
-  submodule, which carries the models and is around 800 MB.
+- A checkout containing `gsplat_server/`, `mapping/`, and — for the mapping
+  pipeline — the `third_party/EasyTensorRT` submodule, which carries the models
+  and is around 800 MB.
 
 The Jetson image is ARM64 and must not be used on this PC. Use the x86 image:
 
@@ -24,11 +24,10 @@ ghcr.io/mapmindai/gaussiansplatting:latest
 
 ## Copy the project to `D:`
 
-Generate the ignored Python protobuf bindings and check out the models first;
-neither is in a fresh clone, and the archive below has to carry both:
+Check out the models first; they are not in a fresh clone and the archive below
+has to carry them:
 
 ```
-bash gsplat_server/proto/build.sh
 git submodule update --init third_party/EasyTensorRT
 ```
 
@@ -147,21 +146,27 @@ the training service below takes.
 `run_server.sh` sets the GPU flags and a shared-memory size the dataloader
 survives; `serve.sh` activates the image's conda environment and points the
 trainer at the installed gsplat.
-Run it from the checkout on `D:`:
+
+After every change to `gsplat_server/proto/gsplat.proto`, generate the ignored
+Python bindings from a Windows command prompt. This uses the Docker image, so
+it needs neither WSL nor a local protobuf installation:
 
 ```
-gsplat_server/run_server.sh 50051 data/gsplat_server
+cd /d D:\EasyGaussianSplatting
+docker run --rm -v D:\EasyGaussianSplatting:/workspace -w /workspace ghcr.io/mapmindai/gaussiansplatting:latest bash -lc "pip install --no-cache-dir grpcio-tools && bash gsplat_server/proto/build.sh"
+```
+
+Start the server in the foreground:
+
+```
+docker run --rm --name gsplat-server --gpus all --shm-size=8g -p 50051:50051 -e TRITON_URL=host.docker.internal:8011 -v D:\EasyGaussianSplatting:/workspace -w /workspace ghcr.io/mapmindai/gaussiansplatting:latest gsplat_server/serve.sh /workspace/data/gsplat_server 50051
 ```
 
 To keep the server across reboots, run the same image detached instead:
 
 ```
 cd /d D:\EasyGaussianSplatting
-docker run -d --name gsplat-server --gpus all --shm-size=8g -p 50051:50051 \
-  -e TRITON_URL=host.docker.internal:8011 \
-  -v D:\EasyGaussianSplatting:/workspace -w /workspace \
-  ghcr.io/mapmindai/gaussiansplatting:latest \
-  gsplat_server/serve.sh /workspace/data/gsplat_server 50051
+docker run -d --name gsplat-server --gpus all --shm-size=8g -p 50051:50051 -e TRITON_URL=host.docker.internal:8011 -v D:\EasyGaussianSplatting:/workspace -w /workspace ghcr.io/mapmindai/gaussiansplatting:latest gsplat_server/serve.sh /workspace/data/gsplat_server 50051
 ```
 
 `TRITON_URL` is needed only when a `run_segmentation: true` job masks sky
