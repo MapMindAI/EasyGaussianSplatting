@@ -27,9 +27,11 @@ message JobParameters {
   float floater_reg_weight = 3;
   // Image-plane gradient threshold for Gaussian splitting or duplication.
   float grow_grad2d = 4;
-  // Minimum opacity below which a Gaussian is pruned.
+  // Minimum opacity below which a Gaussian is pruned. It also sets the reset
+  // floor to prune_opa * 2, so lowering it can collapse a model when opacity
+  // regularization keeps Gaussians below the pruning threshold.
   float prune_opa = 5;
-  // Use absolute image-plane gradients instead of averaged gradients.
+  // Use absolute instead of averaged image-plane gradients, following AbsGS.
   bool absgrad = 6;
   // 3D scale below which densification duplicates a Gaussian.
   float grow_scale3d = 7;
@@ -45,16 +47,17 @@ message JobParameters {
   int32 refine_every = 12;
   // Number of iterations between opacity resets.
   int32 reset_every = 13;
-  // Densification strategy. DEFAULT grows the Gaussian count without an upper
-  // bound; MCMC holds it at cap_max, which is the only way to fit a chosen
-  // budget on a fixed GPU.
+  // Densification strategy. DEFAULT relies on gradient-based split, clone, and
+  // prune rules; MCMC maintains its population by teleporting, adding, and
+  // perturbing Gaussians. DEFAULT has no upper bound; MCMC holds cap_max.
   Strategy strategy = 14;
   // MCMC only: the Gaussian count to converge to. Ignored by DEFAULT.
   int32 cap_max = 15;
   // Spherical-harmonic degree for view-dependent colour. Lower it to spend the
   // memory on more Gaussians instead.
   int32 sh_degree = 16;
-  // Weight of the SSIM term in the loss; the rest is L1.
+  // Weight of the SSIM term in the loss; the rest is L1. 0.5 beat gsplat's
+  // 0.2 on every measured metric at no cost.
   float ssim_lambda = 17;
   // Packed rasterization: less GPU memory, slightly slower.
   bool packed = 18;
@@ -64,6 +67,8 @@ message JobParameters {
   // carried no masks/ directory of its own.
   bool run_segmentation = 20;
   // Mask the sky as well as the people. Only read when run_segmentation is set.
+  // Sky is at infinity, so its Gaussians are floaters that cost memory and
+  // blur geometry below; turn this off when background_color renders the sky.
   bool mask_sky = 21;
   // Colour the splats are composited over, so a region no Gaussian covers --
   // the masked sky above all -- renders as this instead of black. Left unset,
@@ -72,8 +77,24 @@ message JobParameters {
   // Predict depth for the uploaded images with Depth Anything 3 and supervise
   // training on it, when the upload carried no depths/ directory of its own.
   bool run_depth = 23;
-  // Weight of the depth term in the loss. Only read when run_depth is set.
+  // Weight of the depth term in the loss. The gsplat default is tuned for
+  // sparse SfM depths, so lower it if denser generated depths dominate the
+  // photometric terms. Only read when run_depth is set.
   float depth_lambda = 24;
+  // Learning rate for Gaussian positions.
+  float means_lr = 25;
+  // Learning rate for Gaussian scale factors.
+  float scales_lr = 26;
+  // Learning rate for Gaussian opacities.
+  float opacities_lr = 27;
+  // Learning rate for Gaussian orientations.
+  float quats_lr = 28;
+  // Learning rate for the degree-zero spherical-harmonic coefficients.
+  float sh0_lr = 29;
+  // Learning rate for higher-degree spherical-harmonic coefficients.
+  float shN_lr = 30;
+  // Learning rate for camera-pose optimization. Only read when pose_opt is set.
+  float pose_opt_lr = 31;
 
   message Color {
     // Channel intensities in [0, 1].

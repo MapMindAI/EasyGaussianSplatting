@@ -17,6 +17,13 @@ def test_defaults_carry_the_shipped_values():
     assert parameters.iterations == 30000
     assert parameters.sh_degree == 3
     assert parameters.ssim_lambda == pytest.approx(0.5)
+    assert parameters.means_lr == pytest.approx(1.6e-4)
+    assert parameters.scales_lr == pytest.approx(5e-3)
+    assert parameters.opacities_lr == pytest.approx(5e-2)
+    assert parameters.quats_lr == pytest.approx(1e-3)
+    assert parameters.sh0_lr == pytest.approx(2.5e-3)
+    assert parameters.shN_lr == pytest.approx(1.25e-4)
+    assert parameters.pose_opt_lr == pytest.approx(1e-5)
     assert parameters.strategy == gsplat_pb2.STRATEGY_MCMC
     assert parameters.absgrad is True
 
@@ -31,18 +38,24 @@ def test_omitted_fields_keep_the_default_rather_than_proto3_zero(tmp_path):
     assert parameters.iterations == 7000
     assert parameters.sh_degree == 3
     assert parameters.ssim_lambda == pytest.approx(0.5)
+    assert parameters.means_lr == pytest.approx(1.6e-4)
     assert parameters.strategy == gsplat_pb2.STRATEGY_MCMC
 
 
 def test_named_fields_override_the_default(tmp_path):
     path = tmp_path / "override.textproto"
-    path.write_text("strategy: STRATEGY_DEFAULT\nsh_degree: 1\nabsgrad: false\n")
+    path.write_text(
+        "strategy: STRATEGY_DEFAULT\nsh_degree: 1\nabsgrad: false\n"
+        "means_lr: 0.0003\npose_opt_lr: 0.00002\n"
+    )
 
     parameters = load_parameters(path)
 
     assert parameters.strategy == gsplat_pb2.STRATEGY_DEFAULT
     assert parameters.sh_degree == 1
     assert parameters.absgrad is False
+    assert parameters.means_lr == pytest.approx(3e-4)
+    assert parameters.pose_opt_lr == pytest.approx(2e-5)
     assert parameters.iterations == 30000
 
 

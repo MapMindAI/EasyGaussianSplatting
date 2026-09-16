@@ -156,6 +156,10 @@ run. It is layered over the shipped defaults, so it only names what it changes:
 cap_max: 1500000
 ```
 
+The Gaussian learning rates match `simple_trainer` by default and can be
+overridden as `means_lr`, `scales_lr`, `opacities_lr`, `quats_lr`, `sh0_lr`,
+or `shN_lr`; `pose_opt_lr` controls pose optimization when `pose_opt` is true.
+
 The defaults are `STRATEGY_MCMC` at 900k Gaussians, which measured best on
 `data/panorama`. `STRATEGY_MCMC` holds the count at `cap_max`, so it is how to
 ask for a specific budget on a given GPU; quality saturated around 900k there,

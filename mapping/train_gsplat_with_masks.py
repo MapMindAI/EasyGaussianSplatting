@@ -204,7 +204,14 @@ def load_job_parameters():
         "--scale_reg", number(parameters.floater_reg_weight),
         "--sh_degree", str(parameters.sh_degree),
         "--ssim_lambda", number(parameters.ssim_lambda),
+        "--means_lr", number(parameters.means_lr),
+        "--scales_lr", number(parameters.scales_lr),
+        "--opacities_lr", number(parameters.opacities_lr),
+        "--quats_lr", number(parameters.quats_lr),
+        "--sh0_lr", number(parameters.sh0_lr),
+        "--shN_lr", number(parameters.shN_lr),
         "--pose_opt" if parameters.pose_opt else "--no-pose_opt",
+        "--pose_opt_lr", number(parameters.pose_opt_lr),
     ]
     if parameters.run_depth:
         flags += ["--depth_loss", "--depth_lambda", number(parameters.depth_lambda)]
