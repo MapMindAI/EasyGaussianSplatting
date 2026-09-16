@@ -123,6 +123,8 @@ scale, heading and position. That fit is restricted to a turn about the vertical
 so it cannot undo the levelling: a track's altitudes wander over ten metres
 where its horizontal fixes are good to a few, so the rig's own gravity is the
 better vertical. The worst-fitting frames are dropped and the fit repeated once.
+GPS positions must span at least 10 m horizontally; otherwise, as for an indoor
+capture with stationary fixes, the map stays unaligned.
 
 The result is metric, +Z up, and centred on the map's own middle, so it stays
 near the origin whatever UTM zone it came from. `local_to_world.json` records

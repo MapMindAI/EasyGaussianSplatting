@@ -29,6 +29,10 @@ VERTICAL_STANDARD_DEVIATION = 10.0
 # A fix this far from a sampled frame is not evidence about where it was.
 MAX_INTERPOLATION_GAP = 2.0
 
+# A static track jitters by its horizontal GPS uncertainty and cannot determine
+# a map's scale or heading.
+MINIMUM_HORIZONTAL_SPREAD_METRES = 10.0
+
 # The floor keeps a tight fit from discarding frames over centimetres of noise.
 OUTLIER_RESIDUAL_FACTOR = 3.0
 OUTLIER_RESIDUAL_FLOOR = 2.0
@@ -370,6 +374,11 @@ def paired_positions(images, track, seconds_per_frame):
     return np.array(map_positions), np.array(world_positions)
 
 
+def horizontal_spread(positions):
+    """Largest horizontal displacement from the first GPS measurement."""
+    return float(np.max(np.linalg.norm(positions[:, :2] - positions[0, :2], axis=1)))
+
+
 def align_to_track(reconstruction, track, reference_face, seconds_per_frame):
     """Puts `reconstruction` in UTM metres about its own centre, in place.
 
@@ -387,6 +396,14 @@ def align_to_track(reconstruction, track, reference_face, seconds_per_frame):
     if len(map_positions) < 3:
         logging.warning(
             f"Only {len(map_positions)} frames have both a pose and a GPS fix, "
+            "leaving the map unaligned"
+        )
+        return None
+    spread = horizontal_spread(world_positions)
+    if spread < MINIMUM_HORIZONTAL_SPREAD_METRES:
+        logging.warning(
+            f"GPS positions span {spread:.1f} m, below the "
+            f"{MINIMUM_HORIZONTAL_SPREAD_METRES:.1f} m alignment minimum; "
             "leaving the map unaligned"
         )
         return None
