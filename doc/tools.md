@@ -151,6 +151,29 @@ Neither stage runs from the parameters file locally -- `run_segmentation` and
 `run_depth` only tell the server to run them (see
 [gsplat_server.md](gsplat_server.md#submitting-a-model)).
 
+## TSDF mesh from a Gaussian Splat
+
+`mapping.tsdf.pipeline` renders an expected-hit-distance depth map for every
+registered cube face from the final gsplat PLY, fuses the maps with TSDF, and
+writes `tsdf/mesh.ply`. The mesh uses the same COLMAP coordinates as
+`sparse/0/`, so it matches the cube-map reconstruction and the exported splat.
+Run it in the gsplat environment after training:
+
+```bash
+docker run --rm --gpus all -v "$(pwd)":/workspace -w /workspace \
+  ghcr.io/mapmindai/gaussiansplatting:latest \
+  conda run --no-capture-output -n gsplat python3 -m mapping.tsdf.pipeline \
+    ${WORKSPACE_PATH}
+```
+
+By default it reads the highest-step PLY under `gsplat_output/ply/`, writes
+depths under `tsdf/depths/`, retains existing depths, and writes
+`tsdf/mesh.ply`. `--model-path` selects another PLY. `--voxel-length` (0.02),
+`--sdf-truncation` (0.08), and `--maximum-depth` (20) use the map's world
+units; set them after metric GPS alignment when a metric mesh is required.
+`--minimum-alpha` (0.5) rejects weakly covered rendered pixels, and
+`--overwrite-depth` rerenders all depths.
+
 ## Comparing parameter configurations
 
 `mapping/benchmark/gsplat_sweep.sh` trains one model per configuration from a single

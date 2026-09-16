@@ -89,3 +89,6 @@ RUN bash /tmp/installers/install_gsplat.sh && rm /tmp/installers/install_gsplat.
 # matches features against; matplotlib is imported by the SALAD client in
 # third_party/EasyTensorRT for its own plotting entrypoint.
 RUN pip install --no-cache-dir pycolmap==4.2.0.dev0 "tritonclient[grpc]" matplotlib
+
+RUN conda run -n gsplat pip install --no-cache-dir \
+    pycolmap==4.2.0.dev0 open3d==0.19.0 plyfile

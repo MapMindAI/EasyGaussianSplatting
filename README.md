@@ -115,6 +115,19 @@ gsplat_server/client.py ${WORKSPACE_PATH} \
   --server ${GSPLAT_HOST}:50051 --output ${WORKSPACE_PATH}/gsplat.ply
 ```
 
+4. Extract a TSDF mesh from the trained Gaussian Splatting model.
+
+```bash
+docker run --rm --gpus all -v "$(pwd)":/workspace -w /workspace \
+  ghcr.io/mapmindai/gaussiansplatting:latest \
+  conda run --no-capture-output -n gsplat python3 -m mapping.tsdf.pipeline \
+    ${WORKSPACE_PATH} --model-path ${WORKSPACE_PATH}/gsplat.ply
+```
+
+This writes `${WORKSPACE_PATH}/tsdf/mesh.ply` in the cube-map reconstruction's
+COLMAP frame. See [doc/tools.md](doc/tools.md#tsdf-mesh-from-a-gaussian-splat)
+for mesh-resolution options.
+
 ## Tests
 
 Each `*_test.py` sits beside the module it covers, and between them they cover
@@ -155,5 +168,6 @@ This branch is a ground-up remake of the pipeline. What's done so far:
 - [x] Script to reconstruct a panorama capture as a cube-map rig, with
       SuperPoint/LightGlue/SALAD features and global SfM
 - [x] Script to train a Gaussian Splatting model from the cube-map reconstruction (gsplat)
+- [x] TSDF mesh extraction from rendered Gaussian-splat cube-face depths
 - [x] gRPC training server
 - [x] Export/viewer wired to the above
