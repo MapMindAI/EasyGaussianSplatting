@@ -34,22 +34,23 @@ iterations: 30000
 data_factor: 1
 # Regularization weight applied to both opacity and scale terms.
 floater_reg_weight: 0.01
-# Image-plane gradient threshold for Gaussian splitting or duplication.
-grow_grad2d: 0.0006
+
 # Minimum opacity below which a Gaussian is pruned. It also sets the opacity
 # reset floor, which gsplat takes as prune_opa * 2, so lowering it does not
 # simply prune less: at 0.002 every reset clamps opacities to 0.004, and with
 # floater_reg_weight 0.01 pushing them down they never recover above the prune
 # threshold. That collapses this dataset from 409k Gaussians to 10k.
-prune_opa: 0.005
-# Use absolute image-plane gradients instead of averaged gradients.
+prune_opa: 0.005    # 0.005
+# Image-plane gradient threshold for Gaussian splitting or duplication.
+grow_grad2d: 0.0006   # 0.0006
+# Use absolute image-plane gradients instead of averaged gradients, following the AbsGS paper.
 absgrad: true
 # 3D scale below which densification duplicates a Gaussian.
-grow_scale3d: 0.01
+grow_scale3d: 0.01   # 0.01
 # Maximum 3D scale; larger Gaussians are pruned.
-prune_scale3d: 0.1
+prune_scale3d: 0.1  # 0.1
 # Maximum image-plane scale before a Gaussian is pruned.
-prune_scale2d: 0.15
+prune_scale2d: 0.15   # 0.15
 # First iteration at which densification runs.
 refine_start_iter: 500
 # Last iteration at which densification runs.
@@ -58,10 +59,21 @@ refine_stop_iter: 20000
 refine_every: 100
 # Number of iterations between opacity resets.
 reset_every: 3000
-# Densification strategy: STRATEGY_MCMC or STRATEGY_MCMC.
+
+
+# Densification strategy: STRATEGY_DEFAULT or STRATEGY_MCMC.
+# STRATEGY_DEFAULT: relying mainly on gradient-threshold-based split/clone/prune rules
+# STRATEGY_MCMC tries to maintain a population of Gaussians while moving that population
+# toward useful parts of the scene, by periodically:
+# * teleporting low-opacity Gaussians to locations associated with high opacity,
+# * adding new Gaussians according to the opacity distribution,
+# * perturbing Gaussian positions with noise.
+# In my experiments (mapping/benchmark) STRATEGY_MCMC out-performed STRATEGY_DEFAULT
 strategy: STRATEGY_MCMC
 # MCMC only: Gaussian count to converge to. Ignored by STRATEGY_DEFAULT.
-cap_max: 900000
+cap_max: 500000
+
+
 # Spherical-harmonic degree for view-dependent colour.
 sh_degree: 3
 # Weight of the SSIM term in the loss; the rest is L1. 0.5 beat gsplat's 0.2
@@ -69,6 +81,7 @@ sh_degree: 3
 ssim_lambda: 0.5
 # Packed rasterization: less GPU memory, slightly slower.
 packed: true
+
 # Optimize camera poses alongside the model.
 pose_opt: false
 # Segment people out of the images before training, when the upload carried no
@@ -79,6 +92,11 @@ run_segmentation: true
 # it are floaters that cost memory and blur the geometry below. It is off here
 # because background_color now gives the sky something to render as.
 mask_sky: false
+# Colour the splats are composited over, in [0, 1] per channel. Leave it out
+# and gsplat renders onto black instead. See doc/gsplat_server.md.
+background_color { red: 1.0 green: 1.0 blue: 1.0 }
+
+
 # TODO: depth loss still need more work
 # Predict depth with Depth Anything 3 and supervise training on it, when the
 # upload carried no depths/ of its own. Off by default: it costs another pass
@@ -88,6 +106,3 @@ run_depth: false
 # for the sparse SfM depths rather than the denser ones generate_depth.py
 # writes, so lower it if depth starts to dominate the photometric terms.
 depth_lambda: 0.01
-# Colour the splats are composited over, in [0, 1] per channel. Leave it out
-# and gsplat renders onto black instead. See doc/gsplat_server.md.
-background_color { red: 1.0 green: 1.0 blue: 1.0 }
