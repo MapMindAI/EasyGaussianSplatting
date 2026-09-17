@@ -120,6 +120,7 @@ def render_depths(model_path, reconstruction_path, depth_directory,
             width=camera.width,
             height=camera.height,
             render_mode="Ed",
+            packed=False,
             with_eval3d=True,
         )
         depth = render[0, ..., 0].cpu().numpy()
