@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .common import camera_manifest_path, depth_path, progress_milestones
+from .common import camera_manifest_path, depth_path, progress_bar
 
 
 def fuse_tsdf(images_path, depth_directory, mesh_path,
@@ -22,8 +22,6 @@ def fuse_tsdf(images_path, depth_directory, mesh_path,
     )
     integrated = 0
     cameras = json.loads(camera_manifest_path(depth_directory).read_text())
-    milestones = progress_milestones(len(cameras))
-    milestone_index = 0
     for completed, camera in enumerate(cameras, start=1):
         depth_file = depth_path(depth_directory, camera["name"])
         if depth_file.exists():
@@ -47,11 +45,11 @@ def fuse_tsdf(images_path, depth_directory, mesh_path,
             )
             volume.integrate(rgbd, intrinsic, np.asarray(camera["world_to_camera"]))
             integrated += 1
-        while (milestone_index < len(milestones)
-               and completed >= milestones[milestone_index][0]):
-            _, percent = milestones[milestone_index]
-            print(f"Fused TSDF: {percent}% ({completed}/{len(cameras)} cube faces)")
-            milestone_index += 1
+        print(
+            progress_bar("Fused TSDF", completed, len(cameras)),
+            end="\n" if completed == len(cameras) else "",
+            flush=True,
+        )
     if not integrated:
         raise RuntimeError(f"No rendered depths found under {depth_directory}")
     mesh = volume.extract_triangle_mesh()
@@ -67,9 +65,9 @@ def fuse_tsdf(images_path, depth_directory, mesh_path,
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workspace_path", type=Path)
-    parser.add_argument("--voxel-length", type=float, default=0.02)
-    parser.add_argument("--sdf-truncation", type=float, default=0.08)
-    parser.add_argument("--maximum-depth", type=float, default=20.0)
+    parser.add_argument("--voxel-length", type=float, default=0.1)
+    parser.add_argument("--sdf-truncation", type=float, default=0.15)
+    parser.add_argument("--maximum-depth", type=float, default=10.0)
     arguments = parser.parse_args()
     workspace_path = arguments.workspace_path
     integrated = fuse_tsdf(

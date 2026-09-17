@@ -1,7 +1,6 @@
 """Paths and validation shared by the TSDF stages."""
 from pathlib import Path
 import re
-import math
 
 import numpy as np
 
@@ -28,9 +27,11 @@ def camera_manifest_path(depth_directory):
     return Path(depth_directory) / "cameras.json"
 
 
-def progress_milestones(total):
-    """Return work counts at which to report each 20-percent milestone."""
-    return [(math.ceil(total * percent / 100), percent) for percent in range(20, 101, 20)]
+def progress_bar(label, completed, total, width=30):
+    """Format one terminal progress-bar update."""
+    percent = 100 if total == 0 else completed * 100 // total
+    filled = width if total == 0 else completed * width // total
+    return f"\r{label}: [{'#' * filled}{'.' * (width - filled)}] {percent:3d}%"
 
 
 def valid_depth(depth, alpha, minimum_alpha):

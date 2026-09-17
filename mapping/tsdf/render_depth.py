@@ -8,7 +8,7 @@ from .common import (
     camera_manifest_path,
     depth_path,
     latest_point_cloud,
-    progress_milestones,
+    progress_bar,
     valid_depth,
 )
 
@@ -105,8 +105,6 @@ def render_depths(model_path, reconstruction_path, depth_directory,
     splats["opacities"] = torch.sigmoid(splats["opacities"])
 
     images = [image for image in reconstruction.images.values() if image.has_pose]
-    milestones = progress_milestones(len(images))
-    milestone_index = 0
     cameras = []
     written = 0
     for completed, image in enumerate(images, start=1):
@@ -135,11 +133,11 @@ def render_depths(model_path, reconstruction_path, depth_directory,
             output_path.parent.mkdir(parents=True, exist_ok=True)
             np.save(output_path, depth.astype(np.float32))
             written += 1
-        while (milestone_index < len(milestones)
-               and completed >= milestones[milestone_index][0]):
-            _, percent = milestones[milestone_index]
-            print(f"Rendered depth: {percent}% ({completed}/{len(images)} cube faces)")
-            milestone_index += 1
+        print(
+            progress_bar("Rendered depth", completed, len(images)),
+            end="\n" if completed == len(images) else "",
+            flush=True,
+        )
     depth_directory.mkdir(parents=True, exist_ok=True)
     camera_manifest_path(depth_directory).write_text(json.dumps(cameras))
     return written, len(images)
