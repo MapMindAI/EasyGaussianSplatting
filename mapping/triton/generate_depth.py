@@ -30,11 +30,14 @@ from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
 # Views per DA3 request. The served model's input shape is fixed, so this has
 # to match the deployed model (see third_party/EasyTensorRT).
 GROUP_SIZE = 5
+SKIPPED_DEPTH_FACES = {"up", "down"}
 # Groups per progress log line.
 _LOG_EVERY = 20
 # A group's scale is only as trustworthy as the COLMAP depths behind it. The
 # count is pooled over the group's images, since they share the one scale.
 MIN_SCALE_POINTS = 20
+EDGE_DILATION = 2
+DEPTH_EDGE_THRESHOLD = 0.15
 # Why a group produced nothing.
 UNREADABLE, UNSCALED = "unreadable", "unscaled"
 
@@ -77,6 +80,37 @@ def sample_at(image_values, points):
     return image_values[rows, columns]
 
 
+def supervision_mask(depth, confidence, mask, min_confidence, min_depth, max_depth):
+    """Pixels whose depth is suitable for supervision."""
+    usable = np.isfinite(depth) & (depth > 0)
+    if min_depth is not None:
+        usable &= depth >= min_depth
+    if max_depth is not None:
+        usable &= depth <= max_depth
+    if confidence is not None:
+        usable &= confidence >= min_confidence
+    if mask is not None:
+        usable &= mask
+    return usable
+
+
+def depth_edge_mask(image, depth):
+    """Pixels near colour or depth discontinuities, where DA3 is unreliable."""
+    grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    colour_edges = cv2.Canny(grayscale, 100, 200) > 0
+    valid = np.isfinite(depth) & (depth > 0)
+    log_depth = np.zeros(depth.shape, dtype=np.float32)
+    log_depth[valid] = np.log(depth[valid])
+    gradient_x = cv2.Sobel(log_depth, cv2.CV_32F, 1, 0, ksize=3)
+    gradient_y = cv2.Sobel(log_depth, cv2.CV_32F, 0, 1, ksize=3)
+    depth_edges = valid & (np.hypot(gradient_x, gradient_y) > DEPTH_EDGE_THRESHOLD)
+    edges = colour_edges | depth_edges
+    kernel = cv2.getStructuringElement(
+        cv2.MORPH_ELLIPSE, (2 * EDGE_DILATION + 1, 2 * EDGE_DILATION + 1)
+    )
+    return cv2.dilate(edges.astype(np.uint8), kernel).astype(bool)
+
+
 def supervised_points(
     depth, confidence, mask, count, min_confidence, min_depth, max_depth, generator
 ):
@@ -87,15 +121,9 @@ def supervised_points(
     same thing, so a few thousand per image carry the geometry at a fraction of
     the size. x and y come back normalized to [0, 1].
     """
-    usable = np.isfinite(depth) & (depth > 0)
-    if min_depth is not None:
-        usable &= depth >= min_depth
-    if max_depth is not None:
-        usable &= depth <= max_depth
-    if confidence is not None:
-        usable &= confidence >= min_confidence
-    if mask is not None:
-        usable &= mask
+    usable = supervision_mask(
+        depth, confidence, mask, min_confidence, min_depth, max_depth
+    )
     rows, columns = np.nonzero(usable)
     if rows.size == 0:
         return np.zeros((0, 3), dtype=np.float32)
@@ -119,7 +147,10 @@ def depth_overlay(image, depth, alpha=0.5):
                 (depth[valid] - low) * 255 / (high - low), 0, 255
             ).astype(np.uint8)
     colours = cv2.applyColorMap(normalized, cv2.COLORMAP_TURBO)
-    return cv2.addWeighted(image, 1.0 - alpha, colours, alpha, 0.0)
+    overlay = image.copy()
+    blended = cv2.addWeighted(image, 1.0 - alpha, colours, alpha, 0.0)
+    overlay[valid] = blended[valid]
+    return overlay
 
 
 def depth_debug_path(debug_dir, name):
@@ -156,6 +187,8 @@ def camera_groups(reconstruction, group_size):
     """Groups of `group_size` image names, consecutive within one camera."""
     by_camera = {}
     for image in reconstruction.images.values():
+        if Path(image.name).parts[0] in SKIPPED_DEPTH_FACES:
+            continue
         by_camera.setdefault(image.camera_id, []).append(image.name)
     groups = []
     for camera_id in sorted(by_camera):
@@ -178,7 +211,7 @@ def main():
         "--min-depth", type=float, default=0.5, help="minimum scaled depth to keep"
     )
     parser.add_argument(
-        "--max-depth", type=float, default=10.0, help="maximum scaled depth to keep"
+        "--max-depth", type=float, default=5.0, help="maximum scaled depth to keep"
     )
     parser.add_argument(
         "--mask-dir", type=Path, default=None, help="skip pixels these masks block"
@@ -272,26 +305,38 @@ def main():
         # Seeded per group so a rerun samples the same pixels; the groups run
         # on worker threads, which would otherwise interleave the draws.
         generator = np.random.default_rng(0)
-        return [
-            (
-                name,
-                image,
-                depth * scale,
-                supervised_points(
-                    depth * scale,
-                    confidence,
-                    training_mask(name, depth.shape[:2]),
-                    args.samples_per_image,
-                    args.min_confidence,
-                    args.min_depth,
-                    args.max_depth,
-                    generator,
-                ),
+        rows_by_name = []
+        for name, image, depth, confidence in zip(
+            group, images, result["depth_list"], result["depth_conf_list"]
+        ):
+            depth = depth * scale
+            usable = supervision_mask(
+                depth,
+                confidence,
+                training_mask(name, depth.shape[:2]),
+                args.min_confidence,
+                args.min_depth,
+                args.max_depth,
             )
-            for name, image, depth, confidence in zip(
-                group, images, result["depth_list"], result["depth_conf_list"]
+            filtered_depth = np.where(usable & ~depth_edge_mask(image, depth), depth, 0)
+            rows_by_name.append(
+                (
+                    name,
+                    image,
+                    filtered_depth,
+                    supervised_points(
+                        filtered_depth,
+                        None,
+                        None,
+                        args.samples_per_image,
+                        0,
+                        None,
+                        None,
+                        generator,
+                    ),
+                )
             )
-        ], None
+        return rows_by_name, None
 
     # Consecutive groups overlap wherever a camera's image count is not a
     # multiple of GROUP_SIZE, so the writes stay on this thread: two workers

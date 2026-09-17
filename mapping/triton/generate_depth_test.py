@@ -8,6 +8,7 @@ import pytest
 from mapping.triton.generate_depth import (
     camera_groups,
     depth_debug_path,
+    depth_edge_mask,
     depth_overlay,
     fit_depth_scale,
     group_images,
@@ -93,6 +94,18 @@ def test_camera_groups_never_mixes_cameras_and_orders_by_name():
         ["front/000000.jpg", "front/000001.jpg", "front/000002.jpg"],
         ["back/000000.jpg", "back/000001.jpg", "back/000002.jpg"],
     ]
+
+
+def test_camera_groups_skips_up_and_down_faces():
+    reconstruction = Reconstruction(
+        *(Image(f"up/{index:06d}.jpg", camera_id=1) for index in range(3)),
+        *(Image(f"down/{index:06d}.jpg", camera_id=2) for index in range(3)),
+        *(Image(f"front/{index:06d}.jpg", camera_id=3) for index in range(3)),
+    )
+
+    groups = camera_groups(reconstruction, 3)
+
+    assert groups == [["front/000000.jpg", "front/000001.jpg", "front/000002.jpg"]]
 
 
 # --- scale -----------------------------------------------------------------
@@ -195,6 +208,18 @@ def test_supervised_points_keeps_depths_inside_the_requested_range():
     assert rows[:, 2].tolist() == [1.0, 3.0]
 
 
+def test_depth_edge_mask_rejects_colour_and_depth_boundaries():
+    image = np.zeros((20, 20, 3), dtype=np.uint8)
+    image[:, 10:] = 255
+    depth = np.ones((20, 20), dtype=np.float32)
+    depth[10:] = 2.0
+
+    edges = depth_edge_mask(image, depth)
+
+    assert edges[:, 10].all()
+    assert not edges[0, 0]
+
+
 def test_depth_overlay_colours_depth_without_changing_image_shape():
     image = np.full((4, 4, 3), 100, dtype=np.uint8)
     depth = np.arange(1, 17, dtype=np.float32).reshape(4, 4)
@@ -210,6 +235,16 @@ def test_depth_overlay_leaves_the_image_unchanged_at_zero_alpha():
     image = np.full((2, 2, 3), 100, dtype=np.uint8)
 
     assert np.array_equal(depth_overlay(image, np.ones((2, 2)), alpha=0.0), image)
+
+
+def test_depth_overlay_leaves_filtered_pixels_uncoloured():
+    image = np.full((2, 2, 3), 100, dtype=np.uint8)
+    depth = np.array([[0.0, 1.0], [1.0, 1.0]], dtype=np.float32)
+
+    overlay = depth_overlay(image, depth)
+
+    assert np.array_equal(overlay[0, 0], image[0, 0])
+    assert not np.array_equal(overlay[0, 1], image[0, 1])
 
 
 def test_depth_debug_path_replaces_the_image_suffix_with_depth_postfix():
