@@ -167,9 +167,10 @@ bash mapping/tsdf/run_pipeline.sh ${WORKSPACE_PATH}
 By default it reads the highest-step PLY under `gsplat_output/ply/`, retains
 existing depths, and writes `tsdf/mesh.ply`. Pass an exported PLY as the second
 argument when training through gRPC: `bash mapping/tsdf/run_pipeline.sh
-${WORKSPACE_PATH} ${WORKSPACE_PATH}/gsplat.ply`. The dedicated image is rebuilt
-from [artifacts/docker_o3d/Dockerfile](../artifacts/docker_o3d/Dockerfile) when
-invoked.
+${WORKSPACE_PATH} ${WORKSPACE_PATH}/gsplat.ply`. The dedicated image is built
+from [artifacts/docker_o3d/Dockerfile](../artifacts/docker_o3d/Dockerfile) and
+published as `ghcr.io/mapmindai/gaussiansplatting-tsdf:latest`. Set
+`TSDF_DOCKER_IMAGE` to use another image.
 
 ## Comparing parameter configurations
 

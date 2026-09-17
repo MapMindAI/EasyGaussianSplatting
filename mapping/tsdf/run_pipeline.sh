@@ -10,6 +10,7 @@ fi
 source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/docker_common.sh"
 
 RECONSTRUCTION_DIR="$(repo_relative_path "$1")"
+TSDF_DOCKER_IMAGE="${TSDF_DOCKER_IMAGE:-ghcr.io/mapmindai/gaussiansplatting-tsdf:latest}"
 MODEL_ARGUMENTS=()
 if [ $# -eq 2 ]; then
   MODEL_ARGUMENTS=(--model-path "/workspace/$(repo_relative_path "$2")")
@@ -19,8 +20,6 @@ docker run -i "${DOCKER_RUN_FLAGS[@]}" "${DOCKER_IMAGE}" \
   conda run --no-capture-output -n gsplat python3 -m mapping.tsdf.render_depth \
   "/workspace/${RECONSTRUCTION_DIR}" "${MODEL_ARGUMENTS[@]}"
 
-docker build -f artifacts/docker_o3d/Dockerfile \
-  -t easygaussiansplatting-tsdf:open3d-0.19.0 artifacts/docker_o3d
 docker run --rm -v "${REPO_ROOT}:/workspace" -w /workspace \
-  easygaussiansplatting-tsdf:open3d-0.19.0 \
+  "${TSDF_DOCKER_IMAGE}" \
   python3 -m mapping.tsdf.fuse "/workspace/${RECONSTRUCTION_DIR}"
