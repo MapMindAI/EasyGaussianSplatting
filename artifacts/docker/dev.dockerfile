@@ -70,10 +70,6 @@ RUN echo ". $CONDA_DIR/etc/profile.d/conda.sh" >> ~/.profile
 # make conda activate command available from /bin/bash --interative shells
 RUN conda init bash
 
-# opencv-python-headless is for scripts/run_pipeline.sh and mapping/, which only
-# need cv2 (no GUI) and so share the base env rather than a dedicated one.
-RUN pip install --no-cache-dir jupyterlab opencv-python-headless
-
 # gsplat (Gaussian Splatting training), in its own conda env: see
 # installers/install_gsplat.sh for why it needs a different Python/CUDA
 # stack than the base env above. Sourced from the third_party/gsplat
@@ -84,8 +80,11 @@ COPY --from=gsplatsrc . /opt/gsplat
 COPY installers/install_gsplat.sh /tmp/installers/
 RUN bash /tmp/installers/install_gsplat.sh && rm /tmp/installers/install_gsplat.sh
 
+# opencv-python-headless is for scripts/run_pipeline.sh and mapping/, which only
+# need cv2 (no GUI) and so share the base env rather than a dedicated one.
 # pycolmap is pinned to the same version as the base image's COLMAP CLI.
 # tritonclient talks to the inference server the mapping stage extracts and
 # matches features against; matplotlib is imported by the SALAD client in
 # third_party/EasyTensorRT for its own plotting entrypoint.
-RUN pip install --no-cache-dir pycolmap==4.2.0.dev0 "tritonclient[grpc]" matplotlib
+RUN conda run --no-capture-output -n gsplat \
+      pip install --no-cache-dir pycolmap==4.2.0.dev0 "tritonclient[grpc]" jupyterlab opencv-python-headless
