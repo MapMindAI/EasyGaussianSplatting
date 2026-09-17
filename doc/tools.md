@@ -133,9 +133,14 @@ images into consecutive groups of five (the served model's input shape), and
 fits each group to the scale of the COLMAP points its images already observe --
 DA3's own scale is arbitrary and differs per group. A group carrying too few of
 those points is skipped rather than written at a guessed scale.
+The `up/` and `down/` cube faces are skipped: their sky and ground views do not
+need DA3 supervision.
 `--samples-per-image` (4096) sets how many pixels each `.npy` keeps,
 `--min-confidence` (1.0) the DA3 confidence floor, and `--min-depth` (0.5) /
-`--max-depth` (10.0) discard scaled depths outside that range.
+`--max-depth` (5.0) discard scaled depths outside that range.
+Colour and DA3-depth discontinuities are also excluded, so depth supervision
+does not pull geometry across foliage and other detail edges. Debug overlays
+show only the depth that remains after filtering.
 `--debug-dir <directory>` writes a colourized depth overlay over every source
 image, preserving nested image paths and adding `_depth.png` to the filename.
 [gsplat_server.md](gsplat_server.md#depth-supervision) covers the file format
