@@ -264,7 +264,9 @@ def test_depth_reads_the_model_and_writes_beside_it(tmp_path, parameters):
 
     assert str(server.DEPTH_ENTRYPOINT) in command
     assert str(tmp_path / "depths") in command
-    assert command[-2:] == ["--mask-dir", str(tmp_path / "masks")]
+    assert command[-4:] == [
+        "--mask-dir", str(tmp_path / "masks"), "--samples-per-image", "-1",
+    ]
 
 
 def test_an_uploaded_depths_directory_is_never_overwritten(tmp_path, parameters):

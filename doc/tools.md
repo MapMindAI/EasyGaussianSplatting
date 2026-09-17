@@ -134,7 +134,8 @@ fits each group to the scale of the COLMAP points its images already observe --
 DA3's own scale is arbitrary and differs per group. A group carrying too few of
 those points is skipped rather than written at a guessed scale.
 `--samples-per-image` (4096) sets how many pixels each `.npy` keeps,
-`--min-confidence` (2.0) the DA3 confidence floor.
+`--min-confidence` (1.0) the DA3 confidence floor, and `--min-depth` (0.5) /
+`--max-depth` (10.0) discard scaled depths outside that range.
 `--debug-dir <directory>` writes a colourized depth overlay over every source
 image, preserving nested image paths and adding `_depth.png` to the filename.
 [gsplat_server.md](gsplat_server.md#depth-supervision) covers the file format

@@ -77,7 +77,9 @@ def sample_at(image_values, points):
     return image_values[rows, columns]
 
 
-def supervised_points(depth, confidence, mask, count, min_confidence, generator):
+def supervised_points(
+    depth, confidence, mask, count, min_confidence, min_depth, max_depth, generator
+):
     """Up to `count` (x, y, depth) rows worth supervising, as float32.
 
     Keeps confident, positive-depth pixels that the training mask also keeps,
@@ -86,6 +88,10 @@ def supervised_points(depth, confidence, mask, count, min_confidence, generator)
     the size. x and y come back normalized to [0, 1].
     """
     usable = np.isfinite(depth) & (depth > 0)
+    if min_depth is not None:
+        usable &= depth >= min_depth
+    if max_depth is not None:
+        usable &= depth <= max_depth
     if confidence is not None:
         usable &= confidence >= min_confidence
     if mask is not None:
@@ -166,7 +172,13 @@ def main():
         "--samples-per-image", type=int, default=4096, help="supervised pixels kept"
     )
     parser.add_argument(
-        "--min-confidence", type=float, default=2.0, help="DA3 confidence floor"
+        "--min-confidence", type=float, default=1.0, help="DA3 confidence floor"
+    )
+    parser.add_argument(
+        "--min-depth", type=float, default=0.5, help="minimum scaled depth to keep"
+    )
+    parser.add_argument(
+        "--max-depth", type=float, default=10.0, help="maximum scaled depth to keep"
     )
     parser.add_argument(
         "--mask-dir", type=Path, default=None, help="skip pixels these masks block"
@@ -182,6 +194,9 @@ def main():
     )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
+    if args.min_depth is not None and args.max_depth is not None:
+        if args.min_depth > args.max_depth:
+            parser.error("--min-depth cannot exceed --max-depth")
 
     triton_url = resolve_endpoint(args.triton_url)
 
@@ -268,6 +283,8 @@ def main():
                     training_mask(name, depth.shape[:2]),
                     args.samples_per_image,
                     args.min_confidence,
+                    args.min_depth,
+                    args.max_depth,
                     generator,
                 ),
             )

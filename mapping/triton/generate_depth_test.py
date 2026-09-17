@@ -141,7 +141,9 @@ def test_sample_at_clamps_points_outside_the_image():
 def test_supervised_points_normalizes_coordinates():
     depth = np.ones((10, 20), dtype=np.float32)
 
-    rows = supervised_points(depth, None, None, 1000, 0.0, np.random.default_rng(0))
+    rows = supervised_points(
+        depth, None, None, 1000, 0.0, None, None, np.random.default_rng(0)
+    )
 
     assert len(rows) == 200
     assert rows[:, 0].min() == 0.0 and rows[:, 0].max() == pytest.approx(1.0)
@@ -156,7 +158,9 @@ def test_supervised_points_drops_unconfident_masked_and_empty_depth():
     mask = np.ones((4, 4), dtype=bool)
     mask[2] = False
 
-    rows = supervised_points(depth, confidence, mask, 1000, 2.0, np.random.default_rng(0))
+    rows = supervised_points(
+        depth, confidence, mask, 1000, 2.0, None, None, np.random.default_rng(0)
+    )
 
     assert len(rows) == 4
     assert {round(float(y) * 3) for y in rows[:, 1]} == {3}
@@ -165,17 +169,30 @@ def test_supervised_points_drops_unconfident_masked_and_empty_depth():
 def test_supervised_points_subsamples_to_the_requested_count():
     depth = np.ones((50, 50), dtype=np.float32)
 
-    rows = supervised_points(depth, None, None, 17, 0.0, np.random.default_rng(0))
+    rows = supervised_points(
+        depth, None, None, 17, 0.0, None, None, np.random.default_rng(0)
+    )
 
     assert len(rows) == 17
 
 
 def test_supervised_points_returns_nothing_when_every_pixel_is_rejected():
     rows = supervised_points(
-        np.zeros((4, 4), dtype=np.float32), None, None, 10, 0.0, np.random.default_rng(0)
+        np.zeros((4, 4), dtype=np.float32), None, None, 10, 0.0, None, None,
+        np.random.default_rng(0)
     )
 
     assert rows.shape == (0, 3)
+
+
+def test_supervised_points_keeps_depths_inside_the_requested_range():
+    depth = np.array([[0.5, 1.0], [3.0, 7.0]], dtype=np.float32)
+
+    rows = supervised_points(
+        depth, None, None, 10, 0.0, 1.0, 3.0, np.random.default_rng(0)
+    )
+
+    assert rows[:, 2].tolist() == [1.0, 3.0]
 
 
 def test_depth_overlay_colours_depth_without_changing_image_shape():
