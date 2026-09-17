@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .common import camera_manifest_path, depth_path
+from .common import camera_manifest_path, depth_path, progress_milestones
 
 
 def fuse_tsdf(images_path, depth_directory, mesh_path,
@@ -22,30 +22,36 @@ def fuse_tsdf(images_path, depth_directory, mesh_path,
     )
     integrated = 0
     cameras = json.loads(camera_manifest_path(depth_directory).read_text())
-    for camera in cameras:
+    milestones = progress_milestones(len(cameras))
+    milestone_index = 0
+    for completed, camera in enumerate(cameras, start=1):
         depth_file = depth_path(depth_directory, camera["name"])
-        if not depth_file.exists():
-            continue
-        color_file = images_path / camera["name"]
-        color = open3d.io.read_image(str(color_file))
-        if color.is_empty():
-            raise FileNotFoundError(f"Cannot read {color_file}")
-        depth = open3d.geometry.Image(np.load(depth_file).astype(np.float32))
-        rgbd = open3d.geometry.RGBDImage.create_from_color_and_depth(
-            color, depth, depth_scale=1.0, depth_trunc=maximum_depth,
-            convert_rgb_to_intensity=False,
-        )
-        focal_x, focal_y, principal_x, principal_y = camera["params"]
-        intrinsic = open3d.camera.PinholeCameraIntrinsic(
-            camera["width"],
-            camera["height"],
-            focal_x,
-            focal_y,
-            principal_x,
-            principal_y,
-        )
-        volume.integrate(rgbd, intrinsic, np.asarray(camera["world_to_camera"]))
-        integrated += 1
+        if depth_file.exists():
+            color_file = images_path / camera["name"]
+            color = open3d.io.read_image(str(color_file))
+            if color.is_empty():
+                raise FileNotFoundError(f"Cannot read {color_file}")
+            depth = open3d.geometry.Image(np.load(depth_file).astype(np.float32))
+            rgbd = open3d.geometry.RGBDImage.create_from_color_and_depth(
+                color, depth, depth_scale=1.0, depth_trunc=maximum_depth,
+                convert_rgb_to_intensity=False,
+            )
+            focal_x, focal_y, principal_x, principal_y = camera["params"]
+            intrinsic = open3d.camera.PinholeCameraIntrinsic(
+                camera["width"],
+                camera["height"],
+                focal_x,
+                focal_y,
+                principal_x,
+                principal_y,
+            )
+            volume.integrate(rgbd, intrinsic, np.asarray(camera["world_to_camera"]))
+            integrated += 1
+        while (milestone_index < len(milestones)
+               and completed >= milestones[milestone_index][0]):
+            _, percent = milestones[milestone_index]
+            print(f"Fused TSDF: {percent}% ({completed}/{len(cameras)} cube faces)")
+            milestone_index += 1
     if not integrated:
         raise RuntimeError(f"No rendered depths found under {depth_directory}")
     mesh = volume.extract_triangle_mesh()

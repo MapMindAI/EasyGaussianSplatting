@@ -5,6 +5,7 @@ from mapping.tsdf.common import (
     camera_manifest_path,
     depth_path,
     latest_point_cloud,
+    progress_milestones,
     valid_depth,
 )
 from mapping.tsdf.render_depth import _camera_matrix, _read_ply, _world_to_camera
@@ -19,6 +20,10 @@ def test_valid_depth_requires_coverage_and_a_positive_finite_distance():
     depth = np.array([1.0, 0.0, np.nan, 2.0])
     alpha = np.array([0.5, 1.0, 1.0, 0.4])
     assert valid_depth(depth, alpha, 0.5).tolist() == [True, False, False, False]
+
+
+def test_progress_milestones_cover_every_twenty_percent():
+    assert progress_milestones(10) == [(2, 20), (4, 40), (6, 60), (8, 80), (10, 100)]
 
 
 def test_latest_point_cloud_requires_a_gsplat_export(tmp_path):
