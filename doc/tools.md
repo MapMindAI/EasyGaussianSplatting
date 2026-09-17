@@ -172,6 +172,22 @@ from [artifacts/docker_o3d/Dockerfile](../artifacts/docker_o3d/Dockerfile) and
 published as `ghcr.io/mapmindai/gaussiansplatting-tsdf:latest`. Set
 `TSDF_DOCKER_IMAGE` to use another image.
 
+### Inspecting the rendered depths
+
+`mapping/tsdf/view_depth.py` opens the rendered maps in a window, colour-mapped
+against a fixed scale so the same colour means the same distance in every frame
+and face. It needs only NumPy and Matplotlib, so run it on the host rather than
+through Docker:
+
+```bash
+python3 -m mapping.tsdf.view_depth ${WORKSPACE_PATH}/tsdf/depths --face front
+```
+
+Left and right step through frames, up and down through faces, and the cursor
+readout gives the depth in metres under the pointer. Unrendered pixels stay
+grey. Raise `--maximum-depth` above the 20 m default to keep far structure
+apart from the sky.
+
 ## Comparing parameter configurations
 
 `mapping/benchmark/gsplat_sweep.sh` trains one model per configuration from a single
