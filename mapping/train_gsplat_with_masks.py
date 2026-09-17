@@ -96,7 +96,7 @@ def guard_depth_loss(losses_module):
     original_loss = losses_module.depth_l1_loss
 
     def depth_l1_loss(pred_depth, gt_depth, scene_scale=1.0, **kwargs):
-        rendered = pred_depth > UNRENDERED_DEPTH * scene_scale
+        rendered = pred_depth > UNRENDERED_DEPTH
         if not rendered.any():
             return pred_depth.new_zeros(())
         return original_loss(

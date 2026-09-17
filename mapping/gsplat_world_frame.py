@@ -109,7 +109,7 @@ def depth_supervision_in_normalized_frame(transform, rows, width, height):
     """
     rows = np.asarray(rows, dtype=np.float32)
     points = rows[:, :2] * np.array([width - 1, height - 1], dtype=np.float32)
-    depths = rows[:, 2] * similarity_scale(transform)
+    depths = rows[:, 2] * (1.0 / similarity_scale(transform))
     return points, depths.astype(np.float32)
 
 
