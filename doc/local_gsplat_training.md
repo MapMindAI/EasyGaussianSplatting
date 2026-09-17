@@ -25,6 +25,7 @@ GSPLAT_HOST=192.168.11.194
 
 docker run -it --rm --gpus all --shm-size=8g \
   -v "$PWD":/workspace -w /workspace \
+  --mount type=volume,source=easygaussiansplatting-torch-cache,target=/root/.cache/torch \
   --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   bash -lc '
@@ -45,6 +46,7 @@ WORKSPACE_PATH=data/pano_mapping
 
 docker run -it --rm --gpus all --shm-size=8g \
   -v "$PWD":/workspace -w /workspace \
+  --mount type=volume,source=easygaussiansplatting-torch-cache,target=/root/.cache/torch \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   bash -lc '
     source scripts/gsplat_env.sh
@@ -63,6 +65,7 @@ docker run -it --rm --gpus all --shm-size=8g \
 The final model and PLY files are written under
 `<workspace>/gsplat_output/`. `--shm-size=8g` is required for the data-loader
 workers; a smaller allocation can cause a bus error.
+The named Torch-cache volume preserves downloaded model weights between runs.
 
 Use `easygaussiansplatting:dev` in place of the published image when you built
 the image locally.
