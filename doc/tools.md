@@ -151,6 +151,27 @@ Neither stage runs from the parameters file locally -- `run_segmentation` and
 `run_depth` only tell the server to run them (see
 [gsplat_server.md](gsplat_server.md#submitting-a-model)).
 
+## TSDF mesh from a Gaussian Splat
+
+`mapping/tsdf/run_pipeline.sh` renders an expected-hit-distance depth map for
+every registered cube face, then fuses the maps with TSDF and writes
+`tsdf/mesh.ply`. Depth rendering runs in the Gaussian Splatting image; fusion
+runs in a dedicated `python:3.11-slim` image with the official
+`open3d==0.19.0` wheel. The mesh uses the same COLMAP coordinates as `sparse/0/`.
+Run it after training:
+
+```bash
+bash mapping/tsdf/run_pipeline.sh ${WORKSPACE_PATH}
+```
+
+By default it reads the highest-step PLY under `gsplat_output/ply/`, retains
+existing depths, and writes `tsdf/mesh.ply`. Pass an exported PLY as the second
+argument when training through gRPC: `bash mapping/tsdf/run_pipeline.sh
+${WORKSPACE_PATH} ${WORKSPACE_PATH}/gsplat.ply`. The dedicated image is built
+from [artifacts/docker_o3d/Dockerfile](../artifacts/docker_o3d/Dockerfile) and
+published as `ghcr.io/mapmindai/gaussiansplatting-tsdf:latest`. Set
+`TSDF_DOCKER_IMAGE` to use another image.
+
 ## Comparing parameter configurations
 
 `mapping/benchmark/gsplat_sweep.sh` trains one model per configuration from a single
