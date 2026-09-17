@@ -64,6 +64,15 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 Tests sit beside the module they cover, named `<module>_test.py`, and run in
 CI on a slim Python image (see README).
 
+Run tests in the CI Docker environment, not the host Python:
+
+```bash
+docker run --rm -v "$PWD":/workspace -w /workspace python:3.11-slim bash -c '
+    pip install -r artifacts/requirements-test.txt
+    bash gsplat_server/proto/build.sh
+    pytest -q'
+```
+
 ## 1. Read the docs before starting a task
 
 ## 2. Update docs after changing code

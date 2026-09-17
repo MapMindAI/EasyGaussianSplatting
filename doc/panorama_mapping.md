@@ -38,13 +38,15 @@ global SfM (GLOMAP):
    It is a rotation about the origin, so positions and scale are untouched.
 
 A re-run picks up where the last one stopped through the first three stages:
-the database is kept once it holds images, extraction is skipped once the
+the database is kept when it holds the requested number of sampled cube-face
+images, extraction is skipped once the
 sidecar is written, and matching skips the pairs the database already holds a
 two-view geometry for. Global mapping always reruns, overwriting `sparse/`: it
 is the cheap stage, and it is where levelling and GPS alignment happen, so
 skipping it would leave a changed track or a changed alignment out of the saved
-model. Stages 2 and 3 write into the same `database.db` that stage 1 builds, so
-redoing stage 1 means deleting the workspace.
+model. Database creation logs progress every 20% for each video. A changed
+sample count rebuilds the database and global-descriptor sidecar; stages 2 and
+3 otherwise write into the same `database.db` that stage 1 builds.
 
 ## Serving the models
 
