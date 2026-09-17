@@ -35,5 +35,5 @@ def progress_bar(label, completed, total, width=30):
 
 
 def valid_depth(depth, alpha, minimum_alpha):
-    """Keep finite, positive expected-hit distances with enough coverage."""
+    """Keep finite, positive expected z-depths with enough coverage."""
     return np.isfinite(depth) & (depth > 0) & (alpha >= minimum_alpha)

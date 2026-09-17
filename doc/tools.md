@@ -153,8 +153,8 @@ Neither stage runs from the parameters file locally -- `run_segmentation` and
 
 ## TSDF mesh from a Gaussian Splat
 
-`mapping/tsdf/run_pipeline.sh` renders an expected-hit-distance depth map for
-every registered cube face, then fuses the maps with TSDF and writes
+`mapping/tsdf/run_pipeline.sh` renders an expected projective z-depth map
+for every registered cube face, then fuses the maps with TSDF and writes
 `tsdf/mesh.ply`. Depth rendering runs in the Gaussian Splatting image; fusion
 runs in a dedicated `python:3.11-slim` image with the official
 `open3d==0.19.0` wheel. The mesh uses the same COLMAP coordinates as `sparse/0/`.

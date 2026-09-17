@@ -16,7 +16,7 @@ def test_depth_path_keeps_cube_face_directory(tmp_path):
     assert camera_manifest_path(tmp_path) == tmp_path / "cameras.json"
 
 
-def test_valid_depth_requires_coverage_and_a_positive_finite_distance():
+def test_valid_depth_requires_coverage_and_a_positive_finite_depth():
     depth = np.array([1.0, 0.0, np.nan, 2.0])
     alpha = np.array([0.5, 1.0, 1.0, 0.4])
     assert valid_depth(depth, alpha, 0.5).tolist() == [True, False, False, False]

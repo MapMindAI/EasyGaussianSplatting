@@ -43,6 +43,7 @@ def fuse_tsdf(images_path, depth_directory, mesh_path,
                 principal_x,
                 principal_y,
             )
+            # Open3D unprojects as x=(u-cx)*z/fx, so depths must be projective z.
             volume.integrate(rgbd, intrinsic, np.asarray(camera["world_to_camera"]))
             integrated += 1
         print(

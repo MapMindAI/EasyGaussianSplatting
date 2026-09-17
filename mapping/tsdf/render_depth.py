@@ -1,4 +1,4 @@
-"""Render expected-hit-distance depth maps from a gsplat PLY."""
+"""Render expected projective z-depth maps from a gsplat PLY."""
 import json
 from pathlib import Path
 
@@ -77,13 +77,13 @@ def _splat_parameters(path, torch):
     }
 
 
-def _camera_record(image, camera):
+def _camera_record(image, camera, world_to_camera):
     return {
         "name": image.name,
         "width": camera.width,
         "height": camera.height,
         "params": [float(value) for value in camera.params],
-        "world_to_camera": _world_to_camera(image).tolist(),
+        "world_to_camera": world_to_camera.tolist(),
     }
 
 
@@ -109,7 +109,8 @@ def render_depths(model_path, reconstruction_path, depth_directory,
     written = 0
     for completed, image in enumerate(images, start=1):
         camera = reconstruction.cameras[image.camera_id]
-        cameras.append(_camera_record(image, camera))
+        world_to_camera = _world_to_camera(image)
+        cameras.append(_camera_record(image, camera, world_to_camera))
         output_path = depth_path(depth_directory, image.name)
         if not output_path.exists() or overwrite:
             matrix = _camera_matrix(camera)
@@ -118,12 +119,14 @@ def render_depths(model_path, reconstruction_path, depth_directory,
                 quats=splats["quats"],
                 scales=splats["scales"],
                 opacities=splats["opacities"],
-                colors=torch.zeros((len(splats["means"]), 1, 3), device=device),
-                viewmats=torch.from_numpy(_world_to_camera(image))[None].to(device),
+                colors=None,
+                viewmats=torch.from_numpy(world_to_camera)[None].to(device),
                 Ks=torch.from_numpy(matrix)[None].to(device),
                 width=camera.width,
                 height=camera.height,
-                render_mode="Ed",
+                # Projective z, which the TSDF fuser needs; "Ed" would give
+                # along-ray distance, too far by up to sqrt(3) at a face corner.
+                render_mode="ED",
                 packed=False,
                 with_eval3d=True,
             )
@@ -131,7 +134,7 @@ def render_depths(model_path, reconstruction_path, depth_directory,
             coverage = alpha[0, ..., 0].cpu().numpy()
             depth[~valid_depth(depth, coverage, minimum_alpha)] = 0.0
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            np.save(output_path, depth.astype(np.float32))
+            np.save(output_path, depth)
             written += 1
         print(
             progress_bar("Rendered depth", completed, len(images)),
