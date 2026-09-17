@@ -69,10 +69,11 @@ def attach_depths(dataset_class):
 
         assert self.patch_size is None, "depths are not cropped along with patches"
         height, width = data["image"].shape[:2]
-        points = rows[:, :2] * np.array([width - 1, height - 1], dtype=np.float32)
+        points, depths = depth_supervision_in_normalized_frame(
+            self.parser.transform, rows, width, height
+        )
         data["points"] = torch.from_numpy(points).float()
-        scale_inv = 1.0 / similarity_scale(self.parser.transform)
-        data["depths"] = torch.from_numpy(rows[:, 2] * scale_inv).float()
+        data["depths"] = torch.from_numpy(depths).float()
         return data
 
     dataset_class.__getitem__ = __getitem__
@@ -139,8 +140,8 @@ from gsplat_server.parameters import load_parameters  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
     capture_scene_transform,
+    depth_supervision_in_normalized_frame,
     export_in_colmap_frame,
-    similarity_scale,
 )
 
 
