@@ -1,10 +1,16 @@
-"""Render expected-hit-distance depth maps from a gsplat PLY."""
+"""Render expected projective z-depth maps from a gsplat PLY."""
 import json
 from pathlib import Path
 
 import numpy as np
 
-from .common import camera_manifest_path, depth_path, latest_point_cloud, valid_depth
+from .common import (
+    camera_manifest_path,
+    depth_path,
+    latest_point_cloud,
+    progress_bar,
+    valid_depth,
+)
 
 
 def _camera_matrix(camera):
@@ -71,13 +77,13 @@ def _splat_parameters(path, torch):
     }
 
 
-def _camera_record(image, camera):
+def _camera_record(image, camera, world_to_camera):
     return {
         "name": image.name,
         "width": camera.width,
         "height": camera.height,
         "params": [float(value) for value in camera.params],
-        "world_to_camera": _world_to_camera(image).tolist(),
+        "world_to_camera": world_to_camera.tolist(),
     }
 
 
@@ -98,40 +104,46 @@ def render_depths(model_path, reconstruction_path, depth_directory,
     splats["scales"] = torch.exp(splats["scales"])
     splats["opacities"] = torch.sigmoid(splats["opacities"])
 
+    images = [image for image in reconstruction.images.values() if image.has_pose]
     cameras = []
     written = 0
-    for image in reconstruction.images.values():
-        if not image.has_pose:
-            continue
+    for completed, image in enumerate(images, start=1):
         camera = reconstruction.cameras[image.camera_id]
-        cameras.append(_camera_record(image, camera))
+        world_to_camera = _world_to_camera(image)
+        cameras.append(_camera_record(image, camera, world_to_camera))
         output_path = depth_path(depth_directory, image.name)
-        if output_path.exists() and not overwrite:
-            continue
-        matrix = _camera_matrix(camera)
-        render, alpha, _ = rasterization(
-            means=splats["means"],
-            quats=splats["quats"],
-            scales=splats["scales"],
-            opacities=splats["opacities"],
-            colors=torch.zeros((len(splats["means"]), 1, 3), device=device),
-            viewmats=torch.from_numpy(_world_to_camera(image))[None].to(device),
-            Ks=torch.from_numpy(matrix)[None].to(device),
-            width=camera.width,
-            height=camera.height,
-            render_mode="Ed",
-            packed=False,
-            with_eval3d=True,
+        if not output_path.exists() or overwrite:
+            matrix = _camera_matrix(camera)
+            render, alpha, _ = rasterization(
+                means=splats["means"],
+                quats=splats["quats"],
+                scales=splats["scales"],
+                opacities=splats["opacities"],
+                colors=None,
+                viewmats=torch.from_numpy(world_to_camera)[None].to(device),
+                Ks=torch.from_numpy(matrix)[None].to(device),
+                width=camera.width,
+                height=camera.height,
+                # Projective z, which the TSDF fuser needs; "Ed" would give
+                # along-ray distance, too far by up to sqrt(3) at a face corner.
+                render_mode="ED",
+                packed=False,
+                with_eval3d=True,
+            )
+            depth = render[0, ..., 0].cpu().numpy()
+            coverage = alpha[0, ..., 0].cpu().numpy()
+            depth[~valid_depth(depth, coverage, minimum_alpha)] = 0.0
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            np.save(output_path, depth)
+            written += 1
+        print(
+            progress_bar("Rendered depth", completed, len(images)),
+            end="\n" if completed == len(images) else "",
+            flush=True,
         )
-        depth = render[0, ..., 0].cpu().numpy()
-        coverage = alpha[0, ..., 0].cpu().numpy()
-        depth[~valid_depth(depth, coverage, minimum_alpha)] = 0.0
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        np.save(output_path, depth.astype(np.float32))
-        written += 1
     depth_directory.mkdir(parents=True, exist_ok=True)
     camera_manifest_path(depth_directory).write_text(json.dumps(cameras))
-    return written
+    return written, len(images)
 
 
 def main():
@@ -146,14 +158,14 @@ def main():
     model_path = arguments.model_path or latest_point_cloud(
         arguments.workspace_path / "gsplat_output"
     )
-    written = render_depths(
+    written, total = render_depths(
         model_path,
         arguments.workspace_path / "sparse" / "0",
         arguments.workspace_path / "tsdf" / "depths",
         arguments.minimum_alpha,
         arguments.overwrite_depth,
     )
-    print(f"Rendered {written} cube-face depth maps")
+    print(f"Rendered {written}, reused {total - written} cube-face depth maps")
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .common import camera_manifest_path, depth_path
+from .common import camera_manifest_path, depth_path, progress_bar
 
 
 def fuse_tsdf(images_path, depth_directory, mesh_path,
@@ -22,30 +22,35 @@ def fuse_tsdf(images_path, depth_directory, mesh_path,
     )
     integrated = 0
     cameras = json.loads(camera_manifest_path(depth_directory).read_text())
-    for camera in cameras:
+    for completed, camera in enumerate(cameras, start=1):
         depth_file = depth_path(depth_directory, camera["name"])
-        if not depth_file.exists():
-            continue
-        color_file = images_path / camera["name"]
-        color = open3d.io.read_image(str(color_file))
-        if color.is_empty():
-            raise FileNotFoundError(f"Cannot read {color_file}")
-        depth = open3d.geometry.Image(np.load(depth_file).astype(np.float32))
-        rgbd = open3d.geometry.RGBDImage.create_from_color_and_depth(
-            color, depth, depth_scale=1.0, depth_trunc=maximum_depth,
-            convert_rgb_to_intensity=False,
+        if depth_file.exists():
+            color_file = images_path / camera["name"]
+            color = open3d.io.read_image(str(color_file))
+            if color.is_empty():
+                raise FileNotFoundError(f"Cannot read {color_file}")
+            depth = open3d.geometry.Image(np.load(depth_file).astype(np.float32))
+            rgbd = open3d.geometry.RGBDImage.create_from_color_and_depth(
+                color, depth, depth_scale=1.0, depth_trunc=maximum_depth,
+                convert_rgb_to_intensity=False,
+            )
+            focal_x, focal_y, principal_x, principal_y = camera["params"]
+            intrinsic = open3d.camera.PinholeCameraIntrinsic(
+                camera["width"],
+                camera["height"],
+                focal_x,
+                focal_y,
+                principal_x,
+                principal_y,
+            )
+            # Open3D unprojects as x=(u-cx)*z/fx, so depths must be projective z.
+            volume.integrate(rgbd, intrinsic, np.asarray(camera["world_to_camera"]))
+            integrated += 1
+        print(
+            progress_bar("Fused TSDF", completed, len(cameras)),
+            end="\n" if completed == len(cameras) else "",
+            flush=True,
         )
-        focal_x, focal_y, principal_x, principal_y = camera["params"]
-        intrinsic = open3d.camera.PinholeCameraIntrinsic(
-            camera["width"],
-            camera["height"],
-            focal_x,
-            focal_y,
-            principal_x,
-            principal_y,
-        )
-        volume.integrate(rgbd, intrinsic, np.asarray(camera["world_to_camera"]))
-        integrated += 1
     if not integrated:
         raise RuntimeError(f"No rendered depths found under {depth_directory}")
     mesh = volume.extract_triangle_mesh()
@@ -61,9 +66,9 @@ def fuse_tsdf(images_path, depth_directory, mesh_path,
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workspace_path", type=Path)
-    parser.add_argument("--voxel-length", type=float, default=0.02)
-    parser.add_argument("--sdf-truncation", type=float, default=0.08)
-    parser.add_argument("--maximum-depth", type=float, default=20.0)
+    parser.add_argument("--voxel-length", type=float, default=0.1)
+    parser.add_argument("--sdf-truncation", type=float, default=0.15)
+    parser.add_argument("--maximum-depth", type=float, default=10.0)
     arguments = parser.parse_args()
     workspace_path = arguments.workspace_path
     integrated = fuse_tsdf(

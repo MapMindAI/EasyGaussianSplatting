@@ -27,6 +27,13 @@ def camera_manifest_path(depth_directory):
     return Path(depth_directory) / "cameras.json"
 
 
+def progress_bar(label, completed, total, width=30):
+    """Format one terminal progress-bar update."""
+    percent = 100 if total == 0 else completed * 100 // total
+    filled = width if total == 0 else completed * width // total
+    return f"\r{label}: [{'#' * filled}{'.' * (width - filled)}] {percent:3d}%"
+
+
 def valid_depth(depth, alpha, minimum_alpha):
-    """Keep finite, positive expected-hit distances with enough coverage."""
+    """Keep finite, positive expected z-depths with enough coverage."""
     return np.isfinite(depth) & (depth > 0) & (alpha >= minimum_alpha)

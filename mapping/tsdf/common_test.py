@@ -5,6 +5,7 @@ from mapping.tsdf.common import (
     camera_manifest_path,
     depth_path,
     latest_point_cloud,
+    progress_bar,
     valid_depth,
 )
 from mapping.tsdf.render_depth import _camera_matrix, _read_ply, _world_to_camera
@@ -15,10 +16,14 @@ def test_depth_path_keeps_cube_face_directory(tmp_path):
     assert camera_manifest_path(tmp_path) == tmp_path / "cameras.json"
 
 
-def test_valid_depth_requires_coverage_and_a_positive_finite_distance():
+def test_valid_depth_requires_coverage_and_a_positive_finite_depth():
     depth = np.array([1.0, 0.0, np.nan, 2.0])
     alpha = np.array([0.5, 1.0, 1.0, 0.4])
     assert valid_depth(depth, alpha, 0.5).tolist() == [True, False, False, False]
+
+
+def test_progress_bar_reaches_one_hundred_percent():
+    assert progress_bar("Fused TSDF", 5, 5, width=5) == "\rFused TSDF: [#####] 100%"
 
 
 def test_latest_point_cloud_requires_a_gsplat_export(tmp_path):

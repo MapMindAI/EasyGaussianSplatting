@@ -38,8 +38,6 @@ Existing person-segmentation masks are reused on later runs.
 To stitch without reconstructing, `scripts/run_stitch.sh <workspace>` stitches
 every INSV under that workspace; see [doc/tools.md](doc/tools.md).
 
-![COLMAP sparse reconstruction viewer](assets/reconstruction_viewer.png)
-
 ![GS reconstruction viewer](assets/reconstruction_gs_viewer.png)
 
 ## Getting the image
