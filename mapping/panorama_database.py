@@ -17,6 +17,8 @@ import numpy as np
 import pycolmap
 from pycolmap import logging
 
+from .triton.extraction import GLOBAL_FEATURES_FILENAME
+
 # forward, up, right, in equirect camera axes (+X right, +Y up, +Z forward).
 # `right` is chosen so that (right, -up, forward) is right-handed -- i.e. a
 # proper rotation, matching the standard (x=right, y=down, z=forward) pinhole
@@ -182,26 +184,39 @@ def sampled_videos(video_paths, frame_rate):
     return videos
 
 
+def expected_image_count(videos, faces):
+    """The number of cube-face images the sampled videos require."""
+    panorama_count = sum(
+        video.stop_frame_index - video.start_frame_index for video in videos
+    )
+    return panorama_count * len(faces)
+
+
 def build_database(video_paths, workspace_path, frame_rate, face_size, faces):
     """Writes `<workspace_path>/images/<face>/` and a `database.db` holding one
     camera per face, the rig mounting them, and one frame per panorama. A
     `face_size` of None takes the first video's `default_face_size`.
 
-    Returns without touching anything if the database already holds images:
-    later stages write their own output into that same file, so rebuilding it
-    would throw their work away.
+    Returns without touching a complete database: later stages write their own
+    output into that same file, so rebuilding it would throw their work away.
     """
     video_paths = [Path(video_path) for video_path in video_paths]
     if not video_paths:
         raise ValueError("At least one panorama video is required")
     videos = sampled_videos(video_paths, frame_rate)
+    desired_image_count = expected_image_count(videos, faces)
     workspace_path = Path(workspace_path)
     database_path = workspace_path / "database.db"
     if database_path.exists():
         with pycolmap.Database.open(database_path) as database:
-            if database.num_images():
+            database_image_count = database.num_images()
+            if desired_image_count and database_image_count == desired_image_count:
                 logging.info(f"{database_path} already holds images, keeping it")
                 return videos
+            logging.info(
+                f"{database_path} holds {database_image_count} images; rebuilding "
+                f"for {desired_image_count} images"
+            )
 
     if face_size is None:
         face_size = default_face_size(video_paths[0])
@@ -210,6 +225,7 @@ def build_database(video_paths, workspace_path, frame_rate, face_size, faces):
     for face in faces:
         (images_dir / face).mkdir(parents=True, exist_ok=True)
     database_path.unlink(missing_ok=True)
+    (workspace_path / GLOBAL_FEATURES_FILENAME).unlink(missing_ok=True)
 
     cameras = {face: face_camera(index, face_size) for index, face in enumerate(faces, start=1)}
     rig = pycolmap.Rig()
@@ -233,6 +249,8 @@ def build_database(video_paths, workspace_path, frame_rate, face_size, faces):
 
         for video in videos:
             remaps = {}
+            sample_count = video.stop_frame_index - video.start_frame_index
+            next_progress_percent = 20
             for local_index, panorama in enumerate(iter_panorama_frames(video.path, frame_rate)):
                 frame_index = video.start_frame_index + local_index
                 if not remaps:
@@ -267,6 +285,15 @@ def build_database(video_paths, workspace_path, frame_rate, face_size, faces):
                     database.write_image(image, use_image_id=True)
                     frame.add_data_id(image.data_id)
                 database.write_frame(frame, use_frame_id=True)
+                while (
+                    next_progress_percent <= 100
+                    and (local_index + 1) * 100 >= next_progress_percent * sample_count
+                ):
+                    logging.info(
+                        f"Extracted {next_progress_percent}% of {video.path} "
+                        f"({local_index + 1}/{sample_count} panorama frames)"
+                    )
+                    next_progress_percent += 20
 
     if image_id == 0:
         sys.exit(f"Extracted no frames from {', '.join(map(str, video_paths))}")
