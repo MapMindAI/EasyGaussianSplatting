@@ -51,9 +51,10 @@ def _splat_parameters(path, torch):
     names, values = _read_ply(path)
 
     def columns(property_names):
-        return np.asarray(
+        return np.array(
             values[:, [names.index(name) for name in property_names]],
             dtype=np.float32,
+            copy=True,
         )
 
     return {
@@ -65,7 +66,7 @@ def _splat_parameters(path, torch):
             columns(tuple(f"scale_{index}" for index in range(3)))
         ),
         "opacities": torch.from_numpy(
-            np.asarray(values[:, names.index("opacity")], dtype=np.float32)
+            np.array(values[:, names.index("opacity")], dtype=np.float32, copy=True)
         ),
     }
 
@@ -119,6 +120,7 @@ def render_depths(model_path, reconstruction_path, depth_directory,
             width=camera.width,
             height=camera.height,
             render_mode="Ed",
+            with_eval3d=True,
         )
         depth = render[0, ..., 0].cpu().numpy()
         coverage = alpha[0, ..., 0].cpu().numpy()
