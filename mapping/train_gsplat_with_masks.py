@@ -72,7 +72,7 @@ def attach_depths(dataset_class):
         points = rows[:, :2] * np.array([width - 1, height - 1], dtype=np.float32)
         data["points"] = torch.from_numpy(points).float()
         scale_inv = 1.0 / similarity_scale(self.parser.transform)
-        data["depths"] = torch.from_numpy(rows[:, 2] * scale).float()
+        data["depths"] = torch.from_numpy(rows[:, 2] * scale_inv).float()
         return data
 
     dataset_class.__getitem__ = __getitem__
