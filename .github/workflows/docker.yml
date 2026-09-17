@@ -50,6 +50,9 @@ jobs:
             type=raw,value=latest
             type=sha
 
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
@@ -59,5 +62,7 @@ jobs:
             colmapsrc=./third_party/colmap
           file: ./artifacts/docker/dev.dockerfile
           push: true
+          cache-from: type=gha,scope=gaussiansplatting
+          cache-to: type=gha,mode=max,scope=gaussiansplatting
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

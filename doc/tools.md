@@ -77,10 +77,10 @@ with the sweep so its baseline cannot drift from what ships; `mapping/train_gspl
 Two stages under `mapping/triton/` annotate a reconstruction before training,
 both against the Triton server that already serves the mapping features (see
 [panorama_mapping.md](panorama_mapping.md)). `--triton-url` locates it, or
-`$TRITON_URL` when the flag is left out. Run segmentation in the gsplat env,
-which has torchvision and `tritonclient`; depth uses the image's default
-`python3`, which has pycolmap. Mount the repo at `/workspace` so `data/` and
-`mapping/` both come along.
+`$TRITON_URL` when the flag is left out. Run segmentation in the gsplat
+environment, which includes torchvision; depth uses the image's default
+`python3`, which has pycolmap and the Triton gRPC client. Mount the repo at
+`/workspace` so `data/` and `mapping/` both come along.
 
 `segment_people.py` writes the training masks -- white where gsplat should
 supervise, black over people and sky:

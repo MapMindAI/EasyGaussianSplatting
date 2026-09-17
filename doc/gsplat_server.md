@@ -119,6 +119,11 @@ dataloader workers die partway through a run with a bus error, which surfaces
 as a failed job whose log ends in `DataLoader worker ... killed by signal: Bus
 error`.
 
+Training and segmentation use the `gsplat` interpreter that starts the server.
+Depth uses the x86 image's base interpreter, where pycolmap and the Triton
+client are installed. The Jetson image has no separate base environment, so
+depth uses the server interpreter there.
+
 Jobs run one at a time — a single training run already saturates the GPU — and
 the queue lives in memory, so a restart fails whatever was queued or training.
 Finished jobs survive it. A queued job carries its `queue_position`: the jobs
@@ -222,6 +227,10 @@ model's images by camera and splits each camera into consecutive groups of five
 -- for the cube-map rig, neighbouring frames of one face. The served model's
 input shape fixes that count, so it is a constant rather than a flag: changing
 it means deploying a different model (see `third_party/EasyTensorRT`).
+
+Server preprocessing runs in the `gsplat` environment, which includes the
+Triton gRPC client and pycolmap. Rebuild the image after upgrading an existing
+server so depth and sky masking use those dependencies.
 
 Each group is reconstructed in its own arbitrary scale, which is the part worth
 understanding: the depth DA3 returns is not in the input model's units, and a
