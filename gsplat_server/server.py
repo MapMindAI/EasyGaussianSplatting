@@ -145,6 +145,7 @@ def depth_command(model_directory):
         "python3", str(DEPTH_ENTRYPOINT),
         str(model_directory), str(model_directory / "depths"),
         "--mask-dir", str(model_directory / "masks"),
+        "--samples-per-image", "-1"
     ]
 
 

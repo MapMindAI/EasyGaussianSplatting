@@ -20,6 +20,8 @@ Reconstruction infers against a Triton server, which `TRITON_URL` locates and
 keeps the panorama's angular resolution — and `parameters.proto.txt` to
 `gsplat_server/config/gsplat_train_defaults.proto.txt`. Pass a different
 text-format `JobParameters` file as the fifth argument to change training.
+Set `run_segmentation: false` there to skip person masking and its Mask R-CNN
+weight download.
 Every stage skips work already on disk, so an interrupted run resumes; only
 the sparse mapping is always redone:
 
@@ -79,6 +81,8 @@ Built from `artifacts/docker/dev.dockerfile`:
 ## Using the tools
 
 See [doc/tools.md](doc/tools.md).
+For direct local training from a completed COLMAP workspace, see
+[doc/local_gsplat_training.md](doc/local_gsplat_training.md).
 
 ## Reconstructing a capture
 

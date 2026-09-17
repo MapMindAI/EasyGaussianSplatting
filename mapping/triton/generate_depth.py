@@ -93,7 +93,7 @@ def supervised_points(depth, confidence, mask, count, min_confidence, generator)
     rows, columns = np.nonzero(usable)
     if rows.size == 0:
         return np.zeros((0, 3), dtype=np.float32)
-    if rows.size > count:
+    if count > 0 and rows.size > count:
         chosen = generator.choice(rows.size, size=count, replace=False)
         rows, columns = rows[chosen], columns[chosen]
     height, width = depth.shape[:2]
