@@ -173,3 +173,9 @@ This branch is a ground-up remake of the pipeline. What's done so far:
 - [x] TSDF mesh extraction from rendered Gaussian-splat cube-face depths
 - [x] gRPC training server
 - [x] Export/viewer wired to the above
+
+## Next work
+
+- [ ] Improve DA3 depth supervision around foliage and other fine-detail edges.
+- [ ] Tune depth-loss weighting against the rendered-depth quality.
+- [ ] Improve TSDF fusion from rendered cube-face depths.
