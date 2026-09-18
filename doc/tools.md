@@ -62,9 +62,10 @@ The cube-map model lands in `data/pano_mapping`, ready for gsplat: the faces
 are 90-degree-FOV `PINHOLE` cameras, which gsplat's COLMAP loader supports and
 `EQUIRECTANGULAR` it does not.
 
-`scripts/run_pipeline.sh` then masks out people and trains a
-[gsplat](https://github.com/nerfstudio-project/gsplat) model from that cube-map
-reconstruction. Every training setting comes from the parameters file, whose
+`scripts/run_pipeline.sh` runs person masking when `run_segmentation` is true,
+then trains a [gsplat](https://github.com/nerfstudio-project/gsplat) model from
+that cube-map reconstruction. Set it false to skip Mask R-CNN's weight download.
+Every training setting comes from the parameters file, whose
 schema is `gsplat_server/proto/gsplat.proto`. The container needs about 8 GiB of
 shared memory for gsplat's data-loader workers; below that they die mid-run with
 a bus error.
@@ -87,8 +88,7 @@ supervise, black over people and sky:
 
 ```bash
 GSPLAT_HOST=192.168.11.194
-VIDEO_NAME=VID_20260904_155849_00_009
-WORKSPACE_PATH=data/${VIDEO_NAME}_reconstruction
+WORKSPACE_PATH=data/VID_20260904_155849_009
 DOCKER_RUN="docker run --rm -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest"
@@ -124,6 +124,7 @@ ${DOCKER_RUN} python3 -m mapping.triton.generate_depth \
   ${WORKSPACE_PATH} ${WORKSPACE_PATH}/depths \
   --mask-dir ${WORKSPACE_PATH}/masks \
   --debug-dir ${WORKSPACE_PATH}/debug \
+  --samples-per-image -1 \
   --triton-url ${GSPLAT_HOST}:8011
 ```
 
@@ -132,8 +133,14 @@ images into consecutive groups of five (the served model's input shape), and
 fits each group to the scale of the COLMAP points its images already observe --
 DA3's own scale is arbitrary and differs per group. A group carrying too few of
 those points is skipped rather than written at a guessed scale.
+The `up/` and `down/` cube faces are skipped: their sky and ground views do not
+need DA3 supervision.
 `--samples-per-image` (4096) sets how many pixels each `.npy` keeps,
-`--min-confidence` (2.0) the DA3 confidence floor.
+`--min-confidence` (1.0) the DA3 confidence floor, and `--min-depth` (0.5) /
+`--max-depth` (5.0) discard scaled depths outside that range.
+Colour and DA3-depth discontinuities are also excluded, so depth supervision
+does not pull geometry across foliage and other detail edges. Debug overlays
+show only the depth that remains after filtering.
 `--debug-dir <directory>` writes a colourized depth overlay over every source
 image, preserving nested image paths and adding `_depth.png` to the filename.
 [gsplat_server.md](gsplat_server.md#depth-supervision) covers the file format
