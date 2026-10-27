@@ -70,7 +70,8 @@ To stitch without reconstructing,
 `scripts/insta360_run_stitch.sh <workspace>` stitches every INSV under that
 workspace; see [doc/tools.md](doc/tools.md).
 For DJI panorama footage already exported as MP4, `scripts/dji_run_stitch.sh`
-creates six GPS-tagged pinhole faces from its matching SRT.
+creates six GPS-tagged pinhole faces for every MP4 with a matching SRT in the
+workspace.
 
 ![GS reconstruction viewer](assets/reconstruction_gs_viewer.png)
 

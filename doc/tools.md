@@ -37,9 +37,10 @@ re-running restitches it, since the skip above only keeps a video that decodes.
 
 `scripts/run_pipeline.sh` runs the same stage as the first of its four.
 
-For a DJI Avata 360 capture, export the full OSV as an equirectangular MP4 and
-keep its matching SRT beside it. `scripts/dji_run_stitch.sh` samples the MP4 at
-2 frames per second by default (`<workspace> [frame_rate] [face_size]`),
+For DJI Avata 360 captures, export each OSV as an equirectangular MP4 and
+keep its matching SRT beside it. `scripts/dji_run_stitch.sh` samples every MP4
+with a matching SRT in the workspace at 2 frames per second by default
+(`<workspace> [frame_rate] [face_size]`),
 writes all six pinhole faces under `images/`, and sets each JPEG's GPS EXIF from
 the SRT's latitude, longitude, and absolute altitude. It also creates the
 COLMAP rig `database.db` used by mapping:
@@ -48,7 +49,8 @@ COLMAP rig `database.db` used by mapping:
 scripts/dji_run_stitch.sh data/DJI_20261026125945_0013_D
 ```
 
-The MP4 and SRT must share a basename and span the same time. Mapping reads the
+Each MP4 and SRT pair must share a basename and span the same time. MP4 files
+without a matching SRT are skipped. Mapping reads the
 image GPS EXIF for position priors and map alignment.
 
 Read metadata off the source file:

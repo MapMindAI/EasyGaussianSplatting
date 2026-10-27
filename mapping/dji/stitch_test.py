@@ -1,4 +1,5 @@
-from mapping.dji.stitch import position_at, read_srt_positions
+from mapping.dji import stitch
+from mapping.panorama_database import DEFAULT_FACES, SampledVideo
 
 
 def test_srt_positions_follow_subtitle_times_and_absolute_altitude(tmp_path):
@@ -14,10 +15,54 @@ def test_srt_positions_follow_subtitle_times_and_absolute_altitude(tmp_path):
         "[rel_alt: 12.000 abs_alt: -53.484]\n"
     )
 
-    positions = read_srt_positions(subtitles)
+    positions = stitch.read_srt_positions(subtitles)
 
     assert len(positions) == 2
     assert positions[0].seconds == 0.0
     assert positions[0].altitude == -53.984
-    assert position_at(positions, 0.49) == positions[1]
-    assert position_at(positions, 0.1) == positions[0]
+    assert stitch.position_at(positions, 0.49) == positions[1]
+    assert stitch.position_at(positions, 0.1) == positions[0]
+
+
+def test_exports_all_paired_videos_with_each_srt_timed_from_its_start(tmp_path, monkeypatch):
+    for name in ("a.MP4", "a.SRT", "b.mp4", "b.srt", "unpaired.mp4"):
+        (tmp_path / name).touch()
+
+    class Capture:
+        def isOpened(self):
+            return True
+
+        def get(self, property_id):
+            return 2 if property_id == stitch.cv2.CAP_PROP_FPS else 2
+
+        def release(self):
+            pass
+
+    monkeypatch.setattr(stitch.cv2, "VideoCapture", lambda path: Capture())
+    monkeypatch.setattr(stitch, "read_srt_positions", lambda path: [
+        stitch.SrtPosition(0.0, 1.0 if path.stem == "a" else 2.0, 3.0, 4.0),
+        stitch.SrtPosition(0.5, 1.5 if path.stem == "a" else 2.5, 3.0, 4.0),
+    ])
+
+    def build_database(videos, workspace, frame_rate, face_size, faces):
+        assert [path.name for path in videos] == ["a.MP4", "b.mp4"]
+        assert faces == DEFAULT_FACES
+        return [
+            SampledVideo(videos[0], 0, 2, 0.5),
+            SampledVideo(videos[1], 2, 4, 0.5),
+        ]
+
+    monkeypatch.setattr(stitch, "build_database", build_database)
+    tagged = []
+    monkeypatch.setattr(
+        stitch, "write_gps_exif",
+        lambda paths, position: tagged.append((paths, position)),
+    )
+
+    count = stitch.export_images(tmp_path)
+
+    assert count == 4 * len(DEFAULT_FACES)
+    assert [position.latitude for _, position in tagged] == [1.0, 1.5, 2.0, 2.5]
+    assert [paths[0].name for paths, _ in tagged] == [
+        "000000.jpg", "000001.jpg", "000002.jpg", "000003.jpg",
+    ]

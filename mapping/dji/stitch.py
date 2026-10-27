@@ -68,40 +68,56 @@ def write_gps_exif(image_paths, position):
 
 def export_images(workspace_path, frame_rate=2.0, face_size=None):
     workspace_path = Path(workspace_path)
-    videos = sorted(workspace_path.glob("*.mp4"))
-    if len(videos) != 1:
-        raise ValueError(f"Expected one MP4 in {workspace_path}, found {len(videos)}")
-    srt_path = videos[0].with_suffix(".SRT")
-    if not srt_path.is_file():
-        raise FileNotFoundError(f"Missing DJI GPS subtitles: {srt_path}")
-    positions = read_srt_positions(srt_path)
-    capture = cv2.VideoCapture(str(videos[0]))
-    try:
-        frame_rate_of_video = capture.get(cv2.CAP_PROP_FPS)
-        if not capture.isOpened() or frame_rate_of_video <= 0:
-            raise ValueError(f"Could not read video timing from {videos[0]}")
-        duration = capture.get(cv2.CAP_PROP_FRAME_COUNT) / frame_rate_of_video
-    finally:
-        capture.release()
-    if abs(duration - positions[-1].seconds) > 1.0:
-        raise ValueError(
-            f"{videos[0]} lasts {duration:.1f} s but {srt_path} ends at "
-            f"{positions[-1].seconds:.1f} s"
-        )
-    video = build_database(videos, workspace_path, frame_rate, face_size, DEFAULT_FACES)[0]
+    files = list(workspace_path.iterdir())
+    subtitles = {
+        path.stem: path for path in files
+        if path.is_file() and path.suffix.lower() == ".srt"
+    }
+    videos = sorted(
+        path for path in files
+        if path.is_file() and path.suffix.lower() == ".mp4" and path.stem in subtitles
+    )
+    if not videos:
+        raise ValueError(f"No MP4 files with matching SRT found in {workspace_path}")
+
+    positions_by_video = {}
+    for video_path in videos:
+        srt_path = subtitles[video_path.stem]
+        positions = read_srt_positions(srt_path)
+        capture = cv2.VideoCapture(str(video_path))
+        try:
+            frame_rate_of_video = capture.get(cv2.CAP_PROP_FPS)
+            if not capture.isOpened() or frame_rate_of_video <= 0:
+                raise ValueError(f"Could not read video timing from {video_path}")
+            duration = capture.get(cv2.CAP_PROP_FRAME_COUNT) / frame_rate_of_video
+        finally:
+            capture.release()
+        if abs(duration - positions[-1].seconds) > 1.0:
+            raise ValueError(
+                f"{video_path} lasts {duration:.1f} s but {srt_path} ends at "
+                f"{positions[-1].seconds:.1f} s"
+            )
+        positions_by_video[video_path] = positions
+
+    sampled_videos = build_database(videos, workspace_path, frame_rate, face_size, DEFAULT_FACES)
     image_directory = workspace_path / "images"
-    for frame_index in range(video.start_frame_index, video.stop_frame_index):
-        position = position_at(positions, frame_index * video.seconds_per_frame)
-        write_gps_exif(
-            [image_directory / image_name(face, frame_index) for face in DEFAULT_FACES],
-            position,
-        )
-    return video.stop_frame_index * len(DEFAULT_FACES)
+    for video in sampled_videos:
+        positions = positions_by_video[video.path]
+        for frame_index in range(video.start_frame_index, video.stop_frame_index):
+            seconds = (frame_index - video.start_frame_index) * video.seconds_per_frame
+            position = position_at(positions, seconds)
+            write_gps_exif(
+                [image_directory / image_name(face, frame_index) for face in DEFAULT_FACES],
+                position,
+            )
+    return sum(
+        video.stop_frame_index - video.start_frame_index for video in sampled_videos
+    ) * len(DEFAULT_FACES)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("workspace", type=Path, help="directory containing one MP4 and matching SRT")
+    parser.add_argument("workspace", type=Path, help="directory containing MP4 and matching SRT pairs")
     parser.add_argument("--frame-rate", type=float, default=2.0)
     parser.add_argument("--face-size", type=int)
     args = parser.parse_args()
