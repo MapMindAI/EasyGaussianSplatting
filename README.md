@@ -1,10 +1,39 @@
 # EasyGaussianSplatting
 
-An end-to-end pipeline for turning Insta360 360° captures into Gaussian Splatting
+An end-to-end pipeline for turning Insta360 and DJI 360° captures into Gaussian Splatting
 reconstructions. Each panorama frame is reprojected into a rig of pinhole cube
 faces, matched with learned features (SuperPoint, LightGlue, and SALAD served
 over gRPC by [EasyTensorRT](https://github.com/MapMindAI/EasyTensorRT)), and
 solved with global SfM.
+
+## Pipeline overview
+
+```mermaid
+flowchart TD
+    INSV["Insta360 INSV"] --> ISTITCH["Stitch panorama MP4"] --> IFACES["Six pinhole faces + COLMAP rig"]
+    OSV["DJI OSV"] --> DEXPORT["Export panorama MP4"] --> DFACES["Six pinhole faces + COLMAP rig<br/>dji_run_stitch.sh"]
+    SRT["DJI SRT GPS"] --> DFACES
+    IFACES --> FEATURES["SuperPoint + SALAD features"]
+    DFACES --> FEATURES
+    TRITON["Triton models"] --> FEATURES
+    FEATURES --> MATCH["LightGlue matching"] --> SFM["Global SfM"] --> LEVEL["Gravity levelling"]
+    TRITON --> MATCH
+    DFACES --> EXIF["Image GPS EXIF"] --> ALIGN["Optional GPS alignment"]
+    LRV["Insta360 LRV GPS fallback"] --> ALIGN
+    LEVEL --> ALIGN --> SPARSE["Sparse COLMAP model"]
+    SPARSE --> MASKS["Person and sky masks"]
+    SPARSE --> DEPTH["DA3 depth (optional)"]
+    TRITON --> MASKS
+    TRITON --> DEPTH
+    SPARSE --> TRAIN["gsplat training<br/>local or gRPC server"]
+    MASKS --> TRAIN
+    DEPTH --> TRAIN
+    TRAIN --> PLY["Gaussian splat PLY"] --> TSDF["TSDF mesh"]
+    PLY --> VIEWER["Viewer"]
+```
+
+Mapping reads GPS from reference-face image EXIF first, then falls back to
+Insta360 LRV telemetry when those images have no GPS.
 
 ## Running the full pipeline in one command
 
@@ -40,6 +69,9 @@ Existing person-segmentation masks are reused on later runs.
 To stitch without reconstructing,
 `scripts/insta360_run_stitch.sh <workspace>` stitches every INSV under that
 workspace; see [doc/tools.md](doc/tools.md).
+For DJI panorama footage already exported as MP4, `scripts/dji_run_stitch.sh`
+creates six GPS-tagged pinhole faces for every MP4 with a matching SRT in the
+workspace.
 
 ![GS reconstruction viewer](assets/reconstruction_gs_viewer.png)
 
@@ -87,7 +119,10 @@ For direct local training from a completed COLMAP workspace, see
 
 ## Reconstructing a capture
 
-1. [Stitch to video](doc/tools.md) into the mapping workspace `scripts/insta360_run_stitch.sh ${WORKSPACE_PATH}`.
+1. [Prepare the mapping workspace](doc/tools.md): run
+   `scripts/insta360_run_stitch.sh ${WORKSPACE_PATH}` for Insta360, or export
+   DJI OSV to a panorama MP4 and run `scripts/dji_run_stitch.sh ${WORKSPACE_PATH}`
+   to create six GPS-tagged pinhole faces.
 2. [Mapping a panorama capture](doc/panorama_mapping.md).
 
 ```bash

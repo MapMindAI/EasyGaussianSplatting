@@ -155,6 +155,32 @@ def test_rows_without_a_track_parse_to_nothing():
     assert gps.parse_fixes("Warning: no GPS\n", CAPTURE_START) == []
 
 
+def test_image_exif_fixes_use_frame_times_and_coordinate_refs(tmp_path, monkeypatch):
+    image_directory = tmp_path / "images" / "front"
+    image_directory.mkdir(parents=True)
+    rows = [
+        {"SourceFile": str(image_directory / "000010.jpg"),
+         "GPSLatitude": 31.0, "GPSLatitudeRef": "N",
+         "GPSLongitude": 120.0, "GPSLongitudeRef": "E",
+         "GPSAltitude": -53.0, "GPSAltitudeRef": 1},
+        {"SourceFile": str(image_directory / "000012.jpg"),
+         "GPSLatitude": 32.0, "GPSLatitudeRef": "S",
+         "GPSLongitude": 121.0, "GPSLongitudeRef": "W",
+         "GPSAltitude": 4.0, "GPSAltitudeRef": 0},
+        {"SourceFile": str(image_directory / "000013.jpg")},
+        {"SourceFile": str(image_directory / "000020.jpg"),
+         "GPSLatitude": 33.0, "GPSLongitude": 122.0, "GPSAltitude": 5.0},
+    ]
+    monkeypatch.setattr(gps, "_exiftool", lambda *args: json.dumps(rows))
+
+    fixes = gps.read_image_fixes(image_directory, 10, 20, 0.5)
+
+    assert fixes == [
+        gps.GpsFix(0.0, 31.0, 120.0, -53.0),
+        gps.GpsFix(1.0, -32.0, -121.0, 4.0),
+    ]
+
+
 # --- the projected track --------------------------------------------------
 
 

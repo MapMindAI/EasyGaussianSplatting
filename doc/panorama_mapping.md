@@ -100,19 +100,20 @@ The workspace ends up holding `images/<face>/`, `database.db`,
 
 ## Georeferencing with the capture's GPS
 
-Each `VID_<timestamp>_<camera>_<sequence>.mp4` automatically takes GPS from
-the `LRV_<timestamp>_<camera>_<sequence>.lrv` under the workspace; the camera number may
-differ, as it does in Insta360's paired files:
+Mapping first reads GPS EXIF from sampled `images/front/*.jpg` files. For a
+video whose sampled images have no GPS, it reads the matching Insta360 LRV under
+the workspace. The camera number may differ between the MP4 and LRV:
 
 ```
 VID_20260904_155849_00_009.mp4
 LRV_20260904_155849_01_009.lrv
 ```
 
-Videos without a matching LRV still reconstruct but do not receive GPS priors
-or contribute to GPS alignment.
+Videos with neither image GPS nor a matching LRV still reconstruct without GPS
+priors or map alignment.
 
-Insta360 writes about one WGS84 fix a second. exiftool reads them, and each is
+DJI image EXIF comes from `scripts/dji_run_stitch.sh`; Insta360 writes about one
+WGS84 fix a second into LRV telemetry. ExifTool reads either source, and each fix is
 projected into the capture's UTM zone and written to `database.db` as a COLMAP
 position prior, one per image -- every face of a panorama shares its optical
 centre, so they share its position. Those priors are recorded, not solved with:

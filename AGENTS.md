@@ -41,6 +41,9 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── mapping_pipeline.py       # The four mapping stages end to end.
 │   ├── gps.py                    # Capture GPS as UTM priors and map alignment.
 │   ├── gps_test.py               # Track parsing, the fit, and the alignment.
+│   ├── dji/
+│   │   ├── stitch.py            # DJI panorama faces with SRT GPS EXIF.
+│   │   └── stitch_test.py       # DJI SRT parsing and frame timing.
 │   ├── gsplat_world_frame.py     # Undo gsplat's world normalization on export.
 │   ├── gsplat_world_frame_test.py # Similarity inverse and the export wiring.
 │   ├── mapping_pipeline_test.py  # Gravity levelling of the solved map.
@@ -50,6 +53,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── run_pipeline.sh           # Host: the whole pipeline in one `docker run`.
 │   ├── insta360_run_stitch.sh    # Host: stitching on its own.
 │   ├── insta360_stitch_video.sh  # Container: Insta360 capture to panorama video.
+│   ├── dji_run_stitch.sh         # Host: DJI panorama to GPS-tagged cube faces.
 │   ├── docker_common.sh          # Shared helpers for the host-side scripts.
 │   └── gsplat_env.sh             # Container: activate the gsplat conda env.
 ├── third_party/

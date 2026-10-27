@@ -176,6 +176,35 @@ def find_lrv(video_path, search_path=None):
     return matches[0] if matches else None
 
 
+def read_capture_tracks(workspace_path, videos):
+    tracks = []
+    image_directory = workspace_path / "images" / REFERENCE_FACE
+    for video in videos:
+        fixes = gps.read_image_fixes(
+            image_directory, video.start_frame_index, video.stop_frame_index,
+            video.seconds_per_frame,
+        )
+        if fixes:
+            source = image_directory
+            video_track = gps.GpsTrack(fixes)
+            logging.info(f"Read {len(fixes)} GPS fixes from {source} for {video.path}")
+        else:
+            lrv_path = find_lrv(video.path, workspace_path)
+            if lrv_path is None:
+                logging.warning(f"No image GPS or matching LRV for {video.path}; skipping GPS alignment")
+                continue
+            source = lrv_path
+            video_track = gps.read_track(lrv_path)
+        tracks.append((
+            video.start_frame_index,
+            video.stop_frame_index,
+            video_track,
+            video.seconds_per_frame,
+            source,
+        ))
+    return gps.CaptureTracks(tracks) if tracks else None
+
+
 def run_pipeline(workspace_path, triton_url, selection, frame_rate=2.0,
                  face_size=None, faces=DEFAULT_FACES, keypoint_threshold=0.015,
                  match_threshold=0.2, num_threads=8):
@@ -186,20 +215,7 @@ def run_pipeline(workspace_path, triton_url, selection, frame_rate=2.0,
         raise RuntimeError(f"No MP4 videos found under {workspace_path}")
     videos = build_database(video_paths, workspace_path, frame_rate, face_size, faces)
 
-    tracks = []
-    for video in videos:
-        lrv_path = find_lrv(video.path, workspace_path)
-        if lrv_path is None:
-            logging.warning(f"No matching LRV for {video.path}; skipping GPS alignment")
-            continue
-        tracks.append((
-            video.start_frame_index,
-            video.stop_frame_index,
-            gps.read_track(lrv_path),
-            video.seconds_per_frame,
-            lrv_path,
-        ))
-    track = gps.CaptureTracks(tracks) if tracks else None
+    track = read_capture_tracks(workspace_path, videos)
     if track is not None:
         gps.write_pose_priors(workspace_path / "database.db", track, None)
 

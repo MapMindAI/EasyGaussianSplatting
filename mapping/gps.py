@@ -184,6 +184,40 @@ def read_fixes(video_path):
     return fixes
 
 
+def read_image_fixes(image_directory, start_frame_index, stop_frame_index,
+                     seconds_per_frame):
+    """GPS fixes from sampled reference-face JPEGs in one video range."""
+    if not image_directory.is_dir():
+        return []
+    output = _exiftool(
+        "-json", "-n", "-ext", "jpg",
+        "-GPSLatitude", "-GPSLatitudeRef", "-GPSLongitude", "-GPSLongitudeRef",
+        "-GPSAltitude", "-GPSAltitudeRef", str(image_directory),
+    )
+    fixes = []
+    for image in json.loads(output):
+        try:
+            frame_index = int(Path(image["SourceFile"]).stem)
+            latitude = float(image["GPSLatitude"])
+            longitude = float(image["GPSLongitude"])
+            altitude = float(image["GPSAltitude"])
+        except (KeyError, ValueError):
+            continue
+        if not start_frame_index <= frame_index < stop_frame_index:
+            continue
+        if image.get("GPSLatitudeRef") == "S":
+            latitude = -abs(latitude)
+        if image.get("GPSLongitudeRef") == "W":
+            longitude = -abs(longitude)
+        if image.get("GPSAltitudeRef") == 1:
+            altitude = -abs(altitude)
+        fixes.append(GpsFix(
+            (frame_index - start_frame_index) * seconds_per_frame,
+            latitude, longitude, altitude,
+        ))
+    return sorted(fixes, key=lambda fix: fix.seconds)
+
+
 class GpsTrack:
     """A capture's GPS track in UTM metres, sampled by capture time."""
 
