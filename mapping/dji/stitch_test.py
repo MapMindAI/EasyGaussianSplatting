@@ -24,7 +24,7 @@ def test_srt_positions_follow_subtitle_times_and_absolute_altitude(tmp_path):
     assert stitch.position_at(positions, 0.1) == positions[0]
 
 
-def test_exports_all_paired_videos_with_each_srt_timed_from_its_start(tmp_path, monkeypatch):
+def test_exports_all_paired_videos_with_each_srt_timed_from_its_start(tmp_path, monkeypatch, capsys):
     for name in ("a.MP4", "a.SRT", "b.mp4", "b.srt", "unpaired.mp4"):
         (tmp_path / name).touch()
 
@@ -66,3 +66,8 @@ def test_exports_all_paired_videos_with_each_srt_timed_from_its_start(tmp_path, 
     assert [paths[0].name for paths, _ in tagged] == [
         "000000.jpg", "000001.jpg", "000002.jpg", "000003.jpg",
     ]
+    output = capsys.readouterr().out
+    assert "Processing a.MP4 with a.SRT" in output
+    assert "Processing b.mp4 with b.srt" in output
+    assert "begin frame ID 1, expected frames added 2, total frames now 2" in output
+    assert "begin frame ID 3, expected frames added 2, total frames now 4" in output

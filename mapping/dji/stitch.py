@@ -83,6 +83,7 @@ def export_images(workspace_path, frame_rate=2.0, face_size=None):
     positions_by_video = {}
     for video_path in videos:
         srt_path = subtitles[video_path.stem]
+        print(f"Processing {video_path.name} with {srt_path.name}", flush=True)
         positions = read_srt_positions(srt_path)
         capture = cv2.VideoCapture(str(video_path))
         try:
@@ -103,6 +104,14 @@ def export_images(workspace_path, frame_rate=2.0, face_size=None):
     image_directory = workspace_path / "images"
     for video in sampled_videos:
         positions = positions_by_video[video.path]
+        frame_count = video.stop_frame_index - video.start_frame_index
+        print(
+            f"Writing GPS EXIF for {video.path.name}: "
+            f"begin frame ID {video.start_frame_index + 1}, "
+            f"expected frames added {frame_count}, "
+            f"total frames now {video.stop_frame_index}",
+            flush=True,
+        )
         for frame_index in range(video.start_frame_index, video.stop_frame_index):
             seconds = (frame_index - video.start_frame_index) * video.seconds_per_frame
             position = position_at(positions, seconds)
@@ -110,6 +119,7 @@ def export_images(workspace_path, frame_rate=2.0, face_size=None):
                 [image_directory / image_name(face, frame_index) for face in DEFAULT_FACES],
                 position,
             )
+        print(f"Finished {video.path.name}", flush=True)
     return sum(
         video.stop_frame_index - video.start_frame_index for video in sampled_videos
     ) * len(DEFAULT_FACES)

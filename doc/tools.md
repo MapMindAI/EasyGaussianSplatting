@@ -50,8 +50,9 @@ scripts/dji_run_stitch.sh data/DJI_20261026125945_0013_D
 ```
 
 Each MP4 and SRT pair must share a basename and span the same time. MP4 files
-without a matching SRT are skipped. Mapping reads the
-image GPS EXIF for position priors and map alignment.
+without a matching SRT are skipped. The script logs each pair, its first frame
+ID, expected frame count, and cumulative frame total. Mapping reads the image
+GPS EXIF for position priors and map alignment.
 
 Read metadata off the source file:
 
