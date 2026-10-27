@@ -99,7 +99,7 @@ pose_opt: false
 pose_opt_lr: 0.00001
 # Segment people out of the images before training, when the upload carried no
 # masks/ of its own. Costs a few minutes and needs the segmentation weights.
-run_segmentation: true
+run_segmentation: false
 # Mask the sky along with the people. Only read when run_segmentation is set.
 # Left on, the sky is masked out: it is at infinity, so the Gaussians that chase
 # it are floaters that cost memory and blur the geometry below. It is off here
