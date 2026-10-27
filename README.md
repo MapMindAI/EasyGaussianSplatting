@@ -37,8 +37,9 @@ script keeps downloaded PyTorch model weights in the persistent Docker volume
 `easygaussiansplatting-torch-cache`, so later runs reuse them.
 Existing person-segmentation masks are reused on later runs.
 
-To stitch without reconstructing, `scripts/run_stitch.sh <workspace>` stitches
-every INSV under that workspace; see [doc/tools.md](doc/tools.md).
+To stitch without reconstructing,
+`scripts/insta360_run_stitch.sh <workspace>` stitches every INSV under that
+workspace; see [doc/tools.md](doc/tools.md).
 
 ![GS reconstruction viewer](assets/reconstruction_gs_viewer.png)
 
@@ -86,7 +87,7 @@ For direct local training from a completed COLMAP workspace, see
 
 ## Reconstructing a capture
 
-1. [Stitch to video](doc/tools.md) into the mapping workspace `scripts/run_stitch.sh ${WORKSPACE_PATH}`.
+1. [Stitch to video](doc/tools.md) into the mapping workspace `scripts/insta360_run_stitch.sh ${WORKSPACE_PATH}`.
 2. [Mapping a panorama capture](doc/panorama_mapping.md).
 
 ```bash

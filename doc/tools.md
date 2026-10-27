@@ -18,14 +18,15 @@ Stitch a raw Insta360 capture into an equirectangular video:
 insta360_media_stitcher -inputs /workspace/VID_xxx.insv -output /workspace/pano.mp4 -stitch_type optflow
 ```
 
-`scripts/run_stitch.sh <workspace> [output_size]` stitches every INSV under a
-workspace from the host, with the AI-stitch settings we use for reconstruction
-(4000x2000, H.265, flowstate, direction lock). Each MP4 is written beside its
-INSV with the same name, which lets the mapping pipeline find it and its LRV.
+`scripts/insta360_run_stitch.sh <workspace> [output_size]` stitches every INSV
+under a workspace from the host, with the AI-stitch settings we use for
+reconstruction (4000x2000, H.265, flowstate, direction lock). Each MP4 is
+written beside its INSV with the same name, which lets the mapping pipeline
+find it and its LRV.
 The workspace must live under the repo checkout:
 
 ```
-scripts/run_stitch.sh data/pano_mapping
+scripts/insta360_run_stitch.sh data/pano_mapping
 ```
 
 A stitch runs about ten times the capture's length, longer at larger output
