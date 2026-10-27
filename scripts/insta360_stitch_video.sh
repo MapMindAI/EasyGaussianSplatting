@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stitch an Insta360 capture into an equirectangular video with the AI-stitch
-# settings we reconstruct from. Runs inside the container; scripts/run_stitch.sh,
+# settings we reconstruct from. Runs inside the container; scripts/insta360_run_stitch.sh,
 # scripts/run_pipeline.sh, and the pipeline server drive it.
 set -euo pipefail
 

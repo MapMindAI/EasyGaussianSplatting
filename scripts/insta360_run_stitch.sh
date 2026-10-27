@@ -30,7 +30,7 @@ for input_video in "${input_videos[@]}"; do
 
   docker run "${DOCKER_RUN_FLAGS[@]}" -e MODEL_ROOT_DIR="${MODEL_ROOT_DIR:-}" \
     -e STITCH_TIMEOUT_SECONDS="${STITCH_TIMEOUT_SECONDS:-}" \
-    "${DOCKER_IMAGE}" bash scripts/stitch_video.sh \
+    "${DOCKER_IMAGE}" bash scripts/insta360_stitch_video.sh \
     "/workspace/${relative_input}" "/workspace/${relative_output}" "${OUTPUT_SIZE}"
   echo "Stitched video written to ${REPO_ROOT}/${relative_output}"
 done

@@ -48,7 +48,7 @@ set -euo pipefail
 export PYTHONPATH="${PWD}${PYTHONPATH:+:${PYTHONPATH}}"
 
 # --- 1. Stitch the capture into an equirectangular video --------------------
-bash scripts/stitch_video.sh "${INPUT_INSV}" "${OUTPUT_VIDEO}" "${OUTPUT_SIZE}"
+bash scripts/insta360_stitch_video.sh "${INPUT_INSV}" "${OUTPUT_VIDEO}" "${OUTPUT_SIZE}"
 
 # --- 2. Reconstruct it as a cube-map rig ------------------------------------
 MAPPING_ARGUMENTS=(--triton-url "${TRITON_URL}")
