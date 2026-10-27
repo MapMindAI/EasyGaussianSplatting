@@ -48,9 +48,8 @@ COLMAP rig `database.db` used by mapping:
 scripts/dji_run_stitch.sh data/DJI_20261026125945_0013_D
 ```
 
-The MP4 and SRT must share a basename and span the same time. The current
-mapping pipeline reads Insta360 LRV telemetry for position priors; image EXIF
-alone does not georeference its reconstruction.
+The MP4 and SRT must share a basename and span the same time. Mapping reads the
+image GPS EXIF for position priors and map alignment.
 
 Read metadata off the source file:
 

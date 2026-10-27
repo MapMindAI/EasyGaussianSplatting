@@ -18,7 +18,8 @@ flowchart TD
     TRITON["Triton models"] --> FEATURES
     FEATURES --> MATCH["LightGlue matching"] --> SFM["Global SfM"] --> LEVEL["Gravity levelling"]
     TRITON --> MATCH
-    LRV["Insta360 LRV GPS"] --> ALIGN["Optional GPS alignment"]
+    DFACES --> EXIF["Image GPS EXIF"] --> ALIGN["Optional GPS alignment"]
+    LRV["Insta360 LRV GPS fallback"] --> ALIGN
     LEVEL --> ALIGN --> SPARSE["Sparse COLMAP model"]
     SPARSE --> MASKS["Person and sky masks"]
     SPARSE --> DEPTH["DA3 depth (optional)"]
@@ -31,8 +32,8 @@ flowchart TD
     PLY --> VIEWER["Viewer"]
 ```
 
-DJI SRT GPS is written to image EXIF; map alignment currently uses Insta360
-LRV telemetry.
+Mapping reads GPS from reference-face image EXIF first, then falls back to
+Insta360 LRV telemetry when those images have no GPS.
 
 ## Running the full pipeline in one command
 

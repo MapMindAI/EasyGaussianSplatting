@@ -20,8 +20,10 @@ from mapping.mapping_pipeline import (  # noqa: E402
     align_up_axis,
     discover_videos,
     find_lrv,
+    read_capture_tracks,
 )
-from mapping.panorama_database import RIG_DOWN  # noqa: E402
+from mapping import gps  # noqa: E402
+from mapping.panorama_database import RIG_DOWN, SampledVideo  # noqa: E402
 
 WORLD_DOWN = np.array([0.0, 0.0, -1.0])
 
@@ -44,6 +46,34 @@ def test_finds_the_lrv_with_the_same_capture_timestamp_and_sequence(tmp_path):
     (tmp_path / "LRV_20260904_155849_01_010.lrv").touch()
 
     assert find_lrv(video) == lrv
+
+
+def test_image_exif_takes_precedence_over_lrv(tmp_path, monkeypatch):
+    video = tmp_path / "VID_20260904_155849_00_009.mp4"
+    video.touch()
+    (tmp_path / "LRV_20260904_155849_01_009.lrv").touch()
+    fixes = [gps.GpsFix(0.0, 31.0, 120.0, 5.0)]
+    monkeypatch.setattr(gps, "read_image_fixes", lambda *args: fixes)
+    monkeypatch.setattr(gps, "read_track", lambda path: pytest.fail("LRV was read"))
+
+    track = read_capture_tracks(tmp_path, [SampledVideo(video, 0, 1, 0.5)])
+
+    assert track.sources == [tmp_path / "images" / "front"]
+    assert track.position_at_frame(0) == pytest.approx(gps.GpsTrack(fixes).positions[0])
+
+
+def test_lrv_is_used_when_images_have_no_gps(tmp_path, monkeypatch):
+    video = tmp_path / "VID_20260904_155849_00_009.mp4"
+    video.touch()
+    lrv = tmp_path / "LRV_20260904_155849_01_009.lrv"
+    lrv.touch()
+    fixes = [gps.GpsFix(0.0, 31.0, 120.0, 5.0)]
+    monkeypatch.setattr(gps, "read_image_fixes", lambda *args: [])
+    monkeypatch.setattr(gps, "read_track", lambda path: gps.GpsTrack(fixes))
+
+    track = read_capture_tracks(tmp_path, [SampledVideo(video, 0, 1, 0.5)])
+
+    assert track.sources == [lrv]
 
 
 class Frame:
