@@ -37,6 +37,21 @@ re-running restitches it, since the skip above only keeps a video that decodes.
 
 `scripts/run_pipeline.sh` runs the same stage as the first of its four.
 
+For a DJI Avata 360 capture, export the full OSV as an equirectangular MP4 and
+keep its matching SRT beside it. `scripts/dji_run_stitch.sh` samples the MP4 at
+2 frames per second by default (`<workspace> [frame_rate] [face_size]`),
+writes all six pinhole faces under `images/`, and sets each JPEG's GPS EXIF from
+the SRT's latitude, longitude, and absolute altitude. It also creates the
+COLMAP rig `database.db` used by mapping:
+
+```bash
+scripts/dji_run_stitch.sh data/DJI_20261026125945_0013_D
+```
+
+The MP4 and SRT must share a basename and span the same time. The current
+mapping pipeline reads Insta360 LRV telemetry for position priors; image EXIF
+alone does not georeference its reconstruction.
+
 Read metadata off the source file:
 
 ```
