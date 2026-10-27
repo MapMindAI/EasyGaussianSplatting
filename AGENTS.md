@@ -55,7 +55,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── insta360_stitch_video.sh  # Container: Insta360 capture to panorama video.
 │   ├── dji_run_stitch.sh         # Host: DJI panorama to GPS-tagged cube faces.
 │   ├── docker_common.sh          # Shared helpers for the host-side scripts.
-│   └── gsplat_env.sh             # Container: activate the gsplat conda env.
+│   ├── gsplat_env.sh             # Container: activate the gsplat conda env.
+│   └── gsplat_train.sh           # Container: train a splat from a workspace.
 ├── third_party/
 │   ├── gsplat/                   # gsplat submodule the training stage uses.
 │   ├── colmap/                   # COLMAP source the Jetson image builds from.

@@ -41,6 +41,30 @@ def attach_masks(dataset_class):
     dataset_class.__getitem__ = __getitem__
 
 
+def downsample_images(parser_class, resize_image_folder):
+    """Write the images_<factor>/ folder gsplat's Parser requires but never creates.
+
+    Staged under another name because the Parser takes any images_<factor>/ as
+    complete; resize_image_folder skips files already written, so an
+    interrupted resize resumes rather than training on part of the images.
+    """
+    original_init = parser_class.__init__
+
+    def __init__(self, data_dir, factor=1, **kwargs):
+        resized_dir = os.path.join(data_dir, f"images_{factor}")
+        if factor > 1 and not os.path.isdir(resized_dir):
+            image_dir = os.path.join(data_dir, "images")
+            staging_dir = resized_dir + "_partial"
+            # resize_image_folder only creates the top folder, not the per-face ones.
+            for directory, _, _ in os.walk(image_dir):
+                os.makedirs(os.path.join(staging_dir, os.path.relpath(directory, image_dir)), exist_ok=True)
+            resize_image_folder(image_dir, staging_dir, factor)
+            os.replace(staging_dir, resized_dir)
+        original_init(self, data_dir=data_dir, factor=factor, **kwargs)
+
+    parser_class.__init__ = __init__
+
+
 def attach_depths(dataset_class):
     """Supply the depth supervision simple_trainer's --depth_loss consumes.
 
@@ -135,7 +159,7 @@ sys.path.insert(0, EXAMPLES_DIR)
 import gsplat  # noqa: E402
 import gsplat.losses  # noqa: E402
 import gsplat.rendering  # noqa: E402
-from datasets.colmap import Dataset, Parser  # noqa: E402
+from datasets.colmap import Dataset, Parser, _resize_image_folder  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
@@ -229,6 +253,7 @@ def load_job_parameters():
 parameters = load_job_parameters()
 if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)
+downsample_images(Parser, _resize_image_folder)
 attach_masks(Dataset)
 if parameters is not None and parameters.run_depth:
     attach_depths(Dataset)

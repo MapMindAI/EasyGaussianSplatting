@@ -62,6 +62,9 @@ docker run -it --rm --gpus all --shm-size=8g \
   '
 ```
 
+Inside the container, `scripts/gsplat_train.sh <workspace> [parameters] [result_dir]`
+runs the same training; pass it in place of the `bash -lc '...'` block.
+
 The final model and PLY files are written under
 `<workspace>/gsplat_output/`. `--shm-size=8g` is required for the data-loader
 workers; a smaller allocation can cause a bus error.
@@ -80,6 +83,9 @@ only needs the values it changes:
 iterations: 5000
 cap_max: 250000
 ```
+
+A `data_factor` above 1 trains on `<workspace>/images_<data_factor>/`, which
+the first run writes from `images/`.
 
 The local command does not run segmentation or depth generation merely because
 `run_segmentation` or `run_depth` is set in the parameters file. Run those
