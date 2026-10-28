@@ -10,9 +10,15 @@ import os
 import pathlib
 import runpy
 import sys
-import numpy as np
-import torch
-from PIL import Image
+
+# Running this file puts mapping/ on sys.path, where mapping/triton/ shadows the
+# triton package torch probes for on import.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path[:] = [path for path in sys.path if os.path.abspath(path or ".") != SCRIPT_DIR]
+
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
+from PIL import Image  # noqa: E402
 
 GSPLAT_ROOT = pathlib.Path(os.environ.get("GSPLAT_DIR", pathlib.Path(__file__).resolve().parents[1] / "third_party" / "gsplat"))
 EXAMPLES_DIR = str(GSPLAT_ROOT / "examples")
