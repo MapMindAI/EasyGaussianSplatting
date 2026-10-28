@@ -71,6 +71,8 @@ reset_every: 3000
 # In my experiments (mapping/benchmark) STRATEGY_MCMC out-performed STRATEGY_DEFAULT
 strategy: STRATEGY_MCMC
 # MCMC only: Gaussian count to converge to. Ignored by STRATEGY_DEFAULT.
+# Keep it to 2-3M at data_factor 1: gsplat indexes Gaussian-tile intersections
+# with int32, and a 6M cap passed 2^31 in one view, which stops training.
 cap_max: 500000
 
 

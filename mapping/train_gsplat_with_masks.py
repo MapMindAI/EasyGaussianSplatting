@@ -161,6 +161,26 @@ def composite_over_background(rendering, color):
     rendering.rasterization = rasterization_over_background
 
 
+INT32_MAX = 2**31 - 1
+
+
+def guard_intersection_count(rendering):
+    """gsplat indexes intersections through int32 tile offsets; past INT32_MAX they
+    wrap and surface only as an illegal memory access, some calls later."""
+    isect_tiles = rendering.isect_tiles
+
+    def guarded_isect_tiles(*args, **kwargs):
+        tiles_per_gauss, isect_ids, flatten_ids = isect_tiles(*args, **kwargs)
+        if isect_ids.numel() > INT32_MAX:
+            raise RuntimeError(
+                f"{isect_ids.numel()} Gaussian-tile intersections exceed gsplat's "
+                f"int32 limit of {INT32_MAX}; lower cap_max or raise data_factor."
+            )
+        return tiles_per_gauss, isect_ids, flatten_ids
+
+    rendering.isect_tiles = guarded_isect_tiles
+
+
 sys.path.insert(0, EXAMPLES_DIR)
 import gsplat  # noqa: E402
 import gsplat.losses  # noqa: E402
@@ -259,6 +279,7 @@ def load_job_parameters():
 parameters = load_job_parameters()
 if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)
+guard_intersection_count(gsplat.rendering)
 downsample_images(Parser, _resize_image_folder)
 attach_masks(Dataset)
 if parameters is not None and parameters.run_depth:
