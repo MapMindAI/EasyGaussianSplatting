@@ -168,10 +168,7 @@ or `shN_lr`; `pose_opt_lr` controls pose optimization when `pose_opt` is true.
 The defaults are `STRATEGY_MCMC` at 900k Gaussians, which measured best on
 `data/panorama`. `STRATEGY_MCMC` holds the count at `cap_max`, so it is how to
 ask for a specific budget on a given GPU; quality saturated around 900k there,
-and 1.5M and 2M were no better. Very high caps also hit a hard limit: gsplat
-indexes Gaussian-tile intersections with int32, and 6M at `data_factor: 1`
-passed 2^31 in one view, which stops training with an error naming `cap_max`
-and `data_factor`.
+and 1.5M and 2M were no better.
 
 `STRATEGY_DEFAULT` instead grows the count from the image-plane gradient, shaped
 by `grow_grad2d`, `prune_opa`, `reset_every` and `absgrad`. It is harder to
