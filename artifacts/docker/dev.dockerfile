@@ -88,3 +88,5 @@ RUN bash /tmp/installers/install_gsplat.sh && rm /tmp/installers/install_gsplat.
 # third_party/EasyTensorRT for its own plotting entrypoint.
 RUN conda run --no-capture-output -n gsplat \
       pip install --no-cache-dir pycolmap==4.2.0.dev0 "tritonclient[grpc]" jupyterlab opencv-python-headless
+
+RUN pip install jupyterlab
