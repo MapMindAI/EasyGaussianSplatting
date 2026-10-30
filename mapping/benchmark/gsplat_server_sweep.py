@@ -97,8 +97,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("model_dir", type=Path)
     parser.add_argument("--server", default="localhost:50051")
-    parser.add_argument("--configurations", type=Path,
-                        default=Path(__file__).resolve().parent / "configurations")
+    parser.add_argument("--configurations", type=Path, required=True)
     parser.add_argument("--results", type=Path, required=True)
     arguments = parser.parse_args()
 
