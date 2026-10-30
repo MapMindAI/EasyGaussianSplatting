@@ -10,8 +10,8 @@
 # sweep resumes where it stopped.
 set -euo pipefail
 
-if [ $# -lt 1 ]; then
-  echo "Usage: $0 <cubemap_reconstruction_dir>" >&2
+if [ $# -lt 2 ]; then
+  echo "Usage: $0 <cubemap_reconstruction_dir> <configurations_dir>" >&2
   exit 1
 fi
 
@@ -21,11 +21,15 @@ source "${SCRIPTS_DIR}/docker_common.sh"
 REL_CUBEMAP_DIR="$(repo_relative_path "$1")"
 SWEEP_DIR="${REPO_ROOT}/${REL_CUBEMAP_DIR}/sweep"
 
-# The configurations are the same parameter files the server sweep uses
-# (mapping/benchmark/configurations), so the two drivers cannot drift apart.
-CONFIGURATIONS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/configurations" && pwd)"
+CONFIGURATIONS_DIR="${REPO_ROOT}/$(repo_relative_path "$2")"
+shopt -s nullglob
+configurations=("${CONFIGURATIONS_DIR}"/*.proto.txt)
+if [ ${#configurations[@]} -eq 0 ]; then
+  echo "No configurations under ${CONFIGURATIONS_DIR}" >&2
+  exit 1
+fi
 
-for configuration in "${CONFIGURATIONS_DIR}"/*.proto.txt; do
+for configuration in "${configurations[@]}"; do
   name="$(basename "${configuration}" .proto.txt)"
   run_dir="${SWEEP_DIR}/${name}"
 

@@ -1,3 +1,0 @@
-cap_max: 2000000
-sh_degree: 2
-ssim_lambda: 0.2

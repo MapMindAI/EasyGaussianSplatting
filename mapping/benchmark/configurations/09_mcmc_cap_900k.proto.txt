@@ -1,1 +1,0 @@
-ssim_lambda: 0.2

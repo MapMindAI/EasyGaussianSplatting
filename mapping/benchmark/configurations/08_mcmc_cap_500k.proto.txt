@@ -1,3 +1,0 @@
-cap_max: 500000
-ssim_lambda: 0.2
-packed: false
