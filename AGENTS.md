@@ -28,7 +28,6 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 ├── mapping/
 │   ├── benchmark/                # Parameter sweeps and their Markdown report.
 │   │   ├── summarize_gsplat_sweep_test.py # Report sections and PLY geometry.
-│   │   └── configurations/       # One JobParameters file per swept configuration.
 │   ├── triton/                   # Everything served by Triton.
 │   │   ├── clients.py      # SuperPoint/LightGlue/SALAD/SegFormer/DA3 clients.
 │   │   ├── extraction.py         # Features into the database and its sidecar.

@@ -216,22 +216,23 @@ apart from the sky.
 ## Comparing parameter configurations
 
 `mapping/benchmark/gsplat_sweep.sh` trains one model per configuration from a single
-cube-map reconstruction, into `<reconstruction>/sweep/<name>/`. Runs are
-sequential, and a configuration that already recorded evaluation metrics is
-skipped, so an interrupted sweep resumes where it stopped:
+cube-map reconstruction, into `<reconstruction>/sweep/<name>/`. Pass a directory
+of text-format `JobParameters` files inside the repo. Runs are sequential, and
+a configuration that already recorded evaluation metrics is skipped:
 
 ```
-mapping/benchmark/gsplat_sweep.sh data/panorama
+mapping/benchmark/gsplat_sweep.sh data/panorama path/to/configurations
 ```
 
-Both this and the server-side sweep read the same parameter files from
-`mapping/benchmark/configurations/`, so add or edit a file there to change what
-is compared. To sweep on a remote GPU instead, `mapping/benchmark/gsplat_server_sweep.py`
-submits the same configurations to a training server (see `doc/gsplat_server.md`):
+The [historical sweep configurations](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Parameter-Sweep)
+are documented in the wiki. To sweep on a remote GPU instead,
+`mapping/benchmark/gsplat_server_sweep.py` submits the same files to a training
+server (see `doc/gsplat_server.md`):
 
 ```
 python3 mapping/benchmark/gsplat_server_sweep.py data/panorama \
-  --server host:50051 --results data/panorama/sweep_windows
+  --server host:50051 --configurations path/to/configurations \
+  --results data/panorama/sweep_windows
 ```
 
 The report is generated output and is not tracked: it links
