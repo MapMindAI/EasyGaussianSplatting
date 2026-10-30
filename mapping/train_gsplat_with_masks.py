@@ -229,6 +229,7 @@ def load_job_parameters():
         "--data_factor", str(parameters.data_factor),
         "--max_steps", str(parameters.iterations),
         "--eval_steps", str(parameters.iterations),
+        "--test_every", str(parameters.test_every),
         "--save_steps", str(parameters.iterations),
         "--ply_steps", str(parameters.iterations),
         "--opacity_reg", number(parameters.floater_reg_weight),

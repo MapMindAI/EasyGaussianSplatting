@@ -26,6 +26,7 @@ def test_defaults_carry_the_shipped_values():
     assert parameters.pose_opt_lr == pytest.approx(1e-5)
     assert parameters.strategy == gsplat_pb2.STRATEGY_MCMC
     assert parameters.absgrad is True
+    assert parameters.test_every == 8
 
 
 def test_omitted_fields_keep_the_default_rather_than_proto3_zero(tmp_path):
