@@ -83,7 +83,12 @@ only needs the values it changes:
 ```text
 iterations: 5000
 cap_max: 250000
+min_opacity: 0.01
 ```
+
+With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
+refinement; `cap_max` limits the count. `prune_opa` applies only to
+DefaultStrategy.
 
 A `data_factor` above 1 trains on `<workspace>/images_<data_factor>/`, which
 the first run writes from `images/`.

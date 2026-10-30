@@ -9,9 +9,9 @@
 
 
 # Number of optimization steps and evaluation/save schedule.
-iterations: 30000
+iterations: 50000
 # Hold out every test_every-th image for the final evaluation; raise it on large captures.
-test_every: 8
+test_every: 64
 # COLMAP image downsample factor used by the trainer.
 data_factor: 1
 # Regularization weight applied to both opacity and scale terms.
@@ -36,7 +36,7 @@ prune_scale2d: 0.15   # 0.15
 # First iteration at which densification runs.
 refine_start_iter: 500
 # Last iteration at which densification runs.
-refine_stop_iter: 30000
+refine_stop_iter: 40000
 # Number of iterations between densification passes.
 refine_every: 100
 # Number of iterations between opacity resets.
@@ -53,7 +53,9 @@ reset_every: 3000
 # In my experiments (mapping/benchmark) STRATEGY_MCMC out-performed STRATEGY_DEFAULT
 strategy: STRATEGY_MCMC
 # MCMC only: Gaussian count to converge to. Ignored by STRATEGY_DEFAULT.
-cap_max: 4000000
+cap_max: 8000000
+# MCMC only: relocate Gaussians at or below this opacity during refinement.
+min_opacity: 0.005
 
 
 # Spherical-harmonic degree for view-dependent colour.

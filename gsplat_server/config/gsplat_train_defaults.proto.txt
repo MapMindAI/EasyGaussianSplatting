@@ -12,7 +12,8 @@
 # Gaussians. absgrad uses absolute rather than averaged gradients and therefore
 # requires a higher threshold than the gsplat default.
 #
-# prune_opa removes Gaussians below the opacity threshold. grow_scale3d selects
+# prune_opa removes Gaussians below the opacity threshold with DefaultStrategy.
+# MCMC relocates Gaussians at or below min_opacity instead. grow_scale3d selects
 # duplication below the 3D scale threshold; prune_scale3d removes larger ones.
 # prune_scale2d removes Gaussians covering too much of an image while the
 # refinement scale window is active.
@@ -74,6 +75,8 @@ reset_every: 3000
 strategy: STRATEGY_MCMC
 # MCMC only: Gaussian count to converge to. Ignored by STRATEGY_DEFAULT.
 cap_max: 500000
+# MCMC only: relocate Gaussians at or below this opacity during refinement.
+min_opacity: 0.005
 
 
 # Spherical-harmonic degree for view-dependent colour.

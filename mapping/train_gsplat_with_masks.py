@@ -206,7 +206,10 @@ def strategy_flags(parameters):
         "--strategy.refine-every", str(parameters.refine_every),
     ]
     if parameters.strategy == gsplat_pb2.STRATEGY_MCMC:
-        return flags + ["--strategy.cap-max", str(parameters.cap_max)]
+        return flags + [
+            "--strategy.cap-max", str(parameters.cap_max),
+            "--strategy.min-opacity", number(parameters.min_opacity),
+        ]
 
     flags += [
         "--strategy.grow-grad2d", number(parameters.grow_grad2d),
