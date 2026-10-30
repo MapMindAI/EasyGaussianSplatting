@@ -95,6 +95,8 @@ message JobParameters {
   float shN_lr = 30;
   // Learning rate for camera-pose optimization. Only read when pose_opt is set.
   float pose_opt_lr = 31;
+  // Hold out every test_every-th image for the final evaluation.
+  int32 test_every = 32;
 
   message Color {
     // Channel intensities in [0, 1].

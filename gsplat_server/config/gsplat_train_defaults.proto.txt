@@ -30,6 +30,8 @@
 
 # Number of optimization steps and evaluation/save schedule.
 iterations: 30000
+# Hold out every test_every-th image for the final evaluation; raise it on large captures.
+test_every: 8
 # COLMAP image downsample factor used by the trainer.
 data_factor: 1
 # Regularization weight applied to both opacity and scale terms.
