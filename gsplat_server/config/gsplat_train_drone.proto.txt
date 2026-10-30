@@ -1,32 +1,12 @@
-# JobParameters defaults shipped by the gsplat training server.
+# Determined by the benchmark running in https://github.com/MapMindAI/EasyGaussianSplatting/pull/47
+#  using a data set of 1k panorama images (6k cube images), of various height and detail levels.
 #
-# The main detail lever is the final Gaussian count. Lower grow_grad2d or
-# prune_opa, or raise refine_stop_iter, to retain more detail at the cost of
-# GPU memory. DefaultStrategy has no upper bound on the count.
-#
-# floater_reg_weight is applied to both opacity_reg and scale_reg. It suppresses
-# low-opacity and oversized Gaussians; lower it for more detail and higher GPU
-# memory use.
-#
-# grow_grad2d is the image-plane gradient threshold for splitting or duplicating
-# Gaussians. absgrad uses absolute rather than averaged gradients and therefore
-# requires a higher threshold than the gsplat default.
-#
-# prune_opa removes Gaussians below the opacity threshold. grow_scale3d selects
-# duplication below the 3D scale threshold; prune_scale3d removes larger ones.
-# prune_scale2d removes Gaussians covering too much of an image while the
-# refinement scale window is active.
-#
-# refine_start_iter, refine_stop_iter, and refine_every control densification.
-# reset_every periodically resets opacity so unused Gaussians can be pruned.
-# strategy selects between the two densification strategies. STRATEGY_DEFAULT
-# has no ceiling on the Gaussian count, so on a fixed GPU it grows until
-# training runs out of memory. STRATEGY_MCMC holds the count at cap_max,
-# which is how to ask for a specific budget.
-#
-# This file is the schema's defaults; a file passed to --parameters is
-# layered over it and only has to name what it changes. Its schema is
-# gsplat.proto.
+# 1. reference to https://github.com/MapMindAI/EasyGaussianSplatting/pull/45, the current gsplat
+#    code has bug, when cap_max of MCMC went large, mostly came from re-localization of points.
+#    As a result, we need to manage to decrease the re-localization count. we could
+#    * decrease the learning rates.
+#    * decrease floater_reg_weight.
+
 
 # Number of optimization steps and evaluation/save schedule.
 iterations: 30000
