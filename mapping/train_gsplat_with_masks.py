@@ -8,6 +8,7 @@ simple_trainer's own arguments.
 """
 import os
 import pathlib
+import pprint
 import runpy
 import sys
 
@@ -163,6 +164,7 @@ def composite_over_background(rendering, color):
 
 sys.path.insert(0, EXAMPLES_DIR)
 import gsplat  # noqa: E402
+import gsplat.distributed  # noqa: E402
 import gsplat.losses  # noqa: E402
 import gsplat.rendering  # noqa: E402
 from datasets.colmap import Dataset, Parser, _resize_image_folder  # noqa: E402
@@ -257,6 +259,17 @@ def load_job_parameters():
     return parameters
 
 
+original_cli = gsplat.distributed.cli
+
+
+def cli_with_configuration(function, configuration, verbose=False):
+    print("Training configuration:", flush=True)
+    pprint.pprint(vars(configuration), sort_dicts=False, width=100)
+    sys.stdout.flush()
+    return original_cli(function, configuration, verbose=verbose)
+
+
+gsplat.distributed.cli = cli_with_configuration
 parameters = load_job_parameters()
 if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)

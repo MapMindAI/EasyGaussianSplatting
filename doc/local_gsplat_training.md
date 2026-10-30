@@ -69,6 +69,7 @@ The final model and PLY files are written under
 `<workspace>/gsplat_output/`. `--shm-size=8g` is required for the data-loader
 workers; a smaller allocation can cause a bus error.
 The named Torch-cache volume preserves downloaded model weights between runs.
+The resolved training configuration is printed before training starts.
 
 Use `easygaussiansplatting:dev` in place of the published image when you built
 the image locally.
