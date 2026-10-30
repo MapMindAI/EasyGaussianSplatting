@@ -33,7 +33,8 @@ pip install torch==2.9.1 torchvision==0.24.1 \
 
 # Broad architecture coverage (Turing through Hopper) so the compiled
 # extensions run on whatever GPU the image ends up on, not just the dev box.
-export TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;8.9;9.0"
+export TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0"
+export NUM_CHANNELS="3,4"
 cd "${GSPLAT_DIR}"
 pip install --no-build-isolation -e .
 pip install -r examples/requirements.txt --no-build-isolation
