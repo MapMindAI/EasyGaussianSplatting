@@ -69,6 +69,7 @@ The final model and PLY files are written under
 `<workspace>/gsplat_output/`. `--shm-size=8g` is required for the data-loader
 workers; a smaller allocation can cause a bus error.
 The named Torch-cache volume preserves downloaded model weights between runs.
+The resolved training configuration is printed before training starts.
 
 Use `easygaussiansplatting:dev` in place of the published image when you built
 the image locally.
@@ -82,7 +83,12 @@ only needs the values it changes:
 ```text
 iterations: 5000
 cap_max: 250000
+min_opacity: 0.01
 ```
+
+With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
+refinement; `cap_max` limits the count. `prune_opa` applies only to
+DefaultStrategy.
 
 A `data_factor` above 1 trains on `<workspace>/images_<data_factor>/`, which
 the first run writes from `images/`.
