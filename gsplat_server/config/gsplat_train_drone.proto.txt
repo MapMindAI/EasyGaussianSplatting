@@ -15,7 +15,7 @@ test_every: 64
 # COLMAP image downsample factor used by the trainer.
 data_factor: 1
 # Regularization weight applied to both opacity and scale terms.
-floater_reg_weight: 0.01
+floater_reg_weight: 0.005
 
 # Minimum opacity below which a Gaussian is pruned. It also sets the opacity
 # reset floor, which gsplat takes as prune_opa * 2, so lowering it does not
@@ -53,7 +53,7 @@ reset_every: 3000
 # In my experiments (mapping/benchmark) STRATEGY_MCMC out-performed STRATEGY_DEFAULT
 strategy: STRATEGY_MCMC
 # MCMC only: Gaussian count to converge to. Ignored by STRATEGY_DEFAULT.
-cap_max: 8000000
+cap_max: 10000000
 # MCMC only: relocate Gaussians at or below this opacity during refinement.
 min_opacity: 0.005
 
@@ -64,7 +64,7 @@ sh_degree: 3
 # on every metric at no cost.
 ssim_lambda: 0.5
 # Packed rasterization: less GPU memory, slightly slower.
-packed: true
+packed: false
 
 # Gaussian learning rates. These match simple_trainer's defaults.
 # Positions are scaled by the scene size internally, so keep means_lr small.
@@ -78,7 +78,7 @@ sh0_lr: 0.0025
 shN_lr: 0.000125
 
 # Optimize camera poses alongside the model.
-pose_opt: true
+pose_opt: false
 # Learning rate for camera-pose optimization. Only read when pose_opt is set.
 pose_opt_lr: 0.00001
 # Segment people out of the images before training, when the upload carried no
