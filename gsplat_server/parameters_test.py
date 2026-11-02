@@ -25,6 +25,7 @@ def test_defaults_carry_the_shipped_values():
     assert parameters.shN_lr == pytest.approx(1.25e-4)
     assert parameters.pose_opt_lr == pytest.approx(1e-5)
     assert parameters.strategy == gsplat_pb2.STRATEGY_MCMC
+    assert parameters.min_opacity == pytest.approx(0.005)
     assert parameters.absgrad is True
     assert parameters.test_every == 8
 
@@ -58,6 +59,16 @@ def test_named_fields_override_the_default(tmp_path):
     assert parameters.means_lr == pytest.approx(3e-4)
     assert parameters.pose_opt_lr == pytest.approx(2e-5)
     assert parameters.iterations == 30000
+
+
+def test_mcmc_min_opacity_override(tmp_path):
+    path = tmp_path / "mcmc.textproto"
+    path.write_text("min_opacity: 0.01\n")
+
+    parameters = load_parameters(path)
+
+    assert parameters.strategy == gsplat_pb2.STRATEGY_MCMC
+    assert parameters.min_opacity == pytest.approx(0.01)
 
 
 def test_unknown_field_is_rejected(tmp_path):

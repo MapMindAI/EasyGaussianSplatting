@@ -159,7 +159,12 @@ run. It is layered over the shipped defaults, so it only names what it changes:
 
 ```
 cap_max: 1500000
+min_opacity: 0.01
 ```
+
+With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
+refinement; it does not reduce their count. `prune_opa` applies only to
+DefaultStrategy.
 
 The Gaussian learning rates match `simple_trainer` by default and can be
 overridden as `means_lr`, `scales_lr`, `opacities_lr`, `quats_lr`, `sh0_lr`,

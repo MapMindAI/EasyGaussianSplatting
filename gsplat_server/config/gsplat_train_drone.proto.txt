@@ -1,0 +1,106 @@
+# Determined by the benchmark running in https://github.com/MapMindAI/EasyGaussianSplatting/pull/47
+#  using a data set of 1k panorama images (6k cube images), of various height and detail levels.
+#
+# 1. reference to https://github.com/MapMindAI/EasyGaussianSplatting/pull/45, the current gsplat
+#    code has bug, when cap_max of MCMC went large, mostly came from re-localization of points.
+#    As a result, we need to manage to decrease the re-localization count. we could
+#    * decrease the learning rates.
+#    * decrease floater_reg_weight.
+
+
+# Number of optimization steps and evaluation/save schedule.
+iterations: 50000
+# Hold out every test_every-th image for the final evaluation; raise it on large captures.
+test_every: 64
+# COLMAP image downsample factor used by the trainer.
+data_factor: 1
+# Regularization weight applied to both opacity and scale terms.
+floater_reg_weight: 0.005
+
+# Minimum opacity below which a Gaussian is pruned. It also sets the opacity
+# reset floor, which gsplat takes as prune_opa * 2, so lowering it does not
+# simply prune less: at 0.002 every reset clamps opacities to 0.004, and with
+# floater_reg_weight 0.01 pushing them down they never recover above the prune
+# threshold. That collapses this dataset from 409k Gaussians to 10k.
+prune_opa: 0.005    # 0.005
+# Image-plane gradient threshold for Gaussian splitting or duplication.
+grow_grad2d: 0.0006   # 0.0006
+# Use absolute image-plane gradients instead of averaged gradients, following the AbsGS paper.
+absgrad: true
+# 3D scale below which densification duplicates a Gaussian.
+grow_scale3d: 0.01   # 0.01
+# Maximum 3D scale; larger Gaussians are pruned.
+prune_scale3d: 0.1  # 0.1
+# Maximum image-plane scale before a Gaussian is pruned.
+prune_scale2d: 0.15   # 0.15
+# First iteration at which densification runs.
+refine_start_iter: 500
+# Last iteration at which densification runs.
+refine_stop_iter: 40000
+# Number of iterations between densification passes.
+refine_every: 100
+# Number of iterations between opacity resets.
+reset_every: 3000
+
+
+# Densification strategy: STRATEGY_DEFAULT or STRATEGY_MCMC.
+# STRATEGY_DEFAULT: relying mainly on gradient-threshold-based split/clone/prune rules
+# STRATEGY_MCMC tries to maintain a population of Gaussians while moving that population
+# toward useful parts of the scene, by periodically:
+# * teleporting low-opacity Gaussians to locations associated with high opacity,
+# * adding new Gaussians according to the opacity distribution,
+# * perturbing Gaussian positions with noise.
+# In my experiments (mapping/benchmark) STRATEGY_MCMC out-performed STRATEGY_DEFAULT
+strategy: STRATEGY_MCMC
+# MCMC only: Gaussian count to converge to. Ignored by STRATEGY_DEFAULT.
+cap_max: 10000000
+# MCMC only: relocate Gaussians at or below this opacity during refinement.
+min_opacity: 0.005
+
+
+# Spherical-harmonic degree for view-dependent colour.
+sh_degree: 3
+# Weight of the SSIM term in the loss; the rest is L1. 0.5 beat gsplat's 0.2
+# on every metric at no cost.
+ssim_lambda: 0.5
+# Packed rasterization: less GPU memory, slightly slower.
+packed: false
+
+# Gaussian learning rates. These match simple_trainer's defaults.
+# Positions are scaled by the scene size internally, so keep means_lr small.
+means_lr: 0.00008
+scales_lr: 0.001
+opacities_lr: 0.025
+quats_lr: 0.001
+# Degree-zero spherical harmonics control base colour; higher degrees control
+# view-dependent detail and train more slowly.
+sh0_lr: 0.0025
+shN_lr: 0.000125
+
+# Optimize camera poses alongside the model.
+pose_opt: false
+# Learning rate for camera-pose optimization. Only read when pose_opt is set.
+pose_opt_lr: 0.00001
+# Segment people out of the images before training, when the upload carried no
+# masks/ of its own. Costs a few minutes and needs the segmentation weights.
+run_segmentation: false
+# Mask the sky along with the people. Only read when run_segmentation is set.
+# Left on, the sky is masked out: it is at infinity, so the Gaussians that chase
+# it are floaters that cost memory and blur the geometry below. It is off here
+# because background_color now gives the sky something to render as.
+mask_sky: false
+# Colour the splats are composited over, in [0, 1] per channel. Leave it out
+# and gsplat renders onto black instead. See doc/gsplat_server.md.
+background_color { red: 1.0 green: 1.0 blue: 1.0 }
+
+
+# TODO: depth loss still need more work. depth and render performance seems could
+#       be obtain at the same time
+# Predict depth with Depth Anything 3 and supervise training on it, when the
+# upload carried no depths/ of its own. Off by default: it costs another pass
+# over the images and needs the depth model served alongside the others.
+run_depth: false
+# Weight of the depth term in the loss. gsplat's own default, which is tuned
+# for the sparse SfM depths rather than the denser ones generate_depth.py
+# writes, so lower it if depth starts to dominate the photometric terms.
+depth_lambda: 0.01

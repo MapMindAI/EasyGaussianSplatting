@@ -97,6 +97,8 @@ message JobParameters {
   float pose_opt_lr = 31;
   // Hold out every test_every-th image for the final evaluation.
   int32 test_every = 32;
+  // MCMC only: opacity at or below which a Gaussian is relocated.
+  float min_opacity = 33;
 
   message Color {
     // Channel intensities in [0, 1].
