@@ -162,6 +162,11 @@ cap_max: 1500000
 min_opacity: 0.01
 ```
 
+For the Wixi Chongansi drone scene, use
+`gsplat_server/config/gsplat_train_drone.proto.txt`; its
+`floater_reg_weight: 0.003` produced the best reported PSNR and SSIM in the
+[scene benchmark](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Wixi-Chongansi-Drone-Scene).
+
 With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
 refinement; it does not reduce their count. `prune_opa` applies only to
 DefaultStrategy.
