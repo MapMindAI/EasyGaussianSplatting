@@ -15,7 +15,7 @@ test_every: 64
 # COLMAP image downsample factor used by the trainer.
 data_factor: 1
 # Regularization weight applied to both opacity and scale terms.
-floater_reg_weight: 0.005
+floater_reg_weight: 0.003
 
 # Minimum opacity below which a Gaussian is pruned. It also sets the opacity
 # reset floor, which gsplat takes as prune_opa * 2, so lowering it does not
