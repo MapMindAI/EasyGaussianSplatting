@@ -11,6 +11,8 @@ global SfM (GLOMAP):
    is mounted on it by a pure rotation, since all faces share the panorama's
    optical centre. Global SfM then solves one pose per panorama instead of one
    per face, with the faces' relative orientations held at their exact values.
+   Each face's EXIF records an 18 mm focal length in 35 mm format, the
+   90-degree FOV, so other tools read the same intrinsics.
 2. **Feature extraction** — SuperPoint keypoints and descriptors into the
    database's own tables, one SALAD place-recognition descriptor per image into
    a `global_features.npz` sidecar, which COLMAP's schema has nowhere to put.
@@ -100,21 +102,22 @@ The workspace ends up holding `images/<face>/`, `database.db`,
 
 ## Georeferencing with the capture's GPS
 
-Mapping first reads GPS EXIF from sampled `images/front/*.jpg` files. For a
-video whose sampled images have no GPS, it reads the matching Insta360 LRV under
-the workspace. The camera number may differ between the MP4 and LRV:
+Mapping reads GPS EXIF from sampled `images/front/*.jpg` files. For a video
+whose faces have no GPS, it first writes GPS EXIF to every face from the DJI
+SRT beside the video (same basename) or, failing that, the matching Insta360
+LRV under the workspace, interpolated to each frame's time. The camera number
+may differ between the MP4 and LRV:
 
 ```
 VID_20260904_155849_00_009.mp4
 LRV_20260904_155849_01_009.lrv
 ```
 
-Videos with neither image GPS nor a matching LRV still reconstruct without GPS
+Videos with no image GPS, SRT, or matching LRV still reconstruct without GPS
 priors or map alignment.
 
-DJI image EXIF comes from `scripts/dji_run_stitch.sh`; Insta360 writes about one
-WGS84 fix a second into LRV telemetry. ExifTool reads either source, and each fix is
-projected into the capture's UTM zone and written to `database.db` as a COLMAP
+DJI writes a WGS84 fix per video frame into the SRT; Insta360 writes about one a
+second into LRV telemetry. Each fix is projected into the capture's UTM zone and written to `database.db` as a COLMAP
 position prior, one per image -- every face of a panorama shares its optical
 centre, so they share its position. Those priors are recorded, not solved with:
 `pycolmap.global_mapping` reads pose priors only for their gravity, and the

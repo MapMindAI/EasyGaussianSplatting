@@ -11,15 +11,13 @@ solved with global SfM.
 ```mermaid
 flowchart TD
     INSV["Insta360 INSV"] --> ISTITCH["Stitch panorama MP4"] --> IFACES["Six pinhole faces + COLMAP rig"]
-    OSV["DJI OSV"] --> DEXPORT["Export panorama MP4"] --> DFACES["Six pinhole faces + COLMAP rig<br/>dji_run_stitch.sh"]
-    SRT["DJI SRT GPS"] --> DFACES
+    OSV["DJI OSV"] --> DEXPORT["Export panorama MP4"] --> IFACES
     IFACES --> FEATURES["SuperPoint + SALAD features"]
-    DFACES --> FEATURES
     TRITON["Triton models"] --> FEATURES
     FEATURES --> MATCH["LightGlue matching"] --> SFM["Global SfM"] --> LEVEL["Gravity levelling"]
     TRITON --> MATCH
-    DFACES --> EXIF["Image GPS EXIF"] --> ALIGN["Optional GPS alignment"]
-    LRV["Insta360 LRV GPS fallback"] --> ALIGN
+    SRT["DJI SRT or Insta360 LRV GPS"] --> EXIF["Face GPS EXIF"]
+    IFACES --> EXIF --> ALIGN["Optional GPS alignment"]
     LEVEL --> ALIGN --> SPARSE["Sparse COLMAP model"]
     SPARSE --> MASKS["Person and sky masks"]
     SPARSE --> DEPTH["DA3 depth (optional)"]
@@ -32,8 +30,8 @@ flowchart TD
     PLY --> VIEWER["Viewer"]
 ```
 
-Mapping reads GPS from reference-face image EXIF first, then falls back to
-Insta360 LRV telemetry when those images have no GPS.
+Mapping aligns to the GPS in the reference-face EXIF. Faces without it are
+first tagged from a DJI SRT beside the video or the Insta360 LRV.
 
 ## Running the full pipeline in one command
 
@@ -69,9 +67,7 @@ Existing person-segmentation masks are reused on later runs.
 To stitch without reconstructing,
 `scripts/insta360_run_stitch.sh <workspace>` stitches every INSV under that
 workspace; see [doc/tools.md](doc/tools.md).
-For DJI panorama footage already exported as MP4, `scripts/dji_run_stitch.sh`
-creates six GPS-tagged pinhole faces for every MP4 with a matching SRT in the
-workspace.
+For DJI panorama footage, export the OSV as an MP4 and keep its SRT beside it.
 
 ![GS reconstruction viewer](assets/reconstruction_gs_viewer.png)
 
@@ -121,8 +117,7 @@ For direct local training from a completed COLMAP workspace, see
 
 1. [Prepare the mapping workspace](doc/tools.md): run
    `scripts/insta360_run_stitch.sh ${WORKSPACE_PATH}` for Insta360, or export
-   DJI OSV to a panorama MP4 and run `scripts/dji_run_stitch.sh ${WORKSPACE_PATH}`
-   to create six GPS-tagged pinhole faces.
+   DJI OSV to a panorama MP4 beside its SRT.
 2. [Mapping a panorama capture](doc/panorama_mapping.md).
 
 ```bash

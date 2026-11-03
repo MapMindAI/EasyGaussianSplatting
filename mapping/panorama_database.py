@@ -8,6 +8,7 @@ centre. Mapping the faces as a rig leaves global SfM one pose to solve per
 panorama instead of one per face, and holds the faces' relative orientations
 at their exact values.
 """
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,6 +41,10 @@ DEFAULT_FACES = ("front", "right", "back", "left", "up", "down")
 # The rig's reference sensor: every other face's sensor_from_rig is expressed
 # relative to this one.
 REFERENCE_FACE = "front"
+
+# A 90-degree face spans a 36 mm full-frame width at an 18 mm focal length, so
+# this EXIF gives a face_size / 2 pixel focal length at any face size.
+FOCAL_LENGTH_IN_35MM_FORMAT = 18
 
 
 def face_to_equirect_matrix(face):
@@ -100,6 +105,16 @@ def face_camera(camera_id, face_size):
     # lengths from the view graph unless it is told that.
     camera.has_prior_focal_length = True
     return camera
+
+
+def write_focal_length_exif(images_dir, faces):
+    subprocess.run(
+        ["exiftool", "-overwrite_original", "-n", "-ext", "jpg",
+         f"-FocalLength={FOCAL_LENGTH_IN_35MM_FORMAT}",
+         f"-FocalLengthIn35mmFormat={FOCAL_LENGTH_IN_35MM_FORMAT}",
+         *(str(images_dir / face) for face in faces)],
+        capture_output=True, text=True, check=True,
+    )
 
 
 def default_face_size(video_path):
@@ -297,6 +312,7 @@ def build_database(video_paths, workspace_path, frame_rate, face_size, faces):
 
     if image_id == 0:
         sys.exit(f"Extracted no frames from {', '.join(map(str, video_paths))}")
+    write_focal_length_exif(images_dir, faces)
     logging.info(
         f"Registered {image_id // len(faces)} panorama frames x {len(faces)} faces "
         f"in {database_path}"
