@@ -35,6 +35,8 @@ RUN apt-get update && \
     # when a GPU is passed through with no ICD available; this gives it one
     mesa-vulkan-drivers \
     libglfw3-dev \
+    # NVDEC-capable decoder for the mapping stage's 8K panorama frames
+    ffmpeg \
     libdc1394-dev \
     mesa-utils \
     && rm -rf /var/lib/apt/lists/*

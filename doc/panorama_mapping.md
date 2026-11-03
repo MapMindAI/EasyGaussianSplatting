@@ -11,6 +11,9 @@ global SfM (GLOMAP):
    is mounted on it by a pure rotation, since all faces share the panorama's
    optical centre. Global SfM then solves one pose per panorama instead of one
    per face, with the faces' relative orientations held at their exact values.
+   FFmpeg decodes the video on NVDEC when the GPU supports it, keeping frames on
+   the GPU until the unsampled ones are dropped; an 8K HEVC video decodes about
+   ten times faster than on the CPU, which it falls back to otherwise.
 2. **Feature extraction** — SuperPoint keypoints and descriptors into the
    database's own tables, one SALAD place-recognition descriptor per image into
    a `global_features.npz` sidecar, which COLMAP's schema has nowhere to put.
