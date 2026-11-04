@@ -1,7 +1,9 @@
-"""The capture's GPS track, as database pose priors and a map-to-world transform.
+"""The capture's GPS track, as image EXIF, database pose priors and a
+map-to-world transform.
 
 Insta360 writes a roughly 1 Hz WGS84 track into the capture's telemetry, which
-exiftool reads out of either the `.insv` or its much smaller `.lrv` proxy.
+exiftool reads out of either the `.insv` or its much smaller `.lrv` proxy. DJI
+writes one fix per video frame into an `.SRT` subtitle beside the video.
 Projecting the track into the capture's UTM zone puts it in the same metric,
 gravity-aligned frame the reconstruction is levelled into, so aligning the two
 is a similarity transform with the up axis already agreed on.
@@ -10,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -19,7 +22,7 @@ import numpy as np
 import pycolmap
 from pycolmap import logging
 
-from .panorama_database import parse_image_name
+from .panorama_database import image_name, parse_image_name
 
 # Horizontal fixes are good to a few metres; the altitude on the same track
 # wanders over ten.
@@ -184,6 +187,79 @@ def read_fixes(video_path):
     return fixes
 
 
+def read_srt_fixes(path):
+    """A DJI SRT's fixes, timed by their subtitles from the start of the video."""
+    fixes = []
+    for block in re.split(r"\n\s*\n", Path(path).read_text(encoding="utf-8-sig")):
+        lines = block.splitlines()
+        if len(lines) < 3:
+            continue
+        timestamp = re.match(r"(\d+):(\d+):(\d+),(\d+)\s+-->", lines[1])
+        latitude = re.search(r"\[latitude:\s*([-+\d.]+)\]", block)
+        longitude = re.search(r"\[longitude:\s*([-+\d.]+)\]", block)
+        altitude = re.search(r"abs_alt:\s*([-+\d.]+)", block)
+        if not all((timestamp, latitude, longitude, altitude)):
+            raise ValueError(f"Missing time or GPS in SRT entry {lines[0]} of {path}")
+        hours, minutes, seconds, milliseconds = map(int, timestamp.groups())
+        fixes.append(GpsFix(
+            hours * 3600 + minutes * 60 + seconds + milliseconds / 1000,
+            float(latitude.group(1)), float(longitude.group(1)),
+            float(altitude.group(1)),
+        ))
+    if not fixes:
+        raise RuntimeError(f"{path} carries no GPS track")
+    return fixes
+
+
+def interpolate(times, columns, seconds):
+    """`columns` interpolated at `seconds` along the sorted `times`, or None
+    with no sample within MAX_INTERPOLATION_GAP.
+
+    Off either end the nearest sample is the only neighbour, so the gap check
+    rejects a time outside the track without a separate bounds check.
+    """
+    index = int(np.searchsorted(times, seconds))
+    gap = min(abs(times[i] - seconds) for i in (index - 1, index) if 0 <= i < len(times))
+    if gap > MAX_INTERPOLATION_GAP:
+        return None
+    return np.array([np.interp(seconds, times, column) for column in columns.T])
+
+
+def write_image_fixes(image_directory, faces, video, fixes):
+    """Tags every face of each sampled frame in `video` with its GPS EXIF.
+
+    Returns the fixes written, timed from the start of the video.
+    """
+    times = np.array([fix.seconds for fix in fixes])
+    columns = np.array([(fix.latitude, fix.longitude, fix.altitude) for fix in fixes])
+    written = []
+    arguments = []
+    for frame_index in range(video.start_frame_index, video.stop_frame_index):
+        seconds = (frame_index - video.start_frame_index) * video.seconds_per_frame
+        values = interpolate(times, columns, seconds)
+        if values is None:
+            continue
+        fix = GpsFix(seconds, *map(float, values))
+        written.append(fix)
+        arguments += [
+            f"-GPSLatitude={abs(fix.latitude)}",
+            f"-GPSLatitudeRef={'N' if fix.latitude >= 0 else 'S'}",
+            f"-GPSLongitude={abs(fix.longitude)}",
+            f"-GPSLongitudeRef={'E' if fix.longitude >= 0 else 'W'}",
+            f"-GPSAltitude={abs(fix.altitude)}",
+            f"-GPSAltitudeRef={0 if fix.altitude >= 0 else 1}",
+            *(str(image_directory / image_name(face, frame_index)) for face in faces),
+            "-execute",
+        ]
+    if arguments:
+        # One exiftool process for the whole video rather than one per frame.
+        subprocess.run(
+            ["exiftool", "-@", "-", "-common_args", "-overwrite_original", "-n"],
+            input="\n".join(arguments) + "\n", capture_output=True, text=True, check=True,
+        )
+    return written
+
+
 def read_image_fixes(image_directory, start_frame_index, stop_frame_index,
                      seconds_per_frame):
     """GPS fixes from sampled reference-face JPEGs in one video range."""
@@ -243,19 +319,8 @@ class GpsTrack:
 
     def position_at(self, seconds):
         """The interpolated position at `seconds`, or None where the track has
-        nothing close enough to say.
-
-        Off either end the nearest fix is the only neighbour, so the gap below
-        rejects a time outside the track without a separate bounds check.
-        """
-        index = int(np.searchsorted(self.seconds, seconds))
-        neighbours = [i for i in (index - 1, index) if 0 <= i < len(self.seconds)]
-        if min(abs(self.seconds[i] - seconds) for i in neighbours) > MAX_INTERPOLATION_GAP:
-            return None
-        return np.array([
-            np.interp(seconds, self.seconds, self.positions[:, axis])
-            for axis in range(3)
-        ])
+        nothing close enough to say."""
+        return interpolate(self.seconds, self.positions, seconds)
 
 
 class CaptureTracks:
@@ -277,15 +342,6 @@ class CaptureTracks:
             if start <= frame_index < stop:
                 return track.position_at((frame_index - start) * seconds_per_frame)
         return None
-
-
-def read_track(video_path):
-    track = GpsTrack(read_fixes(video_path))
-    logging.info(
-        f"Read {len(track)} GPS fixes over {track.duration:.1f} s from "
-        f"{video_path}, projected to EPSG:{track.epsg}"
-    )
-    return track
 
 
 def position_of(track, image_name, seconds_per_frame):

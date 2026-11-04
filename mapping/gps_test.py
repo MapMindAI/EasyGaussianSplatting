@@ -9,6 +9,7 @@ import pycolmap
 import pytest
 
 from mapping import gps
+from mapping.panorama_database import SampledVideo
 
 CAPTURE_START = datetime(2026, 9, 4, 7, 58, 49, tzinfo=timezone.utc)
 
@@ -179,6 +180,56 @@ def test_image_exif_fixes_use_frame_times_and_coordinate_refs(tmp_path, monkeypa
         gps.GpsFix(0.0, 31.0, 120.0, -53.0),
         gps.GpsFix(1.0, -32.0, -121.0, 4.0),
     ]
+
+
+def test_srt_fixes_follow_subtitle_times_and_absolute_altitude(tmp_path):
+    subtitles = tmp_path / "capture.SRT"
+    subtitles.write_text(
+        "1\n00:00:00,000 --> 00:00:00,033\n"
+        "2026-10-26 12:59:46.281\n"
+        "[latitude: 31.578604] [longitude: 120.296219] "
+        "[rel_alt: 11.500 abs_alt: -53.984]\n\n"
+        "2\n00:00:00,500 --> 00:00:00,533\n"
+        "2026-10-26 12:59:46.781\n"
+        "[latitude: 31.578700] [longitude: 120.296100] "
+        "[rel_alt: 12.000 abs_alt: -53.484]\n"
+    )
+
+    assert gps.read_srt_fixes(subtitles) == [
+        gps.GpsFix(0.0, 31.578604, 120.296219, -53.984),
+        gps.GpsFix(0.5, 31.5787, 120.2961, -53.484),
+    ]
+
+
+def test_image_fixes_tag_every_face_of_each_frame_in_one_exiftool_run(
+        tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        gps.subprocess, "run", lambda command, **kwargs: calls.append(kwargs["input"])
+    )
+    video = SampledVideo(tmp_path / "a.mp4", 4, 6, 0.5)
+    fixes = [gps.GpsFix(0.0, -31.0, 120.0, -2.0), gps.GpsFix(0.5, -31.5, 121.0, 3.0)]
+
+    written = gps.write_image_fixes(tmp_path, ("front", "up"), video, fixes)
+
+    assert written == fixes
+    blocks = calls[0].strip().split("\n-execute")[:-1]
+    assert len(blocks) == 2
+    first = blocks[0].split("\n")
+    assert "-GPSLatitude=31.0" in first and "-GPSLatitudeRef=S" in first
+    assert "-GPSAltitude=2.0" in first and "-GPSAltitudeRef=1" in first
+    assert first[-2:] == [str(tmp_path / "front/000004.jpg"), str(tmp_path / "up/000004.jpg")]
+    assert str(tmp_path / "front/000005.jpg") in blocks[1]
+
+
+def test_image_fixes_interpolate_and_skip_frames_far_from_the_track(tmp_path, monkeypatch):
+    monkeypatch.setattr(gps.subprocess, "run", lambda command, **kwargs: None)
+    video = SampledVideo(tmp_path / "a.mp4", 0, 3, 0.5 + gps.MAX_INTERPOLATION_GAP)
+    fixes = [gps.GpsFix(0.0, 10.0, 20.0, 5.0), gps.GpsFix(1.0, 11.0, 22.0, 7.0)]
+
+    written = gps.write_image_fixes(tmp_path, ("front",), video, fixes)
+
+    assert written == [fixes[0], gps.GpsFix(2.5, 11.0, 22.0, 7.0)]
 
 
 # --- the projected track --------------------------------------------------
