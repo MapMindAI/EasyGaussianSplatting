@@ -35,6 +35,8 @@ RUN apt-get update && \
     # when a GPU is passed through with no ICD available; this gives it one
     mesa-vulkan-drivers \
     libglfw3-dev \
+    # NVDEC-capable decoder for the mapping stage's 8K panorama frames
+    ffmpeg \
     libdc1394-dev \
     mesa-utils \
     && rm -rf /var/lib/apt/lists/*
@@ -80,11 +82,13 @@ COPY --from=gsplatsrc . /opt/gsplat
 COPY installers/install_gsplat.sh /tmp/installers/
 RUN bash /tmp/installers/install_gsplat.sh && rm /tmp/installers/install_gsplat.sh
 
-# opencv-python-headless is for scripts/run_pipeline.sh and mapping/, which only
-# need cv2 (no GUI) and so share the base env rather than a dedicated one.
-# pycolmap is pinned to the same version as the base image's COLMAP CLI.
+# Mapping shares the gsplat env; opencv-python-headless because it only needs
+# cv2 without a GUI. pycolmap is pinned to the same version as the base image's COLMAP CLI.
 # tritonclient talks to the inference server the mapping stage extracts and
 # matches features against; matplotlib is imported by the SALAD client in
 # third_party/EasyTensorRT for its own plotting entrypoint.
 RUN conda run --no-capture-output -n gsplat \
       pip install --no-cache-dir pycolmap==4.2.0.dev0 "tritonclient[grpc]" jupyterlab opencv-python-headless
+
+# Plain python3 runs the gsplat env, which holds every Python dependency.
+ENV PATH=$CONDA_DIR/envs/gsplat/bin:$PATH

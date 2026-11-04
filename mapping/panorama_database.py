@@ -8,8 +8,10 @@ centre. Mapping the faces as a rig leaves global SfM one pose to solve per
 panorama instead of one per face, and holds the faces' relative orientations
 at their exact values.
 """
+import json
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -156,22 +158,74 @@ def sampling_step(video_path, frame_rate):
     return max(1, round(rate / frame_rate)), rate
 
 
+def video_stream(video_path):
+    """Width, height and pixel format of the video's first stream."""
+    output = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=width,height,pix_fmt", "-of", "json", str(video_path)],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    stream = json.loads(output)["streams"][0]
+    return stream["width"], stream["height"], stream["pix_fmt"]
+
+
+def decode_command(video_path, step, pixel_format, use_cuda, frame_count=None):
+    """FFmpeg writing every `step`-th frame to stdout as raw BGR, stopping after
+    `frame_count` of them if given.
+
+    With CUDA, frames stay on the GPU until `select` drops the unsampled ones,
+    so only samples are downloaded: downloading every 8K frame costs as much as
+    decoding it in software.
+    """
+    select = f"select=not(mod(n\\,{step}))"
+    if use_cuda:
+        download_format = "p010le" if "10" in pixel_format else "nv12"
+        input_arguments = ["-hwaccel", "cuda", "-hwaccel_output_format", "cuda"]
+        filters = f"{select},hwdownload,format={download_format}"
+    else:
+        input_arguments, filters = [], select
+    return [
+        "ffmpeg", "-v", "error", *input_arguments, "-i", str(video_path),
+        "-vf", filters, "-fps_mode", "passthrough",
+        *(["-frames:v", str(frame_count)] if frame_count else []),
+        "-f", "rawvideo", "-pix_fmt", "bgr24", "-",
+    ]
+
+
+def cuda_decodes(video_path, step, pixel_format):
+    """Whether NVDEC can decode this video, which needs a GPU run with the
+    "video" driver capability and a codec and size the GPU supports."""
+    return subprocess.run(
+        decode_command(video_path, step, pixel_format, use_cuda=True, frame_count=1),
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+
 def iter_panorama_frames(video_path, frame_rate):
     """Yields every `frame_rate`-th frame per second of the video."""
     step, _ = sampling_step(video_path, frame_rate)
-    capture = cv2.VideoCapture(str(video_path))
-    if not capture.isOpened():
-        sys.exit(f"Could not open {video_path}")
+    width, height, pixel_format = video_stream(video_path)
+    use_cuda = cuda_decodes(video_path, step, pixel_format)
+    logging.info(f"Decoding {video_path} with {'NVDEC' if use_cuda else 'the CPU'}")
+    frame_size = width * height * 3
+    with subprocess.Popen(
+        decode_command(video_path, step, pixel_format, use_cuda), stdout=subprocess.PIPE,
+    ) as process:
+        try:
+            while len(data := process.stdout.read(frame_size)) == frame_size:
+                yield np.frombuffer(data, np.uint8).reshape(height, width, 3)
+        finally:
+            # A consumer that stops early leaves FFmpeg to exit on the closed pipe.
+            process.stdout.close()
+    if process.returncode != 0:
+        sys.exit(f"FFmpeg failed to decode {video_path}; see its error above")
 
-    index = 0
-    while capture.grab():
-        if index % step == 0:
-            ok, frame = capture.retrieve()
-            if not ok:
-                break
-            yield frame
-        index += 1
-    capture.release()
+
+def write_face(path, panorama, remap):
+    cv2.imwrite(
+        str(path),
+        cv2.remap(panorama, *remap, cv2.INTER_LINEAR, borderMode=cv2.BORDER_WRAP),
+    )
 
 
 @dataclass(frozen=True)
@@ -255,9 +309,10 @@ def build_database(video_paths, workspace_path, frame_rate, face_size, faces):
         f"faces={','.join(faces)}"
     )
 
-    remaps = {}
     image_id = 0
-    with pycolmap.Database.open(database_path) as database:
+    writes = []
+    # cv2 releases the GIL, so the faces remap and encode in parallel.
+    with ThreadPoolExecutor(len(faces)) as pool, pycolmap.Database.open(database_path) as database:
         for camera in cameras.values():
             database.write_camera(camera, use_camera_id=True)
         database.write_rig(rig, use_rig_id=True)
@@ -278,19 +333,17 @@ def build_database(video_paths, workspace_path, frame_rate, face_size, faces):
                 frame = pycolmap.Frame()
                 frame.frame_id = frame_index + 1
                 frame.rig_id = rig.rig_id
-                for face in faces:
-                    map_x, map_y = remaps[face]
-                    cv2.imwrite(
-                        str(images_dir / image_name(face, frame_index)),
-                        cv2.remap(
-                            panorama,
-                            map_x,
-                            map_y,
-                            cv2.INTER_LINEAR,
-                            borderMode=cv2.BORDER_WRAP,
-                        ),
+                # The previous frame's faces encoded while FFmpeg decoded this one.
+                for write in writes:
+                    write.result()
+                writes = [
+                    pool.submit(
+                        write_face, images_dir / image_name(face, frame_index),
+                        panorama, remaps[face],
                     )
-
+                    for face in faces
+                ]
+                for face in faces:
                     image_id += 1
                     image = pycolmap.Image(
                         name=image_name(face, frame_index),
@@ -309,6 +362,8 @@ def build_database(video_paths, workspace_path, frame_rate, face_size, faces):
                         f"({local_index + 1}/{sample_count} panorama frames)"
                     )
                     next_progress_percent += 20
+        for write in writes:
+            write.result()
 
     if image_id == 0:
         sys.exit(f"Extracted no frames from {', '.join(map(str, video_paths))}")

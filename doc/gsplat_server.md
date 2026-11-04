@@ -119,10 +119,8 @@ dataloader workers die partway through a run with a bus error, which surfaces
 as a failed job whose log ends in `DataLoader worker ... killed by signal: Bus
 error`.
 
-Training and segmentation use the `gsplat` interpreter that starts the server.
-Depth uses the x86 image's base interpreter, where pycolmap and the Triton
-client are installed. The Jetson image has no separate base environment, so
-depth uses the server interpreter there.
+Training, segmentation, and depth all use the `gsplat` interpreter that starts
+the server.
 
 Jobs run one at a time — a single training run already saturates the GPU — and
 the queue lives in memory, so a restart fails whatever was queued or training.

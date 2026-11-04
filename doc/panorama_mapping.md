@@ -11,6 +11,9 @@ global SfM (GLOMAP):
    is mounted on it by a pure rotation, since all faces share the panorama's
    optical centre. Global SfM then solves one pose per panorama instead of one
    per face, with the faces' relative orientations held at their exact values.
+   FFmpeg decodes the video on NVDEC when the GPU supports it, keeping frames on
+   the GPU until the unsampled ones are dropped; an 8K HEVC video decodes about
+   ten times faster than on the CPU, which it falls back to otherwise.
    Each face's EXIF records an 18 mm focal length in 35 mm format, the
    90-degree FOV, so other tools read the same intrinsics.
 2. **Feature extraction** — SuperPoint keypoints and descriptors into the
@@ -83,7 +86,7 @@ configuration. Point `TRITON_URL` at `host:port` to use a server elsewhere.
 docker run -it --rm -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest \
-  python3 -m mapping.mapping_pipeline \
+  conda run --no-capture-output -n gsplat python3 -m mapping.mapping_pipeline \
     --workspace_path data/pano_mapping \
     --triton-url host.docker.internal:8011
 ```

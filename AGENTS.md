@@ -10,7 +10,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 ├── artifacts/
 │   ├── requirements-test.txt     # Test-only dependencies.
 │   └── docker/
-│       ├── dev.dockerfile        # COLMAP, Insta360 SDK, ExifTool, and gsplat.
+│       ├── dev.dockerfile        # COLMAP, Insta360 SDK, ExifTool, FFmpeg, and gsplat.
 │       ├── jetson.dockerfile     # arm64 image: JetPack 6 CUDA and gsplat.
 │       └── installers/           # Docker image installation scripts.
 ├── data/                         # Local datasets and captures; not repo-managed (see §5).
@@ -44,6 +44,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── gsplat_world_frame_test.py # Similarity inverse and the export wiring.
 │   ├── mapping_pipeline_test.py  # Gravity levelling of the solved map.
 │   ├── panorama_database.py      # Panorama video to a cube-map rig database.
+│   ├── panorama_database_test.py # Image counts and the FFmpeg decode commands.
 │   └── train_gsplat_with_masks.py # simple_trainer entrypoint; reads JobParameters.
 ├── scripts/
 │   ├── run_pipeline.sh           # Host: the whole pipeline in one `docker run`.

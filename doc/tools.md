@@ -47,7 +47,7 @@ Read metadata off the source file:
 exiftool /workspace/VID_xxx.insv
 ```
 
-Run `python3 -m mapping.mapping_pipeline --workspace_path <dir>` to reconstruct
+Run `conda run --no-capture-output -n gsplat python3 -m mapping.mapping_pipeline --workspace_path <dir>` to reconstruct
 every MP4 under the workspace as a cube-map rig: SuperPoint and SALAD features
 into a COLMAP database, LightGlue matching, and global SfM. It needs a Triton
 server serving those models — see
@@ -58,7 +58,7 @@ all six; drop `down` to leave out the nadir, which mostly shows whoever is
 carrying the rig:
 
 ```
-python3 -m mapping.mapping_pipeline \
+conda run --no-capture-output -n gsplat python3 -m mapping.mapping_pipeline \
   --workspace_path data/pano_mapping \
   --triton-url host.docker.internal:8011
 ```
@@ -125,7 +125,7 @@ missing, so the masks do not have to be thrown away to get the views.
 what it samples:
 
 ```bash
-${DOCKER_RUN} python3 -m mapping.triton.generate_depth \
+${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.triton.generate_depth \
   ${WORKSPACE_PATH} ${WORKSPACE_PATH}/depths \
   --mask-dir ${WORKSPACE_PATH}/masks \
   --debug-dir ${WORKSPACE_PATH}/debug \
