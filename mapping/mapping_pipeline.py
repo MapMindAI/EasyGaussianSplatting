@@ -176,25 +176,49 @@ def find_lrv(video_path, search_path=None):
     return matches[0] if matches else None
 
 
-def read_capture_tracks(workspace_path, videos):
+def read_source_fixes(video_path, search_path):
+    """The DJI SRT beside `video_path`, else its Insta360 LRV under
+    `search_path`, with that file's fixes; None if it has neither."""
+    for path in video_path.parent.iterdir():
+        if path.is_file() and path.stem == video_path.stem and path.suffix.lower() == ".srt":
+            return path, gps.read_srt_fixes(path)
+    lrv_path = find_lrv(video_path, search_path)
+    return (lrv_path, gps.read_fixes(lrv_path)) if lrv_path is not None else None
+
+
+def read_capture_tracks(workspace_path, videos, faces):
+    """Each video's GPS track from its reference-face EXIF.
+
+    A video whose faces carry no GPS has it written there first from its SRT or
+    LRV, so the faces keep it for whatever else reads them.
+    """
     tracks = []
-    image_directory = workspace_path / "images" / REFERENCE_FACE
+    image_directory = workspace_path / "images"
+    reference_directory = image_directory / REFERENCE_FACE
     for video in videos:
+        source = reference_directory
         fixes = gps.read_image_fixes(
-            image_directory, video.start_frame_index, video.stop_frame_index,
+            reference_directory, video.start_frame_index, video.stop_frame_index,
             video.seconds_per_frame,
         )
-        if fixes:
-            source = image_directory
-            video_track = gps.GpsTrack(fixes)
-            logging.info(f"Read {len(fixes)} GPS fixes from {source} for {video.path}")
-        else:
-            lrv_path = find_lrv(video.path, workspace_path)
-            if lrv_path is None:
-                logging.warning(f"No image GPS or matching LRV for {video.path}; skipping GPS alignment")
+        if not fixes:
+            found = read_source_fixes(video.path, workspace_path)
+            if found is None:
+                logging.warning(
+                    f"No image GPS, SRT or matching LRV for {video.path}; skipping GPS alignment"
+                )
                 continue
-            source = lrv_path
-            video_track = gps.read_track(lrv_path)
+            source, source_fixes = found
+            fixes = gps.write_image_fixes(image_directory, faces, video, source_fixes)
+            logging.info(f"Wrote GPS EXIF from {source} to {len(fixes)} frames of {video.path}")
+            if not fixes:
+                logging.warning(f"{source} has no fix near any frame of {video.path}")
+                continue
+        video_track = gps.GpsTrack(fixes)
+        logging.info(
+            f"Read {len(video_track)} GPS fixes over {video_track.duration:.1f} s "
+            f"for {video.path}, projected to EPSG:{video_track.epsg}"
+        )
         tracks.append((
             video.start_frame_index,
             video.stop_frame_index,
@@ -215,7 +239,7 @@ def run_pipeline(workspace_path, triton_url, selection, frame_rate=2.0,
         raise RuntimeError(f"No MP4 videos found under {workspace_path}")
     videos = build_database(video_paths, workspace_path, frame_rate, face_size, faces)
 
-    track = read_capture_tracks(workspace_path, videos)
+    track = read_capture_tracks(workspace_path, videos, faces)
     if track is not None:
         gps.write_pose_priors(workspace_path / "database.db", track, None)
 
