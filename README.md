@@ -128,7 +128,7 @@ WORKSPACE_PATH=data/VID_20260904_153909
 docker run -it --rm --gpus all -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest \
-  python3 -m mapping.mapping_pipeline \
+  conda run --no-capture-output -n gsplat python3 -m mapping.mapping_pipeline \
     --workspace_path ${WORKSPACE_PATH} \
     --triton-url ${GSPLAT_HOST}:8011 --num-threads 4
 ```

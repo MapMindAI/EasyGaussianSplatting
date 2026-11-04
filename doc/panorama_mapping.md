@@ -86,7 +86,7 @@ configuration. Point `TRITON_URL` at `host:port` to use a server elsewhere.
 docker run -it --rm -v $(pwd):/workspace -w /workspace \
   --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest \
-  python3 -m mapping.mapping_pipeline \
+  conda run --no-capture-output -n gsplat python3 -m mapping.mapping_pipeline \
     --workspace_path data/pano_mapping \
     --triton-url host.docker.internal:8011
 ```

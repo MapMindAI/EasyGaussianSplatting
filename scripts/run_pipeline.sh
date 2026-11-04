@@ -46,6 +46,7 @@ set -euo pipefail
 
 # The repo root, so mapping/ can import gsplat_server for the parameter schema.
 export PYTHONPATH="${PWD}${PYTHONPATH:+:${PYTHONPATH}}"
+source scripts/gsplat_env.sh
 
 # --- 1. Stitch the capture into an equirectangular video --------------------
 bash scripts/insta360_stitch_video.sh "${INPUT_INSV}" "${OUTPUT_VIDEO}" "${OUTPUT_SIZE}"
@@ -60,10 +61,6 @@ python3 -m mapping.mapping_pipeline \
   "${MAPPING_ARGUMENTS[@]}"
 
 # --- 3. Mask out people and sky, then train --------------------------------
-# Both need the gsplat conda env, which the mapping stage above must not use:
-# pycolmap lives in the base env.
-source scripts/gsplat_env.sh
-
 python3 mapping/triton/segment_people.py \
   "${RECONSTRUCTION_DIR}/images" "${RECONSTRUCTION_DIR}/masks"
 

@@ -129,7 +129,7 @@ videos and their LRV files to `D:\EasyGaussianSplatting\data\pano_mapping\` firs
 ```
 docker run --rm --gpus all -v D:\EasyGaussianSplatting:/workspace -w /workspace \
   ghcr.io/mapmindai/gaussiansplatting:latest \
-  python3 -m mapping.mapping_pipeline \
+  conda run --no-capture-output -n gsplat python3 -m mapping.mapping_pipeline \
     --workspace_path data/pano_mapping \
     --triton-url host.docker.internal:8011
 ```
