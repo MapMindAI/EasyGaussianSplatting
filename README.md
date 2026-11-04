@@ -212,3 +212,7 @@ This branch is a ground-up remake of the pipeline. What's done so far:
 - [ ] Improve DA3 depth supervision around foliage and other fine-detail edges.
 - [ ] Tune depth-loss weighting against the rendered-depth quality.
 - [ ] Improve TSDF fusion from rendered cube-face depths.
+
+## License
+
+Apache 2.0, the same as gsplat; see [LICENSE](LICENSE).
