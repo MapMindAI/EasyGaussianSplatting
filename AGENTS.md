@@ -58,6 +58,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── colmap/                   # COLMAP source the Jetson image builds from.
 │   └── EasyTensorRT/             # Triton server and clients for the features.
 ├── conftest.py                   # Puts the repo root on sys.path for the tests.
+├── LICENSE                       # Apache 2.0, as gsplat.
 ├── pytest.ini                    # Points pytest at the tested packages.
 └── README.md                     # Pipeline, Docker image, and usage overview.
 ```
