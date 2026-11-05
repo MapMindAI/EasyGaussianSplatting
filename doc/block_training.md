@@ -25,7 +25,7 @@ scope.
 flowchart LR
     WS["Workspace<br/>images, sparse/0, masks, depths"] --> COARSE["Coarse training<br/>data_factor 4, small cap_max"]
     COARSE --> CKPT["coarse ckpt"]
-    CKPT --> PART["block_partition.py<br/>grid, margins, cameras"]
+    WS --> PART["block_partition.py<br/>grid, tree, or graph"]
     PART --> MANIFEST["blocks/manifest.json"]
     MANIFEST --> TRAIN["Block training<br/>one block per process"]
     CKPT --> TRAIN
@@ -63,41 +63,54 @@ Output: `<workspace>/block_training/coarse/ckpts/ckpt_<step>_rank0.pt`.
 
 ## Stage 2a: partition (`mapping/block_partition.py`)
 
-Runs in the gsplat environment, since it reads the checkpoint and renders it.
+Implemented over the sparse model, so it runs before any coarse model exists:
+SfM points stand in for the coarse Gaussians, and rig frames (all six faces of
+one panorama) are the unit of camera assignment.
 
-1. **Grid.** Map the coarse means to the COLMAP frame. Split X into `columns`
-   slabs at Gaussian-count quantiles, then each slab's Y into `rows` cells the
-   same way, so blocks hold similar Gaussian counts rather than similar areas.
-   Outer cell edges extend to infinity, so distant Gaussians and sky belong to
-   an edge block instead of their own.
-2. **Expanded bounds.** Grow each core cell by `margin` (default 0.2) of its
-   width and depth. The expanded region is what the block trains; the core is
-   what it keeps at merge.
-3. **Cameras.** An image joins a block if its center lies in the expanded
-   bounds, or if the coarse Gaussians inside the core cover at least
-   `coverage` (default 0.25) of its pixels, rendered at 1/8 resolution with
-   opacity accumulation above 0.5. The coverage test replaces CityGaussian's
-   SSIM contribution test: it needs one render per image and block rather than
-   two plus an SSIM.
-4. **Manifest.** `<workspace>/block_training/manifest.json`:
-
-```json
-{
-  "coarse_checkpoint": "coarse/ckpts/ckpt_29999_rank0.pt",
-  "colmap_to_normalized": [[...4x4...]],
-  "blocks": [
-    {
-      "name": "block_00",
-      "core": {"x": [-Infinity, 12.5], "y": [-Infinity, -3.0]},
-      "expanded": {"x": [-Infinity, 16.1], "y": [-Infinity, 1.2]},
-      "images": ["face_0/frame_000123.jpg", "..."],
-      "gaussians": 241532
-    }
-  ]
-}
+```bash
+docker run --rm -v "$PWD":/workspace -w /workspace ghcr.io/mapmindai/gaussiansplatting:latest \
+  bash -lc 'python3 -m mapping.block_partition <workspace>/sparse/0 <workspace>/block_partition --blocks 8'
 ```
 
-Options: `--rows`, `--columns`, `--margin`, `--coverage`.
+Every method gives each point an owning block:
+
+* **grid:** split X into column slabs at point-count quantiles, then each
+  slab's Y into rows, so blocks hold similar counts, not similar areas. Outer
+  cells are unbounded.
+* **tree:** recursive median split along the wider horizontal axis, the
+  Hierarchical 3DGS split kept to one layer of leaves.
+* **graph:** recursive spectral (Shi-Malik) bisection of the frame covisibility
+  graph, edges weighted by shared points; each point goes to the block most of
+  its observing frames belong to.
+
+A frame trains every block owning at least `--coverage` (default 0.25) of the
+points it observes, and always the block owning most of them; this replaces
+the expanded bounds and CityGaussian's contribution test. The command writes
+`covisibility.png` (frame-pair map and matrix), and per method `<method>.png`
+and `<method>.json`: metrics plus each block's `main_images` and
+`training_images`.
+
+Metrics: `cut_fraction` is the share of covisibility between frames whose main
+blocks differ; `duplication` is training frames summed over blocks per frame;
+`largest_over_mean_training` bounds the slowest block.
+
+### Results on `data/wuxi_chongansi_complete`
+
+1,342 frames (8,052 images) from 7 drone flights, 259k points; 815k of the
+900k frame pairs share a point, since orbiting cameras all see the site center.
+
+| Blocks | Method | Cut | Duplication | Largest / mean |
+| ---: | --- | ---: | ---: | ---: |
+| 4 | grid, tree (identical) | 0.273 | 1.30 | 1.28 |
+| 4 | graph | 0.328 | 1.16 | 1.15 |
+| 8 | grid | 0.498 | 1.38 | 1.31 |
+| 8 | tree | 0.489 | 1.47 | 1.39 |
+| 8 | graph | 0.494 | 1.21 | 1.11 |
+
+The graph split trains on the fewest and best-balanced frames, but its owned
+points are spatially interleaved: covisibility groups viewpoints (an orbit
+arc), not places. The crop-and-concatenate merge needs compact ownership, so
+graph blocks need a spatial ownership rule before stage 3.
 
 ## Stage 2b: block training
 
@@ -150,9 +163,8 @@ On `data/wixi_chongansi`, compare against run 13 of the
 
 ## Tests
 
-* `block_partition_test.py`: quantile splits balance counts; outer cells are
-  unbounded; expanded bounds contain the core; camera assignment by center and
-  by coverage.
+* `block_partition_test.py`: balanced splits, covisibility, graph bisection,
+  point ownership, and frame assignment by coverage.
 * `block_merge_test.py`: every Gaussian lands in exactly one core; a 1x1 grid
   reproduces its input.
 * `train_gsplat_with_masks` block patches: image filtering keeps the global
