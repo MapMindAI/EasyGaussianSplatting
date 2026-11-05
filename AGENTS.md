@@ -37,6 +37,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   │   ├── generate_depth.py     # DA3 depth, grouped by camera and scaled to COLMAP.
 │   │   ├── generate_depth_test.py # Grouping, scale fitting, and sampling.
 │   │   └── progress.py           # Thread pool with progress logging.
+│   ├── block_partition.py        # Grid, tree, and covisibility-graph training blocks.
+│   ├── block_partition_test.py   # Splits, ownership, and frame assignment.
 │   ├── mapping_pipeline.py       # The four mapping stages end to end.
 │   ├── gps.py                    # Capture GPS as face EXIF, UTM priors, and map alignment.
 │   ├── gps_test.py               # Track parsing, the fit, and the alignment.
