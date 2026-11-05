@@ -86,7 +86,8 @@ Every method gives each point an owning block:
 A frame trains every block owning at least `--coverage` (default 0.25) of the
 points it observes, and always the block owning most of them; this replaces
 the expanded bounds and CityGaussian's contribution test. The command writes
-`covisibility.png` (frame-pair map and matrix), and per method `<method>.png`
+`covisibility.png` (frame-pair map and matrix), `comparison.png` (every method's
+top view side by side), and per method `<method>.png`
 and `<method>.json`: metrics plus each block's `main_images` and
 `training_images`.
 

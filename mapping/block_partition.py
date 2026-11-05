@@ -12,7 +12,8 @@ Gaussians a block keeps at merge:
 
 A rig frame then trains every block owning at least `coverage` of the points it
 observes, and always the block owning most of them. Writes `<method>.json` and
-`<method>.png` per method, and the covisibility map as `covisibility.png`.
+`<method>.png` per method, the covisibility map as `covisibility.png`, and every method's top view side by
+side as `comparison.png`.
 """
 import argparse
 import json
@@ -281,6 +282,36 @@ def plot_partition(path, method, centers, points, point_owners, membership, metr
     pyplot.close(figure)
 
 
+def plot_comparison(path, centers, points, results):
+    """Top views of every method: point owners, frames' main blocks, and frame overlap.
+
+    `results` maps a method to its (point_owners, shares, membership, metrics).
+    """
+    pyplot = pyplot_module()
+    low, high = view_limits(points, centers)
+    figure, axes = pyplot.subplots(len(results), 3, figsize=(21, 7 * len(results)), squeeze=False)
+    for row, (method, (point_owners, shares, membership, metrics)) in enumerate(results.items()):
+        colors = pyplot.get_cmap("tab20")(np.arange(membership.shape[1]) % 20)
+        points_axes, frames_axes, overlap_axes = axes[row]
+        points_axes.scatter(points[:, 0], points[:, 1], s=0.2, c=colors[point_owners], linewidths=0)
+        points_axes.set_title(f"{method}: point owners")
+        frames_axes.scatter(points[:, 0], points[:, 1], s=0.2, c="lightgray", linewidths=0)
+        frames_axes.scatter(centers[:, 0], centers[:, 1], s=4, c=colors[shares.argmax(axis=1)])
+        frames_axes.set_title(f"{method}: frames by main block, cut {metrics['cut_fraction']:.3f}")
+        overlap_axes.scatter(points[:, 0], points[:, 1], s=0.2, c="lightgray", linewidths=0)
+        overlap = overlap_axes.scatter(centers[:, 0], centers[:, 1], s=4, c=membership.sum(axis=1),
+                                       cmap="plasma", vmin=1, vmax=max(2, membership.sum(axis=1).max()))
+        figure.colorbar(overlap, ax=overlap_axes, label="blocks trained")
+        overlap_axes.set_title(f"{method}: duplication {metrics['duplication']:.2f}, "
+                               f"largest/mean {metrics['largest_over_mean_training']:.2f}")
+        for each in axes[row]:
+            each.set_xlim(low[0], high[0])
+            each.set_ylim(low[1], high[1])
+            each.set_aspect("equal")
+    figure.savefig(path, dpi=110, bbox_inches="tight")
+    pyplot.close(figure)
+
+
 def point_owners_for(method, points, incidence, shared, blocks):
     if method == "grid":
         return partition_grid(points, *grid_shape(points, blocks))
@@ -311,6 +342,7 @@ def main():
                       centers, shared, arguments.minimum_shared)
 
     methods = ["grid", "tree", "graph"] if arguments.method == "all" else [arguments.method]
+    results = {}
     for method in methods:
         point_owners = point_owners_for(method, points, incidence, shared, arguments.blocks)
         shares = frame_shares(point_owners, incidence, arguments.blocks)
@@ -321,6 +353,9 @@ def main():
             json.dump(manifest(method, shares, membership, image_names, metrics), file, indent=1)
         plot_partition(os.path.join(arguments.output_dir, f"{method}.png"),
                        method, centers, points, point_owners, membership, metrics)
+        results[method] = (point_owners, shares, membership, metrics)
+    if len(results) > 1:
+        plot_comparison(os.path.join(arguments.output_dir, "comparison.png"), centers, points, results)
 
 
 if __name__ == "__main__":
