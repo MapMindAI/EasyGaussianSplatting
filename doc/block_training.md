@@ -70,7 +70,7 @@ unit of camera assignment.
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace ghcr.io/mapmindai/gaussiansplatting:latest \
   bash -lc 'python3 -m mapping.block_partition <workspace>/sparse/0 <workspace>/block_partition \
-    --method tree --max-images 2000'
+    --method tree --max-images 4000'
 ```
 
 Every method gives each point an owning block:
@@ -141,6 +141,9 @@ images they cover most add to the count. Edge blocks shrink to a few dozen
 images. The block count therefore cannot be pushed much below about 1,000–2,000
 images per block on this capture without splitting the densely viewed center
 into slivers.
+
+Chosen for now: `--max-images 4000`, 4 blocks of 3,019–3,840 training images,
+each trained with 6M Gaussians.
 
 ## Stage 2b: block training
 
