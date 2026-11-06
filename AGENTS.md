@@ -39,6 +39,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   │   └── progress.py           # Thread pool with progress logging.
 │   ├── block_partition.py        # Grid, tree, and covisibility-graph training blocks.
 │   ├── block_partition_test.py   # Splits, ownership, and frame assignment.
+│   ├── block_gaussians.py        # Coarse Gaussians per block, and the block merge.
+│   ├── block_gaussians_test.py   # Ownership, expanded regions, and checkpoints.
 │   ├── mapping_pipeline.py       # The four mapping stages end to end.
 │   ├── gps.py                    # Capture GPS as face EXIF, UTM priors, and map alignment.
 │   ├── gps_test.py               # Track parsing, the fit, and the alignment.
@@ -54,7 +56,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── insta360_stitch_video.sh  # Container: Insta360 capture to panorama video.
 │   ├── docker_common.sh          # Shared helpers for the host-side scripts.
 │   ├── gsplat_env.sh             # Container: activate the gsplat conda env.
-│   └── gsplat_train.sh           # Container: train a splat from a workspace.
+│   ├── gsplat_train.sh           # Container: train a splat from a workspace.
+│   └── gsplat_train_blocks.sh    # Container: partition, coarse, blocks, merge.
 ├── third_party/
 │   ├── gsplat/                   # gsplat submodule the training stage uses.
 │   ├── colmap/                   # COLMAP source the Jetson image builds from.

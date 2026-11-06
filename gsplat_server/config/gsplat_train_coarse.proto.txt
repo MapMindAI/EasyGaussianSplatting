@@ -1,0 +1,16 @@
+# Block training stage 1: the whole scene at low resolution and Gaussian count,
+# the prior every block starts from (doc/block_training.md). Drone settings
+# otherwise; test_every must match gsplat_train_block.proto.txt.
+
+iterations: 30000
+test_every: 64
+# Coarse geometry needs little resolution; image buffers shrink 16x.
+data_factor: 4
+floater_reg_weight: 0.003
+refine_stop_iter: 25000
+strategy: STRATEGY_MCMC
+cap_max: 1000000
+packed: false
+means_lr: 0.00008
+scales_lr: 0.001
+opacities_lr: 0.025

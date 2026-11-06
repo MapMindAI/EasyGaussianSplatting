@@ -1,6 +1,6 @@
 # Block training (design)
 
-Status: design, not implemented. Background: the
+Status: implemented, not yet run end to end. Background: the
 [large-scale 3DGS survey](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Paper-Survey---Large-Scale-3D-Gaussian-Splatting).
 
 A single gsplat run holds every Gaussian, its gradient, and two Adam moments on
@@ -14,7 +14,16 @@ for the training and keeping StitchGS's overlap candidates for a later merge.
 1. **Coarse:** train the full scene once at reduced resolution and Gaussian count.
 2. **Blocks:** partition the coarse model, then fine-tune each block on its own,
    one process at a time.
-3. **Merge:** crop each block to the cells it owns and concatenate (CityGaussian).
+3. **Merge:** crop each block to the Gaussians it owns and concatenate (CityGaussian).
+
+```bash
+docker run --rm --gpus all -v "$PWD":/workspace -w /workspace ghcr.io/mapmindai/gaussiansplatting:latest \
+  bash -lc 'scripts/gsplat_train_blocks.sh <workspace> [max_images] [coarse.proto.txt] [block.proto.txt]'
+```
+
+Results go to `<workspace>/block_training/{partition,coarse,blocks/block_NN,merged}`.
+A stage whose output exists is skipped, so a rerun resumes at the first
+unfinished block.
 
 Next step, not in this design: StitchGS's overlap stitching (SIS) and global
 appearance refinement with frozen geometry (GCR). Stage 2 keeps every block's
@@ -26,11 +35,11 @@ flowchart LR
     WS["Workspace<br/>images, sparse/0, masks, depths"] --> COARSE["Coarse training<br/>data_factor 4, small cap_max"]
     COARSE --> CKPT["coarse ckpt"]
     WS --> PART["block_partition.py<br/>tree, max images per block"]
-    PART --> MANIFEST["blocks/manifest.json"]
+    PART --> MANIFEST["partition/tree.json<br/>+ tree_points.npz"]
     MANIFEST --> TRAIN["Block training<br/>one block per process"]
     CKPT --> TRAIN
     TRAIN --> BLOCKS["block_NN ckpt + PLY"]
-    BLOCKS --> MERGE["block_merge.py<br/>crop to core, concatenate"]
+    BLOCKS --> MERGE["block_gaussians.py<br/>crop to owner, concatenate"]
     MERGE --> OUT["merged ckpt + PLY"]
 ```
 
@@ -45,13 +54,13 @@ COLMAP model (`mapping/gsplat_world_frame.py`). Every block is trained with the
 samples, so the coarse run, every block, and the merge share one normalized
 frame. Checkpoints can then be cropped and concatenated without any transform,
 and the merged checkpoint evaluates with `simple_trainer --ckpt` unchanged.
-Block bounds are stored in the COLMAP frame, where Z is up; the manifest keeps
-the parser's COLMAP-to-normalized similarity to test membership.
+Ownership is decided in the COLMAP frame, where Z is up: each block run saves
+the parser's COLMAP-to-normalized similarity as `scene_transform.npy`.
 
 ## Stage 1: coarse model
 
-The existing trainer with a new `gsplat_server/config/gsplat_train_coarse.proto.txt`
-layered over the defaults:
+The existing trainer with `gsplat_server/config/gsplat_train_coarse.proto.txt`,
+the drone settings except:
 
 | Field | Value | Why |
 | --- | --- | --- |
@@ -59,7 +68,8 @@ layered over the defaults:
 | `cap_max` | 1,000,000 | Sized to fit the smallest target GPU. |
 | `iterations` | 30,000 | A prior, not a deliverable. |
 
-Output: `<workspace>/block_training/coarse/ckpts/ckpt_<step>_rank0.pt`.
+`test_every` must match the block configuration, so held-out images stay held
+out throughout.
 
 ## Stage 2a: partition (`mapping/block_partition.py`)
 
@@ -68,9 +78,7 @@ SfM points stand in for the coarse Gaussians, and cube-face images are the
 unit of camera assignment.
 
 ```bash
-docker run --rm -v "$PWD":/workspace -w /workspace ghcr.io/mapmindai/gaussiansplatting:latest \
-  bash -lc 'python3 -m mapping.block_partition <workspace>/sparse/0 <workspace>/block_partition \
-    --method tree --max-images 4000'
+python3 -m mapping.block_partition <workspace>/sparse/0 <output_dir> --method tree --max-images 4000
 ```
 
 Every method gives each point an owning block:
@@ -99,8 +107,8 @@ bounds and CityGaussian's contribution test.
 
 The command writes `covisibility.png` (frame-pair map and matrix),
 `comparison.png` (every method's top view side by side), and per method
-`<method>.png` and `<method>.json`: metrics plus each block's `main_images` and
-`training_images`.
+`<method>.png`, `<method>.json` (metrics plus each block's `main_images` and
+`training_images`), and `<method>_points.npz` (the SfM points and their owners).
 
 Metrics: `cut_fraction` is the share of covisibility between frames whose main
 blocks differ; `duplication` is blocks trained per image; `largest_over_mean_training`
@@ -147,42 +155,32 @@ each trained with 6M Gaussians.
 
 ## Stage 2b: block training
 
-`mapping/train_gsplat_with_masks.py` gains `--block <manifest.json>:<name>`.
-Like the existing mask and depth patches, it wraps gsplat before `simple_trainer`
-runs:
+`mapping/train_gsplat_with_masks.py --block <manifest.json>:<name>
+--coarse_checkpoint <ckpt>` with `gsplat_train_block.proto.txt` (drone
+settings, `cap_max` 6M). Patches, like the existing mask and depth ones:
 
-* **Images.** `Dataset.__init__` keeps only indices whose image name is in the
-  block. The train/test split is still taken over the full model, so held-out
-  images stay held out in every block.
-* **Initialization.** `create_splats_with_optimizers` builds the trainable
-  splats from the coarse checkpoint's Gaussians inside the expanded bounds
-  instead of SfM points.
-* **Context.** The coarse Gaussians outside the expanded bounds are rendered
-  with every view but are frozen: no gradient, no optimizer state, not seen by
-  the strategy. Without them, a block's images show content the block cannot
-  represent, and it grows floaters to explain it; occluders in front of the
-  block would also be baked into its colors. Frozen, they cost about a quarter
-  of their training memory. The rasterization patch appends them after the
-  trainable Gaussians and slices per-Gaussian outputs (`radii`, `means2d`)
-  back to the trainable count before the strategy reads them.
-* **Budget.** `cap_max` is the per-block count; at least the block's initial
-  count.
+* **Images.** `Dataset.__init__` keeps only the block's `training_images`. The
+  train/test split is still taken over the full model's indices.
+* **Ownership.** A Gaussian belongs to the block owning the SfM point nearest
+  it in XY (`mapping/block_gaussians.py`).
+* **Initialization.** The trainable splats are the coarse Gaussians the block
+  owns or that lie within 10% of its extent of its points; their opacities,
+  scales, and colors carry over. Swapped in by wrapping
+  `create_splats_with_optimizers`, reached through the globals of
+  simple_trainer's `main`.
+* **Context.** Every other coarse Gaussian is appended to each render, frozen:
+  no gradient, no optimizer state, unseen by the strategy. Without it, a
+  block's images show content the block cannot represent, and it grows
+  floaters to explain it. MCMC only: it reads nothing per Gaussian from the
+  render, whereas DefaultStrategy's densification would see the context.
+* **Budget.** `cap_max` counts trainable Gaussians only.
 
-A shell driver, `scripts/gsplat_train_blocks.sh <workspace> [coarse parameters]
-[block parameters] [rows] [columns]`, runs stage 1, the partition, every block
-in sequence, and the merge. Each stage skips output already on disk, so an
-interrupted run resumes at the next unfinished block.
+## Stage 3: merge (`mapping/block_gaussians.py`)
 
-## Stage 3: merge (`mapping/block_merge.py`)
-
-For each block, keep the Gaussians whose means, mapped to the COLMAP frame,
-fall in its core cell, and concatenate the checkpoints' `splats`. Core cells
-tile the plane, so every position has exactly one owner. Write
-`merged/ckpts/ckpt_merged.pt` and its PLY through `export_splats`, which the
-existing patch returns to the COLMAP frame.
-
-Block checkpoints are kept with their expanded-region Gaussians; SIS will read
-them in place of the crop.
+Keep each block's Gaussians it owns by the same nearest-point rule and
+concatenate the checkpoints' `splats` into `merged/ckpts/ckpt_merged.pt`
+(evaluates with `simple_trainer --ckpt`) and `merged/ply/point_cloud_merged.ply`
+in the COLMAP frame. Block checkpoints keep their expanded region for SIS.
 
 ## Evaluation
 
@@ -192,17 +190,15 @@ On `data/wixi_chongansi`, compare against run 13 of the
 * PSNR, SSIM, and LPIPS of the merged checkpoint on the shared test split
   (`simple_trainer --ckpt`).
 * Peak GPU memory of each stage.
-* Seams: renders of test views that straddle a core boundary.
+* Seams: renders of test views that straddle a block boundary.
 
 ## Tests
 
 * `block_partition_test.py`: balanced splits, covisibility, graph bisection,
   point ownership, image coverage, and the image-limited tree.
-* `block_merge_test.py`: every Gaussian lands in exactly one core; a 1x1 grid
-  reproduces its input.
-* `train_gsplat_with_masks` block patches: image filtering keeps the global
-  test split; frozen context receives no gradient and is sliced out of the
-  strategy's inputs.
+* `block_gaussians_test.py`: nearest-point ownership, the expanded region, the
+  frame inverse, and checkpoint lookup.
+* The trainer patches need a GPU and are untested.
 
 ## Risks
 
@@ -210,5 +206,7 @@ On `data/wixi_chongansi`, compare against run 13 of the
   `data_factor` 4 does not fit, lower `sh_degree` for this stage only.
 * **Appearance jumps** between blocks trained on different image subsets. That
   is what GCR addresses in the next step.
-* **MCMC relocation** can move Gaussians outside the expanded bounds. They are
-  dropped at merge, which wastes budget but does not corrupt the result.
+* **MCMC relocation** can move Gaussians outside the block. They are dropped
+  at merge, which wastes budget but does not corrupt the result.
+* **Single GPU.** The patches are applied in-process; a multi-GPU launch would
+  not carry them into its workers.

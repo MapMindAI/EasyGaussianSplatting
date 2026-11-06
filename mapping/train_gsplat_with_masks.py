@@ -4,7 +4,8 @@
 gsplat's COLMAP dataset only carries one mask per camera (the undistortion
 ROI), so per-image masks are attached here instead: its __getitem__ is wrapped
 to load "<data_dir>/masks/<image_name>.png" alongside each image. Takes
-simple_trainer's own arguments.
+simple_trainer's own arguments, plus --job_parameters, and --block with
+--coarse_checkpoint to train one block (doc/block_training.md).
 """
 import os
 import pathlib
@@ -162,6 +163,72 @@ def composite_over_background(rendering, color):
     rendering.rasterization = rasterization_over_background
 
 
+def restrict_to_images(dataset_class, image_names):
+    """Keep only a block's images in both splits.
+
+    The split is still taken over the full model's indices, so an image held
+    out of the coarse run stays held out of every block.
+    """
+    original_init = dataset_class.__init__
+
+    def __init__(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        self.indices = np.array([index for index in self.indices
+                                 if self.parser.image_names[index] in image_names], dtype=int)
+
+    dataset_class.__init__ = __init__
+
+
+def train_block(trainer, coarse_checkpoint, points, owners, block, result_dir):
+    """Start from the coarse Gaussians around the block and render the rest frozen.
+
+    `trainer` is simple_trainer's namespace. The coarse Gaussians in the
+    block's expanded region become the trainable splats; the rest are
+    appended to every render with no gradient or optimizer state, so the
+    block's images never show content it would have to explain with floaters.
+    MCMC only: it reads nothing per Gaussian from the render, while
+    DefaultStrategy's densification would see the context in it.
+    """
+    coarse = torch.load(coarse_checkpoint, map_location="cpu", weights_only=True)["splats"]
+    context = {}
+    original_create = trainer["create_splats_with_optimizers"]
+
+    def create_splats_with_optimizers(parser, *args, **kwargs):
+        splats, optimizers = original_create(parser, *args, **kwargs)
+        np.save(os.path.join(result_dir, "scene_transform.npy"), parser.transform)
+        means = block_gaussians.to_colmap(parser.transform, coarse["means"].numpy())
+        inside = torch.from_numpy(block_gaussians.expanded_region(means, points, owners, block))
+        print(f"Block: {int(inside.sum())} trainable and {int((~inside).sum())} frozen coarse Gaussians", flush=True)
+        for name, optimizer in optimizers.items():
+            device = splats[name].device
+            assert coarse[name].shape[1:] == splats[name].shape[1:], f"coarse {name} has another shape"
+            splats[name] = torch.nn.Parameter(coarse[name][inside].to(device))
+            optimizer.param_groups[0]["params"] = [splats[name]]
+            context[name] = coarse[name][~inside].to(device)
+        return splats, optimizers
+
+    runner_class = trainer["Runner"]
+    original_rasterize = runner_class.rasterize_splats
+
+    def rasterize_splats(self, *args, splats=None, **kwargs):
+        splats = self.splats if splats is None else splats
+        combined = {name: torch.cat([splats[name], context[name]]) for name in context}
+        return original_rasterize(self, *args, splats=combined, **kwargs)
+
+    trainer["create_splats_with_optimizers"] = create_splats_with_optimizers
+    runner_class.rasterize_splats = rasterize_splats
+
+
+def take_option(name):
+    """Remove `name` and its value from the command line, returning the value."""
+    if name not in sys.argv:
+        return None
+    index = sys.argv.index(name)
+    value = sys.argv[index + 1]
+    del sys.argv[index:index + 2]
+    return value
+
+
 sys.path.insert(0, EXAMPLES_DIR)
 import gsplat  # noqa: E402
 import gsplat.distributed  # noqa: E402
@@ -169,6 +236,7 @@ import gsplat.losses  # noqa: E402
 import gsplat.rendering  # noqa: E402
 from datasets.colmap import Dataset, Parser, _resize_image_folder  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
+from mapping import block_gaussians  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
     capture_scene_transform,
@@ -265,15 +333,34 @@ def load_job_parameters():
 original_cli = gsplat.distributed.cli
 
 
+block_training = None
+
+
 def cli_with_configuration(function, configuration, verbose=False):
     print("Training configuration:", flush=True)
     pprint.pprint(vars(configuration), sort_dicts=False, width=100)
     sys.stdout.flush()
+    if block_training is not None:
+        # simple_trainer's functions and classes are only reachable once
+        # runpy has defined them, through the globals of its main.
+        train_block(function.__globals__, *block_training, configuration.result_dir)
     return original_cli(function, configuration, verbose=verbose)
 
 
 gsplat.distributed.cli = cli_with_configuration
+# --block <manifest.json>:<name> trains one block of block_partition.py's
+# manifest, from --coarse_checkpoint.
+block_option = take_option("--block")
+coarse_checkpoint = take_option("--coarse_checkpoint")
 parameters = load_job_parameters()
+if block_option is not None:
+    assert coarse_checkpoint is not None, "--block needs --coarse_checkpoint"
+    assert parameters is not None and parameters.strategy == gsplat_pb2.STRATEGY_MCMC, \
+        "block training needs STRATEGY_MCMC"
+    manifest_path, block_name = block_option.rsplit(":", 1)
+    block, block_index, block_points, block_owners = block_gaussians.load_block(manifest_path, block_name)
+    restrict_to_images(Dataset, set(block["training_images"]))
+    block_training = (coarse_checkpoint, block_points, block_owners, block_index)
 if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)
 downsample_images(Parser, _resize_image_folder)

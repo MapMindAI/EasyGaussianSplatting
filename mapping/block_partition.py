@@ -13,9 +13,10 @@ Gaussians a block keeps at merge:
   point goes to the block most of its observing frames belong to.
 
 An image then trains every block whose points cover at least `--visibility` of
-it, and the block covering most of it. Writes `<method>.json` and
-`<method>.png` per method, the frame covisibility map as `covisibility.png`,
-and every method's top view side by side as `comparison.png`.
+it, and the block covering most of it. Writes `<method>.json`, the points
+with their owners as `<method>_points.npz`, and `<method>.png` per method; the
+frame covisibility map as `covisibility.png`; and every method's top view side
+by side as `comparison.png`.
 """
 import argparse
 import dataclasses
@@ -308,7 +309,7 @@ def manifest(method, coverages, membership, image_names, metrics):
                 "training_images": [image_names[image] for image in np.flatnonzero(membership[:, block])],
             }
         )
-    return {"method": method, "metrics": metrics, "blocks": blocks}
+    return {"method": method, "metrics": metrics, "points": f"{method}_points.npz", "blocks": blocks}
 
 
 def view_limits(points, centers):
@@ -467,6 +468,8 @@ def main():
         frame_membership = per_frame(membership, model.image_frames, frames)
         metrics = evaluate(point_owners, frame_labels, membership, shared)
         logging.info("%s: %s", method, json.dumps(metrics))
+        np.savez(os.path.join(arguments.output_dir, f"{method}_points.npz"),
+                 points=model.points, owners=point_owners)
         with open(os.path.join(arguments.output_dir, f"{method}.json"), "w") as file:
             json.dump(manifest(method, coverages, membership, model.image_names, metrics), file, indent=1)
         plot_partition(os.path.join(arguments.output_dir, f"{method}.png"),
