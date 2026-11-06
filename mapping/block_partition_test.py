@@ -59,15 +59,50 @@ def test_graph_separates_weakly_linked_clusters():
     assert labels[0] != labels[1]
 
 
-def test_frames_train_their_main_block_and_any_well_covered_one():
-    # Frame 0 sees only block 0; frame 1 splits 2:1; frame 2 splits 1:3.
-    incidence = incidence_matrix([[0, 1], [0, 1], [1, 2], [2], [2], [2]], frames=3)
-    point_owners = np.array([0, 0, 1, 1, 1, 1])
-    shares = block_partition.frame_shares(point_owners, incidence, blocks=2)
-    membership = block_partition.frame_membership(shares, coverage=0.3)
-    assert membership.tolist() == [[True, False], [True, True], [False, True]]
-    membership = block_partition.frame_membership(shares, coverage=0.5)
-    assert membership.tolist() == [[True, False], [True, False], [False, True]]
+def test_images_train_their_main_block_and_any_well_covered_one():
+    coverages = np.array([[0.5, 0.0], [0.3, 0.15], [0.05, 0.08], [0.0, 0.0]])
+    membership = block_partition.image_membership(coverages, visibility=0.1)
+    # The last image sees no block, like an upward face of sky.
+    assert membership.tolist() == [[True, False], [True, True], [False, True], [False, False]]
+
+
+def test_image_coverage_counts_occupied_cells_in_front_of_the_camera():
+    # One 100 x 100 pinhole camera at the origin looking down +z.
+    projection = np.array([[[50.0, 0, 50, 0], [0, 50.0, 50, 0], [0, 0, 1, 0]]])
+    points = np.array([
+        [-0.9, -0.9, 1.0],  # top-left cell
+        [-0.89, -0.89, 1.0],  # same cell
+        [0.9, 0.9, 1.0],  # bottom-right cell
+        [0.0, 0.0, -1.0],  # behind the camera
+        [5.0, 0.0, 1.0],  # outside the image
+    ])
+    coverage = block_partition.ImageCoverage(projection, np.array([[100, 100]]), points, grid=4)
+    assert coverage(np.arange(5)).tolist() == [2 / 16]
+    assert coverage(np.array([3, 4])).tolist() == [0.0]
+
+
+def test_tree_by_images_splits_until_the_limit():
+    positions = np.zeros((8, 3))
+    positions[:, 0] = np.arange(8)
+
+    def coverage(leaf):
+        # Ten images, each covered by any leaf holding its point.
+        shares = np.zeros(10)
+        shares[leaf] = 1.0
+        return shares
+
+    labels = block_partition.partition_tree_by_images(positions, coverage, max_images=2, visibility=0.5,
+                                                     minimum_points=1)
+    assert sorted(np.bincount(labels).tolist()) == [2, 2, 2, 2]
+    assert len(set(labels[[0, 1]])) == 1
+
+
+def test_per_frame_sums_coverage_and_ors_membership():
+    image_frames = np.array([0, 0, 1])
+    coverages = np.array([[0.1, 0.2], [0.3, 0.0], [0.0, 0.4]])
+    assert np.allclose(block_partition.per_frame(coverages, image_frames, 2), [[0.4, 0.2], [0.0, 0.4]])
+    membership = np.array([[True, False], [False, False], [False, True]])
+    assert block_partition.per_frame(membership, image_frames, 2).tolist() == [[True, False], [False, True]]
 
 
 def test_points_go_to_the_block_most_observers_belong_to():
@@ -78,9 +113,9 @@ def test_points_go_to_the_block_most_observers_belong_to():
 
 def test_evaluate_reports_cut_and_duplication():
     shared = np.array([[0, 4, 1], [4, 0, 0], [1, 0, 0]], dtype=float)
-    shares = np.array([[1.0, 0.0], [1.0, 0.0], [0.4, 0.6]])
-    membership = block_partition.frame_membership(shares, coverage=0.3)
-    metrics = block_partition.evaluate(np.array([0, 0, 1]), shares, membership, shared)
+    membership = np.array([[True, False], [True, True], [False, True], [False, False]])
+    metrics = block_partition.evaluate(np.array([0, 0, 1]), np.array([0, 0, 1]), membership, shared)
     assert metrics["cut_fraction"] == 0.2
-    assert metrics["training_frames"] == [3, 1]
+    assert metrics["training_images"] == [2, 2]
     assert metrics["duplication"] == 4 / 3
+    assert metrics["untrained_images"] == 1

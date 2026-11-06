@@ -25,7 +25,7 @@ scope.
 flowchart LR
     WS["Workspace<br/>images, sparse/0, masks, depths"] --> COARSE["Coarse training<br/>data_factor 4, small cap_max"]
     COARSE --> CKPT["coarse ckpt"]
-    WS --> PART["block_partition.py<br/>grid, tree, or graph"]
+    WS --> PART["block_partition.py<br/>tree, max images per block"]
     PART --> MANIFEST["blocks/manifest.json"]
     MANIFEST --> TRAIN["Block training<br/>one block per process"]
     CKPT --> TRAIN
@@ -64,12 +64,13 @@ Output: `<workspace>/block_training/coarse/ckpts/ckpt_<step>_rank0.pt`.
 ## Stage 2a: partition (`mapping/block_partition.py`)
 
 Implemented over the sparse model, so it runs before any coarse model exists:
-SfM points stand in for the coarse Gaussians, and rig frames (all six faces of
-one panorama) are the unit of camera assignment.
+SfM points stand in for the coarse Gaussians, and cube-face images are the
+unit of camera assignment.
 
 ```bash
 docker run --rm -v "$PWD":/workspace -w /workspace ghcr.io/mapmindai/gaussiansplatting:latest \
-  bash -lc 'python3 -m mapping.block_partition <workspace>/sparse/0 <workspace>/block_partition --blocks 8'
+  bash -lc 'python3 -m mapping.block_partition <workspace>/sparse/0 <workspace>/block_partition \
+    --method tree --max-images 2000'
 ```
 
 Every method gives each point an owning block:
@@ -78,40 +79,68 @@ Every method gives each point an owning block:
   slab's Y into rows, so blocks hold similar counts, not similar areas. Outer
   cells are unbounded.
 * **tree:** recursive median split along the wider horizontal axis, the
-  Hierarchical 3DGS split kept to one layer of leaves.
-* **graph:** recursive spectral (Shi-Malik) bisection of the frame covisibility
-  graph, edges weighted by shared points; each point goes to the block most of
-  its observing frames belong to.
+  Hierarchical 3DGS split kept to one layer of leaves. `--blocks` fixes the
+  count; `--max-images` instead keeps splitting the leaf training the most
+  images until every leaf trains at most that many, so the block count follows
+  how densely the scene is viewed.
+* **graph:** recursive spectral (Shi-Malik) bisection of the rig-frame
+  covisibility graph, edges weighted by shared points; each point goes to the
+  block most of its observing frames belong to.
 
-A frame trains every block owning at least `--coverage` (default 0.25) of the
-points it observes, and always the block owning most of them; this replaces
-the expanded bounds and CityGaussian's contribution test. The command writes
-`covisibility.png` (frame-pair map and matrix), `comparison.png` (every method's
-top view side by side), and per method `<method>.png`
-and `<method>.json`: metrics plus each block's `main_images` and
+**Image assignment.** An image trains every block whose points cover at least
+`--visibility` (default 0.1) of it, and the block covering most of it; an image
+no point reaches trains none. Coverage is geometric: a 20k-point sample is
+projected into every image and binned on a 32 x 32 grid, ignoring occlusion.
+SfM tracks would undercount it, since a drone image shares tracks with only
+its ~10 nearest frames, while distant orbits clearly see the same block.
+Whole panoramas cannot be the unit either: from 20–40 m above a 200 m site,
+every block covers a few percent of every panorama. This replaces the expanded
+bounds and CityGaussian's contribution test.
+
+The command writes `covisibility.png` (frame-pair map and matrix),
+`comparison.png` (every method's top view side by side), and per method
+`<method>.png` and `<method>.json`: metrics plus each block's `main_images` and
 `training_images`.
 
 Metrics: `cut_fraction` is the share of covisibility between frames whose main
-blocks differ; `duplication` is training frames summed over blocks per frame;
-`largest_over_mean_training` bounds the slowest block.
+blocks differ; `duplication` is blocks trained per image; `largest_over_mean_training`
+bounds the slowest block.
 
 ### Results on `data/wuxi_chongansi_complete`
 
 1,342 frames (8,052 images) from 7 drone flights, 259k points; 815k of the
 900k frame pairs share a point, since orbiting cameras all see the site center.
 
-| Blocks | Method | Cut | Duplication | Largest / mean |
-| ---: | --- | ---: | ---: | ---: |
-| 4 | grid, tree (identical) | 0.273 | 1.30 | 1.28 |
-| 4 | graph | 0.328 | 1.16 | 1.15 |
-| 8 | grid | 0.498 | 1.38 | 1.31 |
-| 8 | tree | 0.489 | 1.47 | 1.39 |
-| 8 | graph | 0.494 | 1.21 | 1.11 |
+| Blocks | Method | Cut | Training images (max / min) | Duplication | Largest / mean |
+| ---: | --- | ---: | --- | ---: | ---: |
+| 4 | grid, tree (identical) | 0.274 | 3,840 / 3,019 | 1.71 | 1.11 |
+| 4 | graph | 0.284 | 5,969 / 3,655 | 2.47 | 1.20 |
+| 8 | grid | 0.489 | 2,904 / 1,589 | 2.27 | 1.27 |
+| 8 | tree | 0.490 | 2,799 / 1,548 | 2.22 | 1.25 |
+| 8 | graph | 0.502 | 4,705 / 1,845 | 3.46 | 1.35 |
 
-The graph split trains on the fewest and best-balanced frames, but its owned
-points are spatially interleaved: covisibility groups viewpoints (an orbit
-arc), not places. The crop-and-concatenate merge needs compact ownership, so
-graph blocks need a spatial ownership rule before stage 3.
+Graph blocks own interleaved points, since covisibility groups viewpoints (an
+orbit arc), not places, so every image sees several of them. Tree is the
+working choice.
+
+Tree with `--max-images`:
+
+| `--max-images` | Blocks | Training images (max / mean / min) | Duplication |
+| ---: | ---: | --- | ---: |
+| 4,000 | 4 | 3,840 / 3,449 / 3,019 | 1.71 |
+| 3,000 | 7 | 3,061 / 2,444 / 1,566 | 2.12 |
+| 2,000 | 14 | 1,871 / 1,503 / 1,166 | 2.61 |
+| 1,500 | 18 | 1,792 / 1,133 / 289 | 2.53 |
+| 1,000 | 31 | 1,104 / 596 / 38 | 2.29 |
+| 750 | 36 | 953 / 466 / 74 | 2.08 |
+| 500 | 49 | 718 / 286 / 59 | 1.74 |
+
+Below 2,000 the limit is no longer met: the temple-center blocks reach the
+2,000-point floor on leaf size while every orbit still sees them, and the
+images they cover most add to the count. Edge blocks shrink to a few dozen
+images. The block count therefore cannot be pushed much below about 1,000–2,000
+images per block on this capture without splitting the densely viewed center
+into slivers.
 
 ## Stage 2b: block training
 
@@ -165,7 +194,7 @@ On `data/wixi_chongansi`, compare against run 13 of the
 ## Tests
 
 * `block_partition_test.py`: balanced splits, covisibility, graph bisection,
-  point ownership, and frame assignment by coverage.
+  point ownership, image coverage, and the image-limited tree.
 * `block_merge_test.py`: every Gaussian lands in exactly one core; a 1x1 grid
   reproduces its input.
 * `train_gsplat_with_masks` block patches: image filtering keeps the global
