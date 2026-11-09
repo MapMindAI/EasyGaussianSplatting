@@ -55,50 +55,72 @@ def latest_checkpoint(result_dir):
     return os.path.join(directory, steps[max(steps)])
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("manifest", help="block_partition.py's <method>.json")
-    parser.add_argument("blocks_dir", help="One trained result directory per block, by name.")
-    parser.add_argument("output_dir")
-    arguments = parser.parse_args()
-
+def export_ply(path, splats, transform):
+    """Write `splats` from gsplat's normalized frame as a PLY in the COLMAP frame."""
     import torch
     from gsplat import export_splats
 
     from mapping.gsplat_world_frame import restore_colmap_coordinates
 
-    with open(arguments.manifest) as file:
-        names = [block["name"] for block in json.load(file)["blocks"]]
-    merged, step, transform = {}, 0, None
-    for index, name in enumerate(names):
-        _, _, points, owners = load_block(arguments.manifest, name)
-        result_dir = os.path.join(arguments.blocks_dir, name)
-        checkpoint = torch.load(latest_checkpoint(result_dir), map_location="cpu", weights_only=True)
-        transform = np.load(os.path.join(result_dir, "scene_transform.npy"))
-        means = to_colmap(transform, checkpoint["splats"]["means"].numpy())
-        keep = torch.from_numpy(nearest_owners(means, points, owners) == index)
-        print(f"{name}: keeps {int(keep.sum())} of {len(keep)} Gaussians", flush=True)
-        for key, value in checkpoint["splats"].items():
-            merged.setdefault(key, []).append(value[keep])
-        step = max(step, checkpoint["step"])
-    merged = {key: torch.cat(values) for key, values in merged.items()}
-
-    os.makedirs(os.path.join(arguments.output_dir, "ckpts"), exist_ok=True)
-    os.makedirs(os.path.join(arguments.output_dir, "ply"), exist_ok=True)
-    torch.save({"step": step, "splats": merged}, os.path.join(arguments.output_dir, "ckpts", "ckpt_merged.pt"))
     means, scales, quats = restore_colmap_coordinates(
-        transform, merged["means"].numpy(), merged["scales"].numpy(), merged["quats"].numpy()
+        transform, splats["means"].numpy(), splats["scales"].numpy(), splats["quats"].numpy()
     )
     export_splats(
         means=torch.from_numpy(means).float(),
         scales=torch.from_numpy(scales).float(),
         quats=torch.from_numpy(quats).float(),
-        opacities=merged["opacities"],
-        sh0=merged["sh0"],
-        shN=merged["shN"],
+        opacities=splats["opacities"],
+        sh0=splats["sh0"],
+        shN=splats["shN"],
         format="ply",
-        save_to=os.path.join(arguments.output_dir, "ply", "point_cloud_merged.ply"),
+        save_to=path,
     )
+
+
+def owned_splats(splats, transform, points, owners, block):
+    """The checkpoint tensors of the Gaussians `block` owns."""
+    import torch
+
+    keep = nearest_owners(to_colmap(transform, splats["means"].numpy()), points, owners) == block
+    return {key: value[torch.from_numpy(keep)] for key, value in splats.items()}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("manifest", help="block_partition.py's <method>.json")
+    parser.add_argument("coarse_checkpoint", help="The coarse run's checkpoint, split by block for reference.")
+    parser.add_argument("blocks_dir", help="One trained result directory per block, by name.")
+    parser.add_argument("output_dir")
+    arguments = parser.parse_args()
+
+    import torch
+
+    with open(arguments.manifest) as file:
+        names = [block["name"] for block in json.load(file)["blocks"]]
+    ply_dir = os.path.join(arguments.output_dir, "ply")
+    os.makedirs(os.path.join(arguments.output_dir, "ckpts"), exist_ok=True)
+    os.makedirs(ply_dir, exist_ok=True)
+    coarse = torch.load(arguments.coarse_checkpoint, map_location="cpu", weights_only=True)["splats"]
+    merged, step = {}, 0
+    for index, name in enumerate(names):
+        _, _, points, owners = load_block(arguments.manifest, name)
+        result_dir = os.path.join(arguments.blocks_dir, name)
+        checkpoint = torch.load(latest_checkpoint(result_dir), map_location="cpu", weights_only=True)
+        # Every run reads the full sparse model, so all share this transform.
+        transform = np.load(os.path.join(result_dir, "scene_transform.npy"))
+        kept = owned_splats(checkpoint["splats"], transform, points, owners, index)
+        coarse_kept = owned_splats(coarse, transform, points, owners, index)
+        print(f"{name}: keeps {len(kept['means'])} of {len(checkpoint['splats']['means'])} Gaussians; "
+              f"coarse {len(coarse_kept['means'])}", flush=True)
+        export_ply(os.path.join(ply_dir, f"{name}.ply"), kept, transform)
+        export_ply(os.path.join(ply_dir, f"coarse_{name}.ply"), coarse_kept, transform)
+        for key, value in kept.items():
+            merged.setdefault(key, []).append(value)
+        step = max(step, checkpoint["step"])
+    merged = {key: torch.cat(values) for key, values in merged.items()}
+
+    torch.save({"step": step, "splats": merged}, os.path.join(arguments.output_dir, "ckpts", "ckpt_merged.pt"))
+    export_ply(os.path.join(ply_dir, "point_cloud_merged.ply"), merged, transform)
     print(f"merged {len(merged['means'])} Gaussians from {len(names)} blocks", flush=True)
 
 

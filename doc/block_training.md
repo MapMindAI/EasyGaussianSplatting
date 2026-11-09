@@ -180,7 +180,10 @@ settings, `cap_max` 6M). Patches, like the existing mask and depth ones:
 Keep each block's Gaussians it owns by the same nearest-point rule and
 concatenate the checkpoints' `splats` into `merged/ckpts/ckpt_merged.pt`
 (evaluates with `simple_trainer --ckpt`) and `merged/ply/point_cloud_merged.ply`
-in the COLMAP frame. Block checkpoints keep their expanded region for SIS.
+in the COLMAP frame. `merged/ply/` also holds each block's own Gaussians as
+`block_NN.ply` and the coarse model split by the same rule as
+`coarse_block_NN.ply`, to compare a block with the context it started from.
+Block checkpoints keep their expanded region for SIS.
 
 ## Evaluation
 

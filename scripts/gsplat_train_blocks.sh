@@ -45,4 +45,4 @@ for BLOCK in ${BLOCKS}; do
   fi
 done
 
-python3 -m mapping.block_gaussians "${MANIFEST}" "${OUTPUT_DIR}/blocks" "${OUTPUT_DIR}/merged"
+python3 -m mapping.block_gaussians "${MANIFEST}" "${COARSE_CHECKPOINT}" "${OUTPUT_DIR}/blocks" "${OUTPUT_DIR}/merged"
