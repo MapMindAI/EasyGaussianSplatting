@@ -63,7 +63,10 @@ def resize_image(source_path, resized_path, factor):
         image = image.convert("RGB")
         if image.size != size:
             image = image.resize(size, Image.BICUBIC)
-        image.save(resized_path, compress_level=1)
+        # Renamed into place, so an interrupted write never leaves a truncated
+        # PNG that a resumed run would take as done.
+        image.save(resized_path + ".partial", format="PNG", compress_level=1)
+    os.replace(resized_path + ".partial", resized_path)
 
 
 def resize_images(image_dir, resized_dir, factor):
