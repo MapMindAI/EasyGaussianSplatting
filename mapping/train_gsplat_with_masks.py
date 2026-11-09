@@ -7,6 +7,7 @@ to load "<data_dir>/masks/<image_name>.png" alongside each image. Takes
 simple_trainer's own arguments, plus --job_parameters, and --block with
 --coarse_checkpoint to train one block (doc/block_training.md).
 """
+import concurrent.futures
 import os
 import pathlib
 import pprint
@@ -49,24 +50,57 @@ def attach_masks(dataset_class):
     dataset_class.__getitem__ = __getitem__
 
 
-def downsample_images(parser_class, resize_image_folder):
+def resize_image(source_path, resized_path, factor):
+    """Write one image downscaled by `factor` as PNG, as gsplat's Parser expects.
+
+    `draft` lets libjpeg decode straight at 1/2, 1/4, or 1/8 scale, which is
+    most of the cost of decoding full size and filtering down.
+    """
+    with Image.open(source_path) as image:
+        size = (round(image.width / factor), round(image.height / factor))
+        image.draft("RGB", size)
+        image = image.convert("RGB")
+        if image.size != size:
+            image = image.resize(size, Image.BICUBIC)
+        image.save(resized_path, compress_level=1)
+
+
+def resize_images(image_dir, resized_dir, factor):
+    """Resize every image under `image_dir` in parallel, skipping ones already written.
+
+    Output paths mirror gsplat's _resize_image_folder: the same relative path
+    with a .png extension, so the Parser pairs them with the COLMAP names.
+    """
+    jobs = []
+    for directory, _, files in os.walk(image_dir):
+        output_directory = os.path.join(resized_dir, os.path.relpath(directory, image_dir))
+        os.makedirs(output_directory, exist_ok=True)
+        for name in files:
+            resized_path = os.path.join(output_directory, os.path.splitext(name)[0] + ".png")
+            if not os.path.isfile(resized_path):
+                jobs.append((os.path.join(directory, name), resized_path))
+    print(f"Downscaling {len(jobs)} images by {factor}x into {resized_dir}.", flush=True)
+    with concurrent.futures.ProcessPoolExecutor() as pool:
+        futures = [pool.submit(resize_image, source_path, resized_path, factor)
+                   for source_path, resized_path in jobs]
+        for future in futures:
+            future.result()
+
+
+def downsample_images(parser_class):
     """Write the images_<factor>/ folder gsplat's Parser requires but never creates.
 
     Staged under another name because the Parser takes any images_<factor>/ as
-    complete; resize_image_folder skips files already written, so an
-    interrupted resize resumes rather than training on part of the images.
+    complete; resize_images skips files already written, so an interrupted
+    resize resumes rather than training on part of the images.
     """
     original_init = parser_class.__init__
 
     def __init__(self, data_dir, factor=1, **kwargs):
         resized_dir = os.path.join(data_dir, f"images_{factor}")
         if factor > 1 and not os.path.isdir(resized_dir):
-            image_dir = os.path.join(data_dir, "images")
             staging_dir = resized_dir + "_partial"
-            # resize_image_folder only creates the top folder, not the per-face ones.
-            for directory, _, _ in os.walk(image_dir):
-                os.makedirs(os.path.join(staging_dir, os.path.relpath(directory, image_dir)), exist_ok=True)
-            resize_image_folder(image_dir, staging_dir, factor)
+            resize_images(os.path.join(data_dir, "images"), staging_dir, factor)
             os.replace(staging_dir, resized_dir)
         original_init(self, data_dir=data_dir, factor=factor, **kwargs)
 
@@ -234,7 +268,7 @@ import gsplat  # noqa: E402
 import gsplat.distributed  # noqa: E402
 import gsplat.losses  # noqa: E402
 import gsplat.rendering  # noqa: E402
-from datasets.colmap import Dataset, Parser, _resize_image_folder  # noqa: E402
+from datasets.colmap import Dataset, Parser  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
@@ -363,7 +397,7 @@ if block_option is not None:
     block_training = (coarse_checkpoint, block_points, block_owners, block_index)
 if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)
-downsample_images(Parser, _resize_image_folder)
+downsample_images(Parser)
 attach_masks(Dataset)
 if parameters is not None and parameters.run_depth:
     attach_depths(Dataset)
