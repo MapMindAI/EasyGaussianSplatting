@@ -21,6 +21,7 @@ sys.path[:] = [path for path in sys.path if os.path.abspath(path or ".") != SCRI
 
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
+import tqdm  # noqa: E402
 from PIL import Image  # noqa: E402
 
 GSPLAT_ROOT = pathlib.Path(os.environ.get("GSPLAT_DIR", pathlib.Path(__file__).resolve().parents[1] / "third_party" / "gsplat"))
@@ -79,11 +80,11 @@ def resize_images(image_dir, resized_dir, factor):
             resized_path = os.path.join(output_directory, os.path.splitext(name)[0] + ".png")
             if not os.path.isfile(resized_path):
                 jobs.append((os.path.join(directory, name), resized_path))
-    print(f"Downscaling {len(jobs)} images by {factor}x into {resized_dir}.", flush=True)
     with concurrent.futures.ThreadPoolExecutor(os.cpu_count()) as pool:
         futures = [pool.submit(resize_image, source_path, resized_path, factor)
                    for source_path, resized_path in jobs]
-        for future in futures:
+        for future in tqdm.tqdm(concurrent.futures.as_completed(futures), total=len(futures),
+                                desc=f"Downscaling images by {factor}x", unit="image"):
             future.result()
 
 
