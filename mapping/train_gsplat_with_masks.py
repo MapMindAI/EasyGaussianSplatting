@@ -80,7 +80,7 @@ def resize_images(image_dir, resized_dir, factor):
             if not os.path.isfile(resized_path):
                 jobs.append((os.path.join(directory, name), resized_path))
     print(f"Downscaling {len(jobs)} images by {factor}x into {resized_dir}.", flush=True)
-    with concurrent.futures.ProcessPoolExecutor() as pool:
+    with concurrent.futures.ThreadPoolExecutor(os.cpu_count()) as pool:
         futures = [pool.submit(resize_image, source_path, resized_path, factor)
                    for source_path, resized_path in jobs]
         for future in futures:
