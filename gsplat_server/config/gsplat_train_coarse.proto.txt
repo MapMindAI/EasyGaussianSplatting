@@ -9,7 +9,7 @@ data_factor: 4
 floater_reg_weight: 0.003
 refine_stop_iter: 25000
 strategy: STRATEGY_MCMC
-cap_max: 1000000
+cap_max: 6000000
 packed: false
 means_lr: 0.00008
 scales_lr: 0.001
