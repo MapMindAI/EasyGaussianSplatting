@@ -10,7 +10,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 WORKSPACE_PATH=${1:?usage: $0 <workspace> [parameters.proto.txt] [result_dir]}
-PARAMETERS_PATH=${2:-gsplat_server/config/gsplat_train_defaults.proto.txt}
+PARAMETERS_PATH=${2:-gsplat_server/config/gsplat_train_drone.proto.txt}
 RESULT_DIR=${3:-${WORKSPACE_PATH}/gsplat_output}
 
 source scripts/gsplat_env.sh
