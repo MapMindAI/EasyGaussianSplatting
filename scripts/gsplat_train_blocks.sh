@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 # Container: train a large scene block by block (doc/block_training.md).
 #
-# Usage: scripts/gsplat_train_blocks.sh <workspace> [max_images] [coarse.proto.txt] [block.proto.txt]
+# Usage: scripts/gsplat_train_blocks.sh <workspace> [max_images] [coarse.proto.txt] [block.proto.txt] [output_dir]
 #
 # Partitions sparse/0 into tree blocks of at most max_images training images
 # (default 4000), trains a coarse model of the whole scene, fine-tunes each
 # block from it in turn, and concatenates the Gaussians each block owns.
-# Results go to <workspace>/block_training. A stage whose output exists is
-# skipped, so a rerun resumes at the first unfinished block.
+# Results go to <workspace>/block_training_<YYYYmmdd_HHMMSS>. A stage whose
+# output exists is skipped, so passing an earlier run's folder as output_dir
+# resumes it at the first unfinished block.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-WORKSPACE_PATH=${1:?usage: $0 <workspace> [max_images] [coarse.proto.txt] [block.proto.txt]}
+WORKSPACE_PATH=${1:?usage: $0 <workspace> [max_images] [coarse.proto.txt] [block.proto.txt] [output_dir]}
 MAX_IMAGES=${2:-4000}
 COARSE_PARAMETERS=${3:-gsplat_server/config/gsplat_train_coarse.proto.txt}
 BLOCK_PARAMETERS=${4:-gsplat_server/config/gsplat_train_block.proto.txt}
-OUTPUT_DIR=${WORKSPACE_PATH}/block_training
+OUTPUT_DIR=${5:-${WORKSPACE_PATH}/block_training_$(date +%Y%m%d_%H%M%S)}
 MANIFEST=${OUTPUT_DIR}/partition/tree.json
+echo "Block training output: ${OUTPUT_DIR}"
 
 source scripts/gsplat_env.sh
 export PYTHONPATH="$PWD"

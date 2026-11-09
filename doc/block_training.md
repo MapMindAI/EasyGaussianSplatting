@@ -18,12 +18,12 @@ for the training and keeping StitchGS's overlap candidates for a later merge.
 
 ```bash
 docker run --rm --gpus all -v "$PWD":/workspace -w /workspace ghcr.io/mapmindai/gaussiansplatting:latest \
-  bash -lc 'scripts/gsplat_train_blocks.sh <workspace> [max_images] [coarse.proto.txt] [block.proto.txt]'
+  bash -lc 'scripts/gsplat_train_blocks.sh <workspace> [max_images] [coarse.proto.txt] [block.proto.txt] [output_dir]'
 ```
 
-Results go to `<workspace>/block_training/{partition,coarse,blocks/block_NN,merged}`.
-A stage whose output exists is skipped, so a rerun resumes at the first
-unfinished block.
+Results go to `<workspace>/block_training_<YYYYmmdd_HHMMSS>/{partition,coarse,blocks/block_NN,merged}`.
+A stage whose output exists is skipped, so passing an earlier run's folder as
+`output_dir` resumes it at the first unfinished block.
 
 Next step, not in this design: StitchGS's overlap stitching (SIS) and global
 appearance refinement with frozen geometry (GCR). Stage 2 keeps every block's
