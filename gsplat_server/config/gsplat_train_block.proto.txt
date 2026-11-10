@@ -5,7 +5,8 @@
 iterations: 30000
 test_every: 64
 data_factor: 1
-floater_reg_weight: 0.003
+# use 0.003 might introduce strange artifacts
+floater_reg_weight: 0.005
 refine_stop_iter: 20000
 strategy: STRATEGY_MCMC
 # Trainable Gaussians in one block; the frozen coarse context is extra.
