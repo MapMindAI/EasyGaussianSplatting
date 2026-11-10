@@ -5,7 +5,8 @@
 #
 # Partitions sparse/0 into tree blocks of at most max_images training images
 # (default 4000), trains a coarse model of the whole scene, fine-tunes each
-# block from it in turn, and concatenates the Gaussians each block owns.
+# block from it in turn, concatenates the Gaussians each block owns, and
+# evaluates the merged model and renders the trajectory video with it.
 # Results go to <workspace>/block_training_<YYYYmmdd_HHMMSS>. A stage whose
 # output exists is skipped, so passing an earlier run's folder as output_dir
 # resumes it at the first unfinished block.
@@ -47,4 +48,10 @@ for BLOCK in ${BLOCKS}; do
   fi
 done
 
-python3 -m mapping.block_gaussians "${MANIFEST}" "${COARSE_CHECKPOINT}" "${OUTPUT_DIR}/blocks" "${OUTPUT_DIR}/merged"
+MERGED_DIR=${OUTPUT_DIR}/merged
+python3 -m mapping.block_gaussians "${MANIFEST}" "${COARSE_CHECKPOINT}" "${OUTPUT_DIR}/blocks" "${MERGED_DIR}"
+
+if ! ls "${MERGED_DIR}"/videos/traj_*.mp4 >/dev/null 2>&1; then
+  bash scripts/gsplat_train.sh "${WORKSPACE_PATH}" "${BLOCK_PARAMETERS}" "${MERGED_DIR}" \
+    --ckpt "${MERGED_DIR}/ckpts/ckpt_merged.pt"
+fi

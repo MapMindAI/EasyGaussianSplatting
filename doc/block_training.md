@@ -185,6 +185,10 @@ in the COLMAP frame. `merged/ply/` also holds each block's own Gaussians as
 `coarse_block_NN.ply`, to compare a block with the context it started from.
 Block checkpoints keep their expanded region for SIS.
 
+`gsplat_train_blocks.sh` then runs the trainer with `--ckpt` on the merged
+checkpoint and the block parameters: it writes the test-split metrics to
+`merged/stats/` and the trajectory video to `merged/videos/traj_<step>.mp4`.
+
 ## Evaluation
 
 On `data/wixi_chongansi`, compare against run 13 of the
