@@ -3,15 +3,15 @@
 # wuxi_chongansi_complete; drone settings otherwise. Block training needs
 # STRATEGY_MCMC; test_every must match the coarse run.
 
-iterations: 30000
+iterations: 50000
 test_every: 64
 data_factor: 1
 # use 0.003 might introduce strange artifacts
 floater_reg_weight: 0.005
-refine_stop_iter: 20000
+refine_stop_iter: 40000
 strategy: STRATEGY_MCMC
 # Trainable Gaussians in one block; the frozen coarse context is extra.
-cap_max: 6000000
+cap_max: 8000000
 packed: false
 means_lr: 0.00008
 scales_lr: 0.001

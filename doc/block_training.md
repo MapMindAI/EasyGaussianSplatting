@@ -60,17 +60,14 @@ the parser's COLMAP-to-normalized similarity as `scene_transform.npy`.
 ## Stage 1: coarse model
 
 The existing trainer with `gsplat_server/config/gsplat_train_coarse.proto.txt`,
-the drone settings except:
+the drone settings (10M Gaussians, 50,000 iterations at full resolution) except
+`refine_stop_iter` 25,000 and `floater_reg_weight` 0.005. Peak memory is 12.3 GB.
 
-| Field | Value | Why |
-| --- | --- | --- |
-| `cap_max` | 10,000,000 | Enough context for the blocks; 12.3 GB peak. |
-| `iterations` | 30,000 | A prior, not a deliverable. |
-| `refine_stop_iter` | 25,000 | Scaled to the shorter run. |
-
-Both stage configurations are the settings of run `block_training_20261111_030442`
+Both stage configurations are the settings logged by run
+`block_training_20261111_092451`
 ([Block Training Tests](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Development---Block-Training-Tests)):
-merged 24.19 / 0.848 / 0.223 PSNR / SSIM / LPIPS, 14.9 GB peak, 2.9 h of training.
+17.7 GB peak and 5.4 h of training; each block scores 0.5–0.7 dB PSNR above
+6M Gaussians at 30,000 steps.
 
 `test_every` must match the block configuration, so held-out images stay held
 out throughout.
@@ -155,13 +152,13 @@ images per block on this capture without splitting the densely viewed center
 into slivers.
 
 Chosen for now: `--max-images 4000`, 4 blocks of 3,019–3,840 training images,
-each trained with 6M Gaussians.
+each trained with 8M Gaussians.
 
 ## Stage 2b: block training
 
 `mapping/train_gsplat_with_masks.py --block <manifest.json>:<name>
 --coarse_checkpoint <ckpt>` with `gsplat_train_block.proto.txt` (drone
-settings, `cap_max` 6M, 30,000 iterations, `refine_stop_iter` 20,000,
+settings, `cap_max` 8M, 50,000 iterations, `refine_stop_iter` 40,000,
 `floater_reg_weight` 0.005). Patches, like the existing mask and depth ones:
 
 * **Images.** `Dataset.__init__` keeps only the block's `training_images`. The

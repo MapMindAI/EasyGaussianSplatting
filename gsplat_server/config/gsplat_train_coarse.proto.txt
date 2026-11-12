@@ -3,12 +3,12 @@
 # wuxi_chongansi_complete (wiki: Development - Block Training Tests); drone
 # settings otherwise. test_every must match gsplat_train_block.proto.txt.
 
-iterations: 30000
+iterations: 50000
 test_every: 64
 data_factor: 1
 # use 0.003 with too small pts size might introduce strange artifacts
-floater_reg_weight: 0.003
-refine_stop_iter: 25000
+floater_reg_weight: 0.005
+refine_stop_iter: 40000
 strategy: STRATEGY_MCMC
 cap_max: 10000000
 packed: false
