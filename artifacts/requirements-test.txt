@@ -9,3 +9,4 @@ opencv-python-headless
 protobuf
 pycolmap
 pytest
+scipy

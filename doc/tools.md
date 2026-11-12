@@ -176,7 +176,7 @@ Run it after training:
 bash mapping/tsdf/run_pipeline.sh ${WORKSPACE_PATH}
 ```
 
-By default it reads the highest-step PLY under `gsplat_output/ply/`, retains
+By default it reads the highest-step PLY under the newest `gsplat_output*/ply/`, retains
 existing depths, and writes `tsdf/mesh.ply`. Pass an exported PLY as the second
 argument when training through gRPC: `bash mapping/tsdf/run_pipeline.sh
 ${WORKSPACE_PATH} ${WORKSPACE_PATH}/gsplat.ply`. The dedicated image is built

@@ -1,0 +1,18 @@
+# Block training stage 2: one block fine-tuned from the coarse model
+# (doc/block_training.md). Settings of block_training_20261111_030442 on
+# wuxi_chongansi_complete; drone settings otherwise. Block training needs
+# STRATEGY_MCMC; test_every must match the coarse run.
+
+iterations: 50000
+test_every: 64
+data_factor: 1
+# use 0.003 might introduce strange artifacts
+floater_reg_weight: 0.005
+refine_stop_iter: 40000
+strategy: STRATEGY_MCMC
+# Trainable Gaussians in one block; the frozen coarse context is extra.
+cap_max: 8000000
+packed: false
+means_lr: 0.00008
+scales_lr: 0.001
+opacities_lr: 0.025

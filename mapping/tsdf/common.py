@@ -17,6 +17,14 @@ def latest_point_cloud(model_path):
     return candidates[-1]
 
 
+def latest_model_directory(workspace_path):
+    """Return the workspace's newest gsplat_output or timestamped gsplat_output_<time> directory."""
+    candidates = sorted(path for path in Path(workspace_path).glob("gsplat_output*") if path.is_dir())
+    if not candidates:
+        raise FileNotFoundError(f"No gsplat_output directory exists under {workspace_path}")
+    return candidates[-1]
+
+
 def depth_path(depth_directory, image_name):
     """Return the depth file preserving an image's nested cube-face path."""
     return Path(depth_directory) / Path(image_name).with_suffix(".npy")
