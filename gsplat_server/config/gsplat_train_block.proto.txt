@@ -1,6 +1,7 @@
 # Block training stage 2: one block fine-tuned from the coarse model
-# (doc/block_training.md). Drone settings with a per-block budget. Block
-# training needs STRATEGY_MCMC; test_every must match the coarse run.
+# (doc/block_training.md). Settings of block_training_20261111_030442 on
+# wuxi_chongansi_complete; drone settings otherwise. Block training needs
+# STRATEGY_MCMC; test_every must match the coarse run.
 
 iterations: 30000
 test_every: 64

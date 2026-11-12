@@ -32,7 +32,7 @@ scope.
 
 ```mermaid
 flowchart LR
-    WS["Workspace<br/>images, sparse/0, masks, depths"] --> COARSE["Coarse training<br/>data_factor 4, small cap_max"]
+    WS["Workspace<br/>images, sparse/0, masks, depths"] --> COARSE["Coarse training<br/>whole scene, 10M Gaussians"]
     COARSE --> CKPT["coarse ckpt"]
     WS --> PART["block_partition.py<br/>tree, max images per block"]
     PART --> MANIFEST["partition/tree.json<br/>+ tree_points.npz"]
@@ -64,9 +64,13 @@ the drone settings except:
 
 | Field | Value | Why |
 | --- | --- | --- |
-| `data_factor` | 4 | Coarse geometry needs little resolution; image buffers shrink 16x. |
-| `cap_max` | 1,000,000 | Sized to fit the smallest target GPU. |
+| `cap_max` | 10,000,000 | Enough context for the blocks; 12.3 GB peak. |
 | `iterations` | 30,000 | A prior, not a deliverable. |
+| `refine_stop_iter` | 25,000 | Scaled to the shorter run. |
+
+Both stage configurations are the settings of run `block_training_20261111_030442`
+([Block Training Tests](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Development---Block-Training-Tests)):
+merged 24.19 / 0.848 / 0.223 PSNR / SSIM / LPIPS, 14.9 GB peak, 2.9 h of training.
 
 `test_every` must match the block configuration, so held-out images stay held
 out throughout.
@@ -157,7 +161,8 @@ each trained with 6M Gaussians.
 
 `mapping/train_gsplat_with_masks.py --block <manifest.json>:<name>
 --coarse_checkpoint <ckpt>` with `gsplat_train_block.proto.txt` (drone
-settings, `cap_max` 6M). Patches, like the existing mask and depth ones:
+settings, `cap_max` 6M, 30,000 iterations, `refine_stop_iter` 20,000,
+`floater_reg_weight` 0.005). Patches, like the existing mask and depth ones:
 
 * **Images.** `Dataset.__init__` keeps only the block's `training_images`. The
   train/test split is still taken over the full model's indices.
@@ -209,8 +214,9 @@ On `data/wixi_chongansi`, compare against run 13 of the
 
 ## Risks
 
-* **Coarse stage memory.** It still holds the whole scene. If 1M Gaussians at
-  `data_factor` 4 does not fit, lower `sh_degree` for this stage only.
+* **Coarse stage memory.** It still holds the whole scene. If 10M Gaussians at
+  full resolution do not fit, lower `cap_max` or raise `data_factor` for this
+  stage only.
 * **Appearance jumps** between blocks trained on different image subsets. That
   is what GCR addresses in the next step.
 * **MCMC relocation** can move Gaussians outside the block. They are dropped
