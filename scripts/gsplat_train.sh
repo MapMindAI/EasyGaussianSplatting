@@ -6,7 +6,8 @@
 # The workspace holds images/ and sparse/0/. The parameters file is layered over
 # gsplat_server/config/gsplat_train_defaults.proto.txt. Results default to
 # <workspace>/gsplat_output_<YYYYmmdd_HHMMSS>. Further flags go to
-# train_gsplat_with_masks.py.
+# train_gsplat_with_masks.py. A final PLY of 2 GiB or more is also bisected
+# into ply/split/ until every part is smaller.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -34,3 +35,8 @@ python3 mapping/train_gsplat_with_masks.py default \
   --result_dir "${RESULT_DIR}" \
   "${@:4}" \
   2>&1 | tee "${RESULT_DIR}.log"
+
+FINAL_PLY=$(ls -v "${RESULT_DIR}"/ply/point_cloud_*.ply 2>/dev/null | tail -n 1)
+if [ -n "${FINAL_PLY}" ]; then
+  python3 -m mapping.split_ply "${FINAL_PLY}" "${RESULT_DIR}/ply/split"
+fi
