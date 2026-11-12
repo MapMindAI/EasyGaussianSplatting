@@ -7,6 +7,7 @@ import numpy as np
 from .common import (
     camera_manifest_path,
     depth_path,
+    latest_model_directory,
     latest_point_cloud,
     progress_bar,
     valid_depth,
@@ -156,7 +157,7 @@ def main():
     parser.add_argument("--overwrite-depth", action="store_true")
     arguments = parser.parse_args()
     model_path = arguments.model_path or latest_point_cloud(
-        arguments.workspace_path / "gsplat_output"
+        latest_model_directory(arguments.workspace_path)
     )
     written, total = render_depths(
         model_path,

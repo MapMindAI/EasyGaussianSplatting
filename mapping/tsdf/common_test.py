@@ -4,6 +4,7 @@ import pytest
 from mapping.tsdf.common import (
     camera_manifest_path,
     depth_path,
+    latest_model_directory,
     latest_point_cloud,
     progress_bar,
     valid_depth,
@@ -34,6 +35,16 @@ def test_latest_point_cloud_requires_a_gsplat_export(tmp_path):
     (ply_directory / "point_cloud_100.ply").touch()
     (ply_directory / "point_cloud_20.ply").touch()
     assert latest_point_cloud(tmp_path).name == "point_cloud_100.ply"
+
+
+
+def test_latest_model_directory_prefers_the_newest_timestamp(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        latest_model_directory(tmp_path)
+    for name in ["gsplat_output", "gsplat_output_20261112_101500", "gsplat_output_20261110_090000"]:
+        (tmp_path / name).mkdir()
+    (tmp_path / "gsplat_output_20261112_101500.log").touch()
+    assert latest_model_directory(tmp_path).name == "gsplat_output_20261112_101500"
 
 
 class _Camera:

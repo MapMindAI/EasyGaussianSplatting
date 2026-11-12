@@ -5,13 +5,15 @@
 #
 # The workspace holds images/ and sparse/0/. The parameters file is layered over
 # gsplat_server/config/gsplat_train_defaults.proto.txt. Results default to
-# <workspace>/gsplat_output. Further flags go to train_gsplat_with_masks.py.
+# <workspace>/gsplat_output_<YYYYmmdd_HHMMSS>. Further flags go to
+# train_gsplat_with_masks.py.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 WORKSPACE_PATH=${1:?usage: $0 <workspace> [parameters.proto.txt] [result_dir]}
 PARAMETERS_PATH=${2:-gsplat_server/config/gsplat_train_drone.proto.txt}
-RESULT_DIR=${3:-${WORKSPACE_PATH}/gsplat_output}
+RESULT_DIR=${3:-${WORKSPACE_PATH}/gsplat_output_$(date +%Y%m%d_%H%M%S)}
+echo "Training output: ${RESULT_DIR}"
 
 source scripts/gsplat_env.sh
 export PYTHONPATH="$PWD"

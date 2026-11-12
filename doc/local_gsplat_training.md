@@ -63,7 +63,8 @@ docker run -it --rm --gpus all --shm-size=8g \
 ```
 
 Inside the container, `scripts/gsplat_train.sh <workspace> [parameters] [result_dir]`
-runs the same training; pass it in place of the `bash -lc '...'` block.
+runs the same training into `<workspace>/gsplat_output_<YYYYmmdd_HHMMSS>` by
+default; pass it in place of the `bash -lc '...'` block.
 
 The final model and PLY files are written under
 `<workspace>/gsplat_output/`. `--shm-size=8g` is required for the data-loader
