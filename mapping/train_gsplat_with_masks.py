@@ -275,6 +275,7 @@ import gsplat.rendering  # noqa: E402
 from datasets.colmap import Dataset, Parser  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
+from mapping.gsplat_pruning import attach_pruning, validate_pruning  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
     capture_scene_transform,
@@ -336,6 +337,7 @@ def load_job_parameters():
     except ValueError:
         return None
     parameters = load_parameters(sys.argv[parameter_index + 1])
+    validate_pruning(parameters)
     flags = [
         "--data_factor", str(parameters.data_factor),
         "--max_steps", str(parameters.iterations),
@@ -378,6 +380,10 @@ def cli_with_configuration(function, configuration, verbose=False):
     print("Training configuration:", flush=True)
     pprint.pprint(vars(configuration), sort_dicts=False, width=100)
     sys.stdout.flush()
+    if parameters is not None and parameters.mcmc_prune_steps:
+        if block_training is not None:
+            raise ValueError("significance pruning does not support frozen block context")
+        attach_pruning(function.__globals__, parameters)
     if block_training is not None:
         # simple_trainer's functions and classes are only reachable once
         # runpy has defined them, through the globals of its main.
