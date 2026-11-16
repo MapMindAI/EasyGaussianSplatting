@@ -168,12 +168,9 @@ With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
 refinement; it does not reduce their count. `prune_opa` applies only to
 DefaultStrategy.
 
-Optional `mcmc_prune_steps` adds scheduled significance pruning to MCMC, with
-`mcmc_prune_keep_fraction`, `mcmc_prune_scoring_views`, and
-`mcmc_prune_resolution` controlling retention and scoring. Each event deletes
-low-ranked Gaussians and lowers `cap_max`; see
-[pruning during MCMC training](local_gsplat_training.md#prune-during-mcmc-training)
-for the protocol and supported modes. Regenerate client/server protobuf bindings
+Optional `mcmc_prune_steps` deletes low-significance Gaussians and lowers
+`cap_max`; see [pruning during MCMC training](local_gsplat_training.md#prune-during-mcmc-training)
+for settings and supported modes. Regenerate client/server protobuf bindings
 after updating the schema.
 
 The Gaussian learning rates match `simple_trainer` by default, except

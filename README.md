@@ -173,7 +173,10 @@ gravity levelling (`mapping/mapping_pipeline_test.py`), the point cloud's
 return to COLMAP coordinates (`mapping/gsplat_world_frame_test.py`), and the
 training-mask helpers (`mapping/triton/segment_people_test.py`), and the
 depth sampling (`mapping/depth/generate_depth_test.py`), and the covisibility
-grouping and scale fit (`mapping/depth/`).
+grouping and scale fit (`mapping/depth/`), and MCMC pruning settings, masks,
+and retention (`mapping/gsplat_pruning_test.py`).
+`mapping/gsplat_pruning_gpu_test.py` exercises scoring and optimizer/scene state
+in the GPU image; the slim CI image skips it.
 
 CI runs them on a slim Python image rather than the 20 GB pipeline one. To do
 the same locally:

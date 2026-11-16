@@ -1,9 +1,14 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
+from PIL import Image
 
 from gsplat_server.parameters import load_default_parameters, load_parameters
 from gsplat_server.proto import gsplat_pb2
-from mapping.gsplat_pruning import removal_mask, validate_pruning
+from mapping.gsplat_pruning import (
+    load_training_mask, removal_mask, validate_pruning, validate_pruning_configuration,
+)
 
 
 def test_pruning_is_disabled_by_default():
@@ -61,3 +66,37 @@ def test_ties_keep_original_order_and_small_models_keep_one_primitive():
 def test_invalid_or_invisible_models_cannot_be_pruned(scores):
     with pytest.raises(ValueError):
         removal_mask(scores, 0.5)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("patch_size", 128), ("max_steps", 1000), ("with_eval3d", True),
+    ("with_ut", True), ("camera_model", "fisheye"),
+])
+def test_incompatible_resolved_configuration_is_rejected(field, value):
+    configuration = SimpleNamespace(patch_size=None, max_steps=2000, with_eval3d=False,
+                                    with_ut=False, camera_model="pinhole")
+    setattr(configuration, field, value)
+    with pytest.raises(ValueError):
+        validate_pruning_configuration(configuration, [1000], 1)
+
+
+@pytest.mark.parametrize("world_size", [0, 2])
+def test_pruning_requires_one_gpu(world_size):
+    configuration = SimpleNamespace(patch_size=None)
+    with pytest.raises(ValueError, match="one GPU"):
+        validate_pruning_configuration(configuration, [1000], world_size)
+
+
+def test_training_mask_missing_or_all_black_preserves_camera_mask(tmp_path):
+    assert load_training_mask(tmp_path, "face.jpg", (4, 4)) is None
+    (tmp_path / "masks").mkdir()
+    Image.fromarray(np.zeros((2, 2), dtype=np.uint8)).save(tmp_path / "masks/face.jpg.png")
+    assert load_training_mask(tmp_path, "face.jpg", (4, 4)) is None
+
+
+def test_training_mask_uses_nearest_resize_and_threshold(tmp_path):
+    (tmp_path / "masks/rig").mkdir(parents=True)
+    values = np.array([[0, 127], [128, 255]], dtype=np.uint8)
+    Image.fromarray(values).save(tmp_path / "masks/rig/face.jpg.png")
+    mask = load_training_mask(tmp_path, "rig/face.jpg", (4, 4))
+    np.testing.assert_array_equal(mask, np.repeat(np.repeat(values > 127, 2, axis=0), 2, axis=1))
