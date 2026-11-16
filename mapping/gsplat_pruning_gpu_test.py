@@ -89,19 +89,35 @@ def test_pruning_preserves_adam_and_scene_state_while_mcmc_continues(tmp_path, m
 
 
 @pytest.mark.parametrize("antialiased", [False, True])
-def test_scoring_maps_packed_ids_and_excludes_masked_or_invisible_hits(antialiased, monkeypatch):
+def test_scoring_maps_packed_ids_and_excludes_masked_or_invisible_hits(antialiased, monkeypatch, tmp_path):
     parameters = load_default_parameters()
     splats = make_splats(4)
     with torch.no_grad():
         splats["means"][2, 2] = -3
         splats["means"][3, 0] = 100
-    data = {"image": torch.zeros(32, 32, 3), "camtoworld": torch.eye(4),
-            "K": torch.tensor([[24., 0, 16], [0, 24., 16], [0, 0, 1]]), "image_id": 0}
+    parser = SimpleNamespace(
+        data_dir=str(tmp_path), camera_ids=[1, 2], imsize_dict={2: (32, 32)},
+        Ks_dict={2: np.array([[24., 0, 16], [0, 24., 16], [0, 0, 1]])},
+        camtoworlds=np.stack([np.eye(4), np.eye(4)]),
+        image_names=["heldout.jpg", "training.jpg"], mask_dict={2: None},
+    )
+
+    class Dataset:
+        indices = np.array([1])
+
+        def __len__(self):
+            return len(self.indices)
+
+        def __getitem__(self, index):
+            pytest.fail("scoring must not decode training RGB images")
+
+    dataset = Dataset()
+    dataset.parser = parser
     configuration = SimpleNamespace(
         packed=False, near_plane=0.01, far_plane=100, camera_model="pinhole",
         antialiased=antialiased, pose_opt=False,
     )
-    runner = SimpleNamespace(splats=splats, cfg=configuration, trainset=[data])
+    runner = SimpleNamespace(splats=splats, cfg=configuration, trainset=dataset)
     dense_scores, views = gsplat_pruning.score_gaussians(runner, parameters)
     configuration.packed = True
     packed_scores, _ = gsplat_pruning.score_gaussians(runner, parameters)
@@ -112,6 +128,6 @@ def test_scoring_maps_packed_ids_and_excludes_masked_or_invisible_hits(antialias
     monkeypatch.setattr(gsplat_pruning, "MAXIMUM_REGION_HITS", 10)
     subdivided_scores, _ = gsplat_pruning.score_gaussians(runner, parameters)
     np.testing.assert_array_equal(subdivided_scores, packed_scores)
-    data["mask"] = torch.zeros(32, 32, dtype=torch.bool)
+    parser.mask_dict[2] = np.zeros((32, 32), dtype=bool)
     masked_scores, _ = gsplat_pruning.score_gaussians(runner, parameters)
     assert (masked_scores == 0).all()

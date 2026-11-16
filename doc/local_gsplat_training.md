@@ -93,13 +93,19 @@ With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
 refinement; `cap_max` limits the count. `prune_opa` applies only to
 DefaultStrategy.
 
+A `data_factor` above 1 trains on `<workspace>/images_<data_factor>/`, which
+the first run writes from `images/`.
+
+The local command does not run segmentation or depth generation merely because
+`run_segmentation` or `run_depth` is set in the parameters file. Run those
+stages separately. When `run_depth: true`, the trainer uses any existing
+`<workspace>/depths/*.npy` files for depth supervision. It logs generated-depth
+minus sparse-COLMAP-depth statistics for samples within two pixels of each
+sparse point.
+
 ## Prune during MCMC training
 
-MCMC has no built-in population reduction: it relocates low-opacity Gaussians.
-DefaultStrategy prunes by opacity and 3D size, with optional image-plane size
-pruning in gsplat; switching strategies also changes densification.
-
-The training wrapper supports optional LightGaussian-style significance pruning:
+Enable optional significance pruning in a custom JobParameters file:
 
 ```text
 iterations: 12000
@@ -112,52 +118,22 @@ mcmc_prune_scoring_views: 32
 mcmc_prune_resolution: 256
 ```
 
-Steps count completed optimizer updates, starting at 1. Each event scores the
-current model on evenly sampled training views, retains the requested fraction
-of its current population, and lowers `cap_max` to prevent regrowth. MCMC
-relocation and noise continue according to their existing settings. The schedule
-must be increasing and leave at least one optimization step after the last prune.
-An empty `mcmc_prune_steps` disables pruning.
+Steps count completed optimizer updates from 1; they must increase and precede
+the final iteration. The default step list is empty, disabling pruning. Each
+event retains a fraction of the current population and lowers `cap_max` to
+prevent regrowth; MCMC relocation and noise continue under their existing settings.
 
-The score is `accepted_pixel_hits × sigmoid(opacity) × volume**0.1`.
-Scoring uses gsplat's occlusion-aware contributor indices and integer hit
-reduction, rather than LightGaussian's non-atomic counter updates. It uses the
-training rasterization mode and masks, with the longest scoring image dimension
-capped by `mcmc_prune_resolution`. The common volume reference is omitted because
-it does not affect ranking. This follows the unclipped upstream volume weighting;
-it does not reproduce the paper's clipped formula. A zero score on sampled views
-does not prove a Gaussian is invisible from other viewpoints.
+Scoring uses evenly sampled training cameras and masks without decoding RGB
+images. Images are capped at `mcmc_prune_resolution` on their longest side;
+crowded regions are subdivided to bound contributor-index buffers. The score is
+`accepted_pixel_hits × sigmoid(opacity) × volume**0.1`, using gsplat's integer
+hit reduction and the upstream unclipped volume weighting. The common volume
+reference is omitted because it does not affect ranking. Zero sampled hits do
+not establish invisibility from other views.
 
-Deletion updates every Gaussian attribute, Adam state, and scene bookkeeping;
-the MCMC binomial table is preserved. `pruning.jsonl` records iteration, population,
-cap, and scoring settings. Final checkpoints and PLYs contain the reduced model.
-Checkpoint/export events on a pruning iteration occur before that iteration's
-optimizer and pruning updates; use a later save to inspect the pruned population.
-
-This path supports one GPU, complete COLMAP training images, and standard pinhole
-rasterization. Frozen block context, `with_ut`, and `with_eval3d` are unsupported.
-Scoring processes one view at a time and subdivides crowded image regions to
-bound contributor-index buffers; model and training memory still need measurement.
-Do not assume the full training run fits in 4 GB from its final model size.
-
-Compare against direct MCMC training at the same final count and SH degree, plus
-an unpruned run with the same optimization budget, before attributing quality
-changes to pruning.
-
-Validation on the GTX 1650 Ti: a synthetic 12-step run pruned 64 → 51 → 41
-Gaussians at steps 4 and 8, continued training, and exported a checkpoint and PLY
-with 41 rows. CUDA tests cover packed/unpacked scoring, masks, image subdivision,
-and preservation of Adam and scene state. This verifies integration, not real-scene
-appearance preservation.
-
-## Image and supervision settings
-
-A `data_factor` above 1 trains on `<workspace>/images_<data_factor>/`, which
-the first run writes from `images/`.
-
-The local command does not run segmentation or depth generation merely because
-`run_segmentation` or `run_depth` is set in the parameters file. Run those
-stages separately. When `run_depth: true`, the trainer uses any existing
-`<workspace>/depths/*.npy` files for depth supervision. It logs generated-depth
-minus sparse-COLMAP-depth statistics for samples within two pixels of each
-sparse point.
+Deletion preserves Adam and scene state; `pruning.jsonl` records each event.
+Saves on a pruning iteration precede its optimizer/pruning updates; later saves
+contain the reduced population. Supports one GPU, full COLMAP images, and standard
+pinhole rasterization; frozen block context, `with_ut`, and `with_eval3d` are
+unsupported. Final model size does not establish peak training memory.
+PPISP phases that freeze Gaussians skip pruning callbacks.
