@@ -121,6 +121,14 @@ message JobParameters {
   // max_scale_ratio; 0 is off (see doc/gsplat_server.md).
   float anisotropy_reg_weight = 40;
   float max_scale_ratio = 41;
+  // MCMC only: prune after these optimization steps; empty disables pruning.
+  repeated int32 mcmc_prune_steps = 43;
+  // Fraction of the current population retained at each pruning step.
+  float mcmc_prune_keep_fraction = 44;
+  // Number of evenly sampled training views used for significance scoring.
+  int32 mcmc_prune_scoring_views = 45;
+  // Maximum scoring image dimension in pixels.
+  int32 mcmc_prune_resolution = 46;
 
   message Color {
     // Channel intensities in [0, 1].

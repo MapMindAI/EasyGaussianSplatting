@@ -97,6 +97,65 @@ With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
 refinement; `cap_max` limits the count. `prune_opa` applies only to
 DefaultStrategy.
 
+## Prune during MCMC training
+
+MCMC has no built-in population reduction: it relocates low-opacity Gaussians.
+DefaultStrategy prunes by opacity and 3D size, with optional image-plane size
+pruning in gsplat; switching strategies also changes densification.
+
+The training wrapper supports optional LightGaussian-style significance pruning:
+
+```text
+iterations: 12000
+strategy: STRATEGY_MCMC
+cap_max: 500000
+mcmc_prune_steps: 6000
+mcmc_prune_steps: 9000
+mcmc_prune_keep_fraction: 0.8
+mcmc_prune_scoring_views: 32
+mcmc_prune_resolution: 256
+```
+
+Steps count completed optimizer updates, starting at 1. Each event scores the
+current model on evenly sampled training views, retains the requested fraction
+of its current population, and lowers `cap_max` to prevent regrowth. MCMC
+relocation and noise continue according to their existing settings. The schedule
+must be increasing and leave at least one optimization step after the last prune.
+An empty `mcmc_prune_steps` disables pruning.
+
+The score is `accepted_pixel_hits × sigmoid(opacity) × volume**0.1`.
+Scoring uses gsplat's occlusion-aware contributor indices and integer hit
+reduction, rather than LightGaussian's non-atomic counter updates. It uses the
+training rasterization mode and masks, with the longest scoring image dimension
+capped by `mcmc_prune_resolution`. The common volume reference is omitted because
+it does not affect ranking. This follows the unclipped upstream volume weighting;
+it does not reproduce the paper's clipped formula. A zero score on sampled views
+does not prove a Gaussian is invisible from other viewpoints.
+
+Deletion updates every Gaussian attribute, Adam state, and scene bookkeeping;
+the MCMC binomial table is preserved. `pruning.jsonl` records iteration, population,
+cap, and scoring settings. Final checkpoints and PLYs contain the reduced model.
+Checkpoint/export events on a pruning iteration occur before that iteration's
+optimizer and pruning updates; use a later save to inspect the pruned population.
+
+This path supports one GPU, complete COLMAP training images, and standard pinhole
+rasterization. Frozen block context, `with_ut`, and `with_eval3d` are unsupported.
+Scoring processes one view at a time and subdivides crowded image regions to
+bound contributor-index buffers; model and training memory still need measurement.
+Do not assume the full training run fits in 4 GB from its final model size.
+
+Compare against direct MCMC training at the same final count and SH degree, plus
+an unpruned run with the same optimization budget, before attributing quality
+changes to pruning.
+
+Validation on the GTX 1650 Ti: a synthetic 12-step run pruned 64 → 51 → 41
+Gaussians at steps 4 and 8, continued training, and exported a checkpoint and PLY
+with 41 rows. CUDA tests cover packed/unpacked scoring, masks, image subdivision,
+and preservation of Adam and scene state. This verifies integration, not real-scene
+appearance preservation.
+
+## Image and supervision settings
+
 A `data_factor` above 1 trains on `<workspace>/images_<data_factor>/`, which
 the first run writes from `images/`.
 
