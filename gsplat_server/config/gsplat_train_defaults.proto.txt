@@ -78,6 +78,11 @@ cap_max: 500000
 # MCMC only: relocate Gaussians at or below this opacity during refinement.
 min_opacity: 0.005
 
+# mcmc_prune_steps defaults to [] (disabled); add step entries in a custom file to enable it.
+mcmc_prune_keep_fraction: 0.8
+mcmc_prune_scoring_views: 32
+mcmc_prune_resolution: 256
+
 
 # Spherical-harmonic degree for view-dependent colour.
 sh_degree: 3

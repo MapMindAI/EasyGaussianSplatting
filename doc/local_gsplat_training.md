@@ -106,3 +106,38 @@ separately too. When `run_depth: true`, the trainer uses any existing
 `<workspace>/depths/*.npy` files for depth supervision. It logs generated-depth
 minus sparse-COLMAP-depth statistics for samples within two pixels of each
 sparse point.
+
+## Prune during MCMC training
+
+Enable optional significance pruning in a custom JobParameters file:
+
+```text
+iterations: 12000
+strategy: STRATEGY_MCMC
+cap_max: 500000
+mcmc_prune_steps: 6000
+mcmc_prune_steps: 9000
+mcmc_prune_keep_fraction: 0.8
+mcmc_prune_scoring_views: 32
+mcmc_prune_resolution: 256
+```
+
+Steps count completed optimizer updates from 1; they must increase and precede
+the final iteration. The default step list is empty, disabling pruning. Each
+event retains a fraction of the current population and lowers `cap_max` to
+prevent regrowth; MCMC relocation and noise continue under their existing settings.
+
+Scoring uses evenly sampled training cameras and masks without decoding RGB
+images. Images are capped at `mcmc_prune_resolution` on their longest side;
+crowded regions are subdivided to bound contributor-index buffers. The score is
+`accepted_pixel_hits × sigmoid(opacity) × volume**0.1`, using gsplat's integer
+hit reduction and the upstream unclipped volume weighting. The common volume
+reference is omitted because it does not affect ranking. Zero sampled hits do
+not establish invisibility from other views.
+
+Deletion preserves Adam and scene state; `pruning.jsonl` records each event.
+Saves on a pruning iteration precede its optimizer/pruning updates; later saves
+contain the reduced population. Supports one GPU, full COLMAP images, and standard
+pinhole rasterization; frozen block context, `with_ut`, and `with_eval3d` are
+unsupported. Final model size does not establish peak training memory.
+PPISP phases that freeze Gaussians skip pruning callbacks.

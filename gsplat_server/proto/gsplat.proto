@@ -96,6 +96,14 @@ message JobParameters {
   int32 test_every = 32;
   // MCMC only: opacity at or below which a Gaussian is relocated.
   float min_opacity = 33;
+  // MCMC only: prune after these optimization steps; empty disables pruning.
+  repeated int32 mcmc_prune_steps = 34;
+  // Fraction of the current population retained at each pruning step.
+  float mcmc_prune_keep_fraction = 35;
+  // Number of evenly sampled training views used for significance scoring.
+  int32 mcmc_prune_scoring_views = 36;
+  // Maximum scoring image dimension in pixels.
+  int32 mcmc_prune_resolution = 37;
 
   message Color {
     // Channel intensities in [0, 1].

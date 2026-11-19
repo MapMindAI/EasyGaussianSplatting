@@ -46,6 +46,9 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── gps_test.py               # Track parsing, the fit, and the alignment.
 │   ├── gsplat_world_frame.py     # Undo gsplat's world normalization on export.
 │   ├── gsplat_world_frame_test.py # Similarity inverse and the export wiring.
+│   ├── gsplat_pruning.py          # Training masks and scheduled MCMC significance pruning.
+│   ├── gsplat_pruning_test.py     # Pruning settings, masks, and retained rows.
+│   ├── gsplat_pruning_gpu_test.py # CUDA scoring, subdivision, and optimizer/scene state.
 │   ├── mapping_pipeline_test.py  # Gravity levelling of the solved map.
 │   ├── panorama_database.py      # Panorama video to a cube-map rig database.
 │   ├── panorama_database_test.py # Image counts and the FFmpeg decode commands.
