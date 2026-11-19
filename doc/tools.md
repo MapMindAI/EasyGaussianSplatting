@@ -67,9 +67,10 @@ The cube-map model lands in `data/pano_mapping`, ready for gsplat: the faces
 are 90-degree-FOV `PINHOLE` cameras, which gsplat's COLMAP loader supports and
 `EQUIRECTANGULAR` it does not.
 
-`scripts/run_pipeline.sh` runs person masking when `run_segmentation` is true,
-then trains a [gsplat](https://github.com/nerfstudio-project/gsplat) model from
-that cube-map reconstruction. Set it false to skip Mask R-CNN's weight download.
+`scripts/run_pipeline.sh` runs Mask R-CNN when `mask_people` is true and
+SegFormer when `mask_sky` is true, then trains a
+[gsplat](https://github.com/nerfstudio-project/gsplat) model from that cube-map
+reconstruction. Both flags default to false.
 Every training setting comes from the parameters file, whose
 schema is `gsplat_server/proto/gsplat.proto`. The container needs about 8 GiB of
 shared memory for gsplat's data-loader workers; below that they die mid-run with
@@ -104,10 +105,14 @@ ${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.triton.
   --triton-url ${GSPLAT_HOST}:8011
 ```
 
-`scripts/run_pipeline.sh` runs this with its defaults; run it by hand to change
-them. People use torchvision Mask R-CNN. `--no-mask-sky` masks people only and
-does not call SegFormer; otherwise SegFormer supplies sky masks. `--dilation` grows each person mask (1
-pixel), and `--num-threads` sets how many images infer at once (4). Masks mirror
+`scripts/run_pipeline.sh` and `scripts/gsplat_train.sh` read `mask_people` and
+`mask_sky` from their parameters file through `scripts/gsplat_segment.sh`.
+`scripts/gsplat_train_blocks.sh` generates masks enabled in either its coarse
+or block parameters before partitioning.
+Direct invocation of `segment_people.py` enables both by default:
+`--no-mask-people` skips Mask R-CNN, and `--no-mask-sky` skips SegFormer.
+`--dilation` grows each person mask (1 pixel), and `--num-threads` sets how many
+images infer at once (4). Masks mirror
 any nested folders under `images/`, so each keeps the image's relative path and
 adds `.png` to its filename. Existing masks are kept unless `--overwrite` is
 given. SegFormer runs a 512-pixel model on overlapping tiles, so masks retain
@@ -159,8 +164,9 @@ run_depth: true
 depth_lambda: 0.01
 ```
 
-Neither stage runs from the parameters file locally -- `run_segmentation` and
-`run_depth` only tell the server to run them (see
+Calling `mapping/train_gsplat_with_masks.py` directly does not generate masks
+or depth. The server honors `mask_people`, `mask_sky`, and `run_depth`.
+The pipeline and training scripts honor the two mask flags (see
 [gsplat_server.md](gsplat_server.md#submitting-a-model)).
 
 ## TSDF mesh from a Gaussian Splat

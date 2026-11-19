@@ -4,7 +4,8 @@
 # Usage: scripts/gsplat_train.sh <workspace> [parameters.proto.txt] [result_dir] [trainer flags...]
 #
 # The workspace holds images/ and sparse/0/. The parameters file is layered over
-# gsplat_server/config/gsplat_train_defaults.proto.txt. Results default to
+# gsplat_server/config/gsplat_train_defaults.proto.txt; mask_people and mask_sky
+# generate masks before training. Results default to
 # <workspace>/gsplat_output_<YYYYmmdd_HHMMSS>. Further flags go to
 # train_gsplat_with_masks.py. A final PLY of 2 GiB or more is also bisected
 # into ply/split/ until every part is smaller.
@@ -22,9 +23,7 @@ export PYTORCH_ALLOC_CONF=expandable_segments:True
 
 mkdir -p "$(dirname "${RESULT_DIR}")"
 
-if [ ! -f gsplat_server/proto/gsplat_pb2.py ]; then
-  bash gsplat_server/proto/build.sh
-fi
+bash scripts/gsplat_segment.sh "${WORKSPACE_PATH}" "${PARAMETERS_PATH}"
 
 python3 mapping/train_gsplat_with_masks.py default \
   --job_parameters "${PARAMETERS_PATH}" \
