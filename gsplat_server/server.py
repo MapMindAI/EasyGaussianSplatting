@@ -132,10 +132,11 @@ def training_command(job_directory):
     ]
 
 
-def segmentation_command(model_directory, mask_sky):
+def segmentation_command(model_directory, mask_people, mask_sky):
     return [
         "python3", str(SEGMENT_ENTRYPOINT),
         str(model_directory / "images"), str(model_directory / "masks"),
+        "--mask-people" if mask_people else "--no-mask-people",
         "--mask-sky" if mask_sky else "--no-mask-sky",
     ]
 
@@ -160,10 +161,12 @@ def job_steps(job, directory):
     model_directory = directory / "model"
     parameters = parameters_from_dict(job["parameters"])
     steps = []
-    if parameters.run_segmentation and not (model_directory / "masks").is_dir():
-        steps.append(
-            ("segmentation", segmentation_command(model_directory, parameters.mask_sky))
-        )
+    if (parameters.mask_people or parameters.mask_sky) and not (
+        model_directory / "masks"
+    ).is_dir():
+        steps.append(("segmentation", segmentation_command(
+            model_directory, parameters.mask_people, parameters.mask_sky
+        )))
     if parameters.run_depth and not (model_directory / "depths").is_dir():
         steps.append(("depth", depth_command(model_directory)))
     steps.append(("gsplat training", training_command(directory)))

@@ -36,8 +36,10 @@ docker run -it --rm --gpus all --shm-size=8g \
   '
 ```
 
-Segmentation requires Triton with the SegFormer model available; see
-[panorama mapping](panorama_mapping.md). Training works without `masks/`.
+Direct invocation of `segment_people.py` enables both models by default.
+`--no-mask-people` skips Mask R-CNN, and `--no-mask-sky` skips SegFormer and its
+Triton dependency; see [panorama mapping](panorama_mapping.md).
+Training works without `masks/`.
 
 ## Train
 
@@ -63,8 +65,10 @@ docker run -it --rm --gpus all --shm-size=8g \
 ```
 
 Inside the container, `scripts/gsplat_train.sh <workspace> [parameters] [result_dir]`
-runs the same training into `<workspace>/gsplat_output_<YYYYmmdd_HHMMSS>` by
-default; pass it in place of the `bash -lc '...'` block. If the final PLY is
+runs segmentation according to `mask_people` and `mask_sky`, then trains into
+`<workspace>/gsplat_output_<YYYYmmdd_HHMMSS>` by default. Existing masks are
+reused. Sky masking requires `TRITON_URL`; people masking uses local Mask R-CNN.
+Pass the script in place of the `bash -lc '...'` block. If the final PLY is
 2 GiB or larger, it also bisects it along the longer horizontal axis into
 `ply/split/point_cloud_<step>_NN.ply`, each under 2 GiB, for browser viewers.
 
@@ -96,9 +100,9 @@ DefaultStrategy.
 A `data_factor` above 1 trains on `<workspace>/images_<data_factor>/`, which
 the first run writes from `images/`.
 
-The local command does not run segmentation or depth generation merely because
-`run_segmentation` or `run_depth` is set in the parameters file. Run those
-stages separately. When `run_depth: true`, the trainer uses any existing
+Calling `mapping/train_gsplat_with_masks.py` directly does not generate masks;
+use `scripts/gsplat_train.sh` or run segmentation separately. Generate depth
+separately too. When `run_depth: true`, the trainer uses any existing
 `<workspace>/depths/*.npy` files for depth supervision. It logs generated-depth
 minus sparse-COLMAP-depth statistics for samples within two pixels of each
 sparse point.
