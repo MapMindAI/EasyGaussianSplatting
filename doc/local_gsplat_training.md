@@ -67,7 +67,7 @@ docker run -it --rm --gpus all --shm-size=8g \
 Inside the container, `scripts/gsplat_train.sh <workspace> [parameters] [result_dir]`
 runs segmentation according to `mask_people` and `mask_sky`, then trains into
 `<workspace>/gsplat_output_<YYYYmmdd_HHMMSS>` by default, and saves the resolved
-parameters, defaults included, as `job_parameters.proto.txt` there. Existing
+parameters, defaults included, as `cfg.proto.txt` there. Existing
 masks are reused. Sky masking requires `TRITON_URL`; people masking uses local Mask R-CNN.
 Pass the script in place of the `bash -lc '...'` block. If the final PLY is
 2 GiB or larger, it also bisects it along the longer horizontal axis into

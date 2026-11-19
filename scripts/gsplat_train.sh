@@ -7,7 +7,7 @@
 # gsplat_server/config/gsplat_train_defaults.proto.txt; mask_people and mask_sky
 # generate masks before training. Results default to
 # <workspace>/gsplat_output_<YYYYmmdd_HHMMSS>, with the resolved parameters in
-# job_parameters.proto.txt. Further flags go to
+# cfg.proto.txt. Further flags go to
 # train_gsplat_with_masks.py. A final PLY of 2 GiB or more is also bisected
 # into ply/split/ until every part is smaller.
 set -euo pipefail
