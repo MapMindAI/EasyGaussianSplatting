@@ -276,6 +276,7 @@ def test_depth_reads_the_model_and_writes_beside_it(tmp_path, parameters):
 
 def test_an_uploaded_depths_directory_is_never_overwritten(tmp_path, parameters):
     parameters["mask_people"] = False
+    parameters["mask_sky"] = False
     parameters["run_depth"] = True
     (tmp_path / "model" / "depths").mkdir(parents=True)
 

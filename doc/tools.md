@@ -107,7 +107,7 @@ ${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.triton.
 
 `scripts/run_pipeline.sh` reads `mask_people` and `mask_sky` from its parameters
 file. Direct invocation enables both by default: `--no-mask-people` skips
-Mask R-CNN, and `--no-mask-sky` skips SegFormer. Either model can run alone.
+Mask R-CNN, and `--no-mask-sky` skips SegFormer.
 `--dilation` grows each person mask (1 pixel), and `--num-threads` sets how many
 images infer at once (4). Masks mirror
 any nested folders under `images/`, so each keeps the image's relative path and

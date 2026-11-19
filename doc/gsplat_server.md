@@ -205,8 +205,11 @@ mask_sky: true
 
 `mask_people` runs torchvision's COCO-trained Mask R-CNN locally. `mask_sky`
 runs SegFormer from `third_party/EasyTensorRT` (ADE20K class 2) over gRPC at
-`TRITON_URL`. Each flag loads only its own model; either can run alone, and
-both default to false. When both are enabled, their masks are combined.
+`TRITON_URL`. Both default to false; enabling both combines their masks.
+
+Before upgrading, rename `run_segmentation` to `mask_people` in existing
+parameter files and saved `job.json` parameters. Protobuf field number 20
+is unchanged.
 
 An uploaded `masks/` always wins. Segmentation runs inference on
 `segment_people.py --num-threads` worker threads, through the same helper the

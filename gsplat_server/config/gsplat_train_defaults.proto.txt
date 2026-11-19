@@ -102,7 +102,7 @@ shN_lr: 0.000125
 pose_opt: false
 # Learning rate for camera-pose optimization. Only read when pose_opt is set.
 pose_opt_lr: 0.00001
-# Generate masks before training when none are supplied; each model is independent.
+# Generate masks before training when none are supplied.
 # Mask R-CNN masks people; SegFormer masks sky through Triton.
 mask_people: false
 mask_sky: false

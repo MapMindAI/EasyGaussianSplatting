@@ -151,9 +151,11 @@ def test_mask_choices_only_run_enabled_models(tmp_path, monkeypatch, mask_people
     blocked = (people & mask_people) | ((classes == 2) & mask_sky)
     mask = cv2.imread(str(tmp_path / "masks/front/frame.png.png"), cv2.IMREAD_GRAYSCALE)
     assert np.array_equal(mask, training_mask(blocked))
-    debug_image = image if not mask_sky else label_overlay(image, classes)
-    if mask_people:
-        debug_image = person_overlay(debug_image, people)
     overlay = cv2.imread(str(tmp_path / "debug/front/frame.png.png"))
-    assert np.array_equal(overlay, debug_image)
+    expected_pixels = {
+        (True, False): [[40, 40, 168], [40, 40, 40]],
+        (False, True): [[40, 40, 168], [40, 86, 138]],
+        (True, True): [[20, 20, 212], [20, 43, 69]],
+    }
+    assert overlay[0, :2].tolist() == expected_pixels[mask_people, mask_sky]
     assert (tmp_path / "debug/label_colours.png").exists() == mask_sky

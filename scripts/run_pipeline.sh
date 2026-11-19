@@ -70,14 +70,13 @@ from pathlib import Path
 from gsplat_server.parameters import load_parameters
 
 parameters = load_parameters(os.environ["PARAMETERS_FILE"])
-if parameters.mask_people or parameters.mask_sky:
-    directory = Path(os.environ["RECONSTRUCTION_DIR"])
-    subprocess.run([
-        sys.executable, "-m", "mapping.triton.segment_people",
-        str(directory / "images"), str(directory / "masks"),
-        "--mask-people" if parameters.mask_people else "--no-mask-people",
-        "--mask-sky" if parameters.mask_sky else "--no-mask-sky",
-    ], check=True)
+directory = Path(os.environ["RECONSTRUCTION_DIR"])
+subprocess.run([
+    sys.executable, "-m", "mapping.triton.segment_people",
+    str(directory / "images"), str(directory / "masks"),
+    "--mask-people" if parameters.mask_people else "--no-mask-people",
+    "--mask-sky" if parameters.mask_sky else "--no-mask-sky",
+], check=True)
 PY
 
 export PYTORCH_ALLOC_CONF="${PYTORCH_ALLOC_CONF:-expandable_segments:True}"
