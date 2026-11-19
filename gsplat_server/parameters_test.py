@@ -3,6 +3,7 @@
 import pytest
 
 from gsplat_server.parameters import (
+    DEFAULT_PARAMETERS_PATH,
     load_default_parameters,
     load_parameters,
     parameters_from_dict,
@@ -28,6 +29,8 @@ def test_defaults_carry_the_shipped_values():
     assert parameters.min_opacity == pytest.approx(0.005)
     assert parameters.absgrad is True
     assert parameters.test_every == 8
+    assert parameters.opacity_reg_weight == pytest.approx(0.01)
+    assert parameters.scale_reg_weight == pytest.approx(0.01)
 
 
 def test_omitted_fields_keep_the_default_rather_than_proto3_zero(tmp_path):
@@ -69,6 +72,22 @@ def test_mcmc_min_opacity_override(tmp_path):
 
     assert parameters.strategy == gsplat_pb2.STRATEGY_MCMC
     assert parameters.min_opacity == pytest.approx(0.01)
+
+
+def test_regularization_weights_override_independently(tmp_path):
+    path = tmp_path / "regularization.textproto"
+    path.write_text("opacity_reg_weight: 0\nscale_reg_weight: 0.03\n")
+
+    parameters = load_parameters(path)
+
+    assert parameters.opacity_reg_weight == 0
+    assert parameters.scale_reg_weight == pytest.approx(0.03)
+
+
+@pytest.mark.parametrize("name", sorted(
+    path.name for path in (DEFAULT_PARAMETERS_PATH.parent).glob("*.proto.txt")))
+def test_shipped_configs_parse(name):
+    load_parameters(DEFAULT_PARAMETERS_PATH.parent / name)
 
 
 def test_unknown_field_is_rejected(tmp_path):

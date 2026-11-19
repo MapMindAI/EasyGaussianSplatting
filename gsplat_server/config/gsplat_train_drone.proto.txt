@@ -5,7 +5,7 @@
 #    code has bug, when cap_max of MCMC went large, mostly came from re-localization of points.
 #    As a result, we need to manage to decrease the re-localization count. we could
 #    * decrease the learning rates.
-#    * decrease floater_reg_weight.
+#    * decrease opacity_reg_weight and scale_reg_weight.
 
 
 # Number of optimization steps and evaluation/save schedule.
@@ -14,13 +14,15 @@ iterations: 50000
 test_every: 64
 # COLMAP image downsample factor used by the trainer.
 data_factor: 1
-# Regularization weight applied to both opacity and scale terms.
-floater_reg_weight: 0.003
+# Weight of the mean-opacity penalty (gsplat opacity_reg).
+opacity_reg_weight: 0.003
+# Weight of the mean-scale penalty (gsplat scale_reg).
+scale_reg_weight: 0.003
 
 # Minimum opacity below which a Gaussian is pruned. It also sets the opacity
 # reset floor, which gsplat takes as prune_opa * 2, so lowering it does not
 # simply prune less: at 0.002 every reset clamps opacities to 0.004, and with
-# floater_reg_weight 0.01 pushing them down they never recover above the prune
+# opacity_reg_weight 0.01 pushing them down they never recover above the prune
 # threshold. That collapses this dataset from 409k Gaussians to 10k.
 prune_opa: 0.005    # 0.005
 # Image-plane gradient threshold for Gaussian splitting or duplication.

@@ -23,8 +23,10 @@ message JobParameters {
   int32 iterations = 1;
   // COLMAP image downsample factor used by the trainer.
   int32 data_factor = 2;
-  // Regularization weight applied to both opacity and scale terms.
-  float floater_reg_weight = 3;
+  // Weight of the mean-opacity penalty (gsplat opacity_reg). It sinks unused
+  // Gaussians below min_opacity for MCMC to relocate, but lowers every
+  // Gaussian's opacity alike.
+  float opacity_reg_weight = 3;
   // Image-plane gradient threshold for Gaussian splitting or duplication.
   float grow_grad2d = 4;
   // Minimum opacity below which a Gaussian is pruned. It also sets the reset
@@ -96,6 +98,9 @@ message JobParameters {
   int32 test_every = 32;
   // MCMC only: opacity at or below which a Gaussian is relocated.
   float min_opacity = 33;
+  // Weight of the mean-scale penalty (gsplat scale_reg). It pushes the largest
+  // Gaussians hardest; smaller Gaussians overall need a larger cap_max.
+  float scale_reg_weight = 34;
 
   message Color {
     // Channel intensities in [0, 1].

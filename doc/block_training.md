@@ -66,7 +66,7 @@ the parser's COLMAP-to-normalized similarity as `scene_transform.npy`.
 
 The existing trainer with `gsplat_server/config/gsplat_train_coarse.proto.txt`,
 the drone settings (10M Gaussians, 50,000 iterations at full resolution) except
-`refine_stop_iter` 25,000 and `floater_reg_weight` 0.005. Peak memory is 12.3 GB.
+`refine_stop_iter` 25,000 and `opacity_reg_weight` and `scale_reg_weight` 0.005. Peak memory is 12.3 GB.
 
 Both stage configurations are the settings logged by run
 `block_training_20261111_092451`
@@ -164,7 +164,7 @@ each trained with 8M Gaussians.
 `mapping/train_gsplat_with_masks.py --block <manifest.json>:<name>
 --coarse_checkpoint <ckpt>` with `gsplat_train_block.proto.txt` (drone
 settings, `cap_max` 8M, 50,000 iterations, `refine_stop_iter` 40,000,
-`floater_reg_weight` 0.005). Patches, like the existing mask and depth ones:
+`opacity_reg_weight` and `scale_reg_weight` 0.005). Patches, like the existing mask and depth ones:
 
 * **Images.** `Dataset.__init__` keeps only the block's `training_images`. The
   train/test split is still taken over the full model's indices.
