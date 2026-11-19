@@ -1,5 +1,11 @@
-import numpy as np
+import sys
+from types import SimpleNamespace
 
+import cv2
+import numpy as np
+import pytest
+
+from mapping.triton import segment_people
 from mapping.triton.segment_people import (
     ADE20K_NUM_CLASSES,
     CLASS_COLOURS,
@@ -81,3 +87,73 @@ def test_label_colour_legend_uses_the_overlay_palette_for_every_label():
     assert np.array_equal(legend[34, 4], CLASS_COLOURS[0])
     row, column = divmod(ADE20K_NUM_CLASSES - 1, columns)
     assert np.array_equal(legend[30 + row * 28 + 4, column * 100 + 4], CLASS_COLOURS[149])
+
+
+@pytest.mark.parametrize("mask_people", [False, True])
+@pytest.mark.parametrize("mask_sky", [False, True])
+def test_mask_choices_only_run_enabled_models(tmp_path, monkeypatch, mask_people, mask_sky):
+    image_directory = tmp_path / "images" / "front"
+    image_directory.mkdir(parents=True)
+    image = np.full((2, 3, 3), 80, dtype=np.uint8)
+    cv2.imwrite(str(image_directory / "frame.png"), image)
+    people = np.array([[True, False, False], [False, False, False]])
+    classes = np.array([[0, 2, 0], [0, 0, 0]], dtype=np.uint8)
+    calls = []
+
+    class PersonSegmenter:
+        def __init__(self):
+            assert mask_people
+            calls.append("load people")
+
+        def mask(self, source):
+            calls.append("mask people")
+            return people
+
+    class SemanticSegmenter:
+        def __init__(self, endpoint):
+            assert mask_sky
+            assert endpoint == "triton:8001"
+            calls.append("load sky")
+
+        def classes(self, source):
+            calls.append("mask sky")
+            return classes
+
+    monkeypatch.setitem(sys.modules, "mapping.triton.people", SimpleNamespace(
+        PersonSegmenter=PersonSegmenter,
+    ))
+    monkeypatch.setitem(sys.modules, "mapping.triton.clients", SimpleNamespace(
+        SemanticSegmenter=SemanticSegmenter, ADE20K_SKY_CLASS=2,
+    ))
+    arguments = [
+        "segment_people", str(tmp_path / "images"), str(tmp_path / "masks"),
+        "--mask-people" if mask_people else "--no-mask-people",
+        "--mask-sky" if mask_sky else "--no-mask-sky",
+        "--dilation", "0", "--num-threads", "1",
+        "--debug-dir", str(tmp_path / "debug"),
+    ]
+    monkeypatch.delenv("TRITON_URL", raising=False)
+    if mask_sky:
+        arguments.extend(["--triton-url", "triton:8001"])
+    monkeypatch.setattr(sys, "argv", arguments)
+
+    segment_people.main()
+
+    assert ("load people" in calls) == mask_people
+    assert ("mask people" in calls) == mask_people
+    assert ("load sky" in calls) == mask_sky
+    assert ("mask sky" in calls) == mask_sky
+    if not (mask_people or mask_sky):
+        assert not (tmp_path / "masks").exists()
+        assert not (tmp_path / "debug").exists()
+        return
+
+    blocked = (people & mask_people) | ((classes == 2) & mask_sky)
+    mask = cv2.imread(str(tmp_path / "masks/front/frame.png.png"), cv2.IMREAD_GRAYSCALE)
+    assert np.array_equal(mask, training_mask(blocked))
+    debug_image = image if not mask_sky else label_overlay(image, classes)
+    if mask_people:
+        debug_image = person_overlay(debug_image, people)
+    overlay = cv2.imread(str(tmp_path / "debug/front/frame.png.png"))
+    assert np.array_equal(overlay, debug_image)
+    assert (tmp_path / "debug/label_colours.png").exists() == mask_sky

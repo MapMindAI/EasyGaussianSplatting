@@ -81,13 +81,9 @@ shN_lr: 0.000125
 pose_opt: false
 # Learning rate for camera-pose optimization. Only read when pose_opt is set.
 pose_opt_lr: 0.00001
-# Segment people out of the images before training, when the upload carried no
-# masks/ of its own. Costs a few minutes and needs the segmentation weights.
-run_segmentation: false
-# Mask the sky along with the people. Only read when run_segmentation is set.
-# Left on, the sky is masked out: it is at infinity, so the Gaussians that chase
-# it are floaters that cost memory and blur the geometry below. It is off here
-# because background_color now gives the sky something to render as.
+# Generate masks before training when none are supplied; each model is independent.
+# Mask R-CNN masks people; SegFormer masks sky through Triton.
+mask_people: false
 mask_sky: false
 # Colour the splats are composited over, in [0, 1] per channel. Leave it out
 # and gsplat renders onto black instead. See doc/gsplat_server.md.

@@ -36,7 +36,8 @@ docker run -it --rm --gpus all --shm-size=8g \
   '
 ```
 
-Segmentation requires Triton with the SegFormer model available; see
+Direct segmentation enables both models by default. `--no-mask-people` skips
+Mask R-CNN, and `--no-mask-sky` skips SegFormer and its Triton dependency; see
 [panorama mapping](panorama_mapping.md). Training works without `masks/`.
 
 ## Train
@@ -97,7 +98,7 @@ A `data_factor` above 1 trains on `<workspace>/images_<data_factor>/`, which
 the first run writes from `images/`.
 
 The local command does not run segmentation or depth generation merely because
-`run_segmentation` or `run_depth` is set in the parameters file. Run those
+`mask_people`, `mask_sky`, or `run_depth` is set in the parameters file. Run those
 stages separately. When `run_depth: true`, the trainer uses any existing
 `<workspace>/depths/*.npy` files for depth supervision. It logs generated-depth
 minus sparse-COLMAP-depth statistics for samples within two pixels of each

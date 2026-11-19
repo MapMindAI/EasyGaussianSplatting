@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Segment people and sky in a COLMAP image folder and write gsplat training masks.
 
-Masks are white where gsplat should supervise training and black over people
-and, unless --no-mask-sky is given, the sky. People come from torchvision's
-COCO-trained Mask R-CNN. Sky comes from the ADE20K SegFormer model in
-third_party/EasyTensorRT over gRPC only when sky masking is enabled. Named
+Masks are white where gsplat should supervise training and black over enabled
+classes. --mask-people and --mask-sky independently enable torchvision's
+COCO-trained Mask R-CNN and the ADE20K SegFormer model in
+third_party/EasyTensorRT over gRPC. Both default to enabled. Named
 "<image_name>.png" after the image they belong to (COLMAP's mask naming
 convention). Nested image folders are mirrored under the mask directory.
 
@@ -115,10 +115,16 @@ def main():
         "--dilation", type=int, default=1, help="pixels to grow each person mask by"
     )
     parser.add_argument(
+        "--mask-people",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="mask people with Mask R-CNN",
+    )
+    parser.add_argument(
         "--mask-sky",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="mask the sky as well as the people",
+        help="mask sky with SegFormer",
     )
     parser.add_argument(
         "--num-threads", type=int, default=4, help="worker threads running inference"
@@ -131,6 +137,10 @@ def main():
     )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
+
+    if not (args.mask_people or args.mask_sky):
+        print("People and sky masking disabled; skipping segmentation")
+        return
 
     triton_url = resolve_endpoint(args.triton_url) if args.mask_sky else None
     image_paths = sorted(
@@ -164,9 +174,12 @@ def main():
 
     # Deferred so a run with nothing to do never loads either model.
     from mapping.triton.progress import map_with_progress
-    from mapping.triton.people import PersonSegmenter
 
-    person_segmenter = PersonSegmenter()
+    person_segmenter = None
+    if args.mask_people:
+        from mapping.triton.people import PersonSegmenter
+
+        person_segmenter = PersonSegmenter()
     segmenter = None
     if args.mask_sky:
         from mapping.triton.clients import ADE20K_SKY_CLASS, SemanticSegmenter
@@ -182,7 +195,9 @@ def main():
             print(f"Skipping unreadable image: {image_path}", flush=True)
             return False, False
 
-        people = dilate(person_segmenter.mask(image), args.dilation)
+        people = np.zeros(image.shape[:2], dtype=bool)
+        if person_segmenter is not None:
+            people = dilate(person_segmenter.mask(image), args.dilation)
         classes = None
         sky = np.zeros(image.shape[:2], dtype=bool)
         if segmenter is not None:
@@ -192,9 +207,9 @@ def main():
         cv2.imwrite(str(mask_path), training_mask(blocked))
         if debug_path is not None:
             debug_path.parent.mkdir(parents=True, exist_ok=True)
-            debug_image = person_overlay(image, people)
-            if classes is not None:
-                debug_image = person_overlay(label_overlay(image, classes), people)
+            debug_image = image if classes is None else label_overlay(image, classes)
+            if person_segmenter is not None:
+                debug_image = person_overlay(debug_image, people)
             cv2.imwrite(str(debug_path), debug_image)
         return bool(blocked.any()), bool(sky.any())
 

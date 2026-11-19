@@ -195,29 +195,20 @@ uploaded too if present, and training then skips the masked pixels (see
 `mapping/triton/segment_people.py`). Nothing else is uploaded, so an earlier
 `gsplat_output/` in the same directory costs nothing.
 
-To mask people and sky without segmenting them first, set `run_segmentation: true`
-and upload no `masks/`. The server then segments the uploaded images before
-training, writing its output into the job's own directory:
+Set `mask_people` and `mask_sky` independently to generate masks before
+training when the upload has no `masks/`:
 
 ```
-run_segmentation: true
+mask_people: true
+mask_sky: true
 ```
 
-People come from torchvision's COCO-trained Mask R-CNN. When `mask_sky` is
-true, sky comes from the SegFormer model in `third_party/EasyTensorRT` (ADE20K
-class 2), over gRPC at `TRITON_URL`. A person-only job needs no Triton server.
+`mask_people` runs torchvision's COCO-trained Mask R-CNN locally. `mask_sky`
+runs SegFormer from `third_party/EasyTensorRT` (ADE20K class 2) over gRPC at
+`TRITON_URL`. Each flag loads only its own model; either can run alone, and
+both default to false. When both are enabled, their masks are combined.
 
-`mask_sky` selects which of the two is masked. It defaults to true: sky is at
-infinity, so the Gaussians that chase it are floaters that cost memory and blur
-the geometry below. Set it false to keep the sky and mask only people:
-
-```
-run_segmentation: true
-mask_sky: false
-```
-
-An uploaded `masks/` always wins, so the flag is a fallback rather than an
-override. Segmentation adds a few minutes to a job: it runs inference on
+An uploaded `masks/` always wins. Segmentation runs inference on
 `segment_people.py --num-threads` worker threads, through the same helper the
 feature stages use.
 

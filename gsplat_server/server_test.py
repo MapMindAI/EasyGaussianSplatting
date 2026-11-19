@@ -217,15 +217,16 @@ def test_training_command_points_at_the_job_directory(tmp_path):
 
 
 def test_segmentation_command_reads_images_and_writes_masks(tmp_path):
-    command = server.segmentation_command(tmp_path, mask_sky=True)
+    command = server.segmentation_command(tmp_path, mask_people=True, mask_sky=True)
 
-    assert command[-3:] == [
-        str(tmp_path / "images"), str(tmp_path / "masks"), "--mask-sky",
+    assert command[-4:] == [
+        str(tmp_path / "images"), str(tmp_path / "masks"), "--mask-people", "--mask-sky",
     ]
 
 
 def test_training_is_the_only_step_when_segmentation_is_off(tmp_path, parameters):
-    parameters["run_segmentation"] = False
+    parameters["mask_people"] = False
+    parameters["mask_sky"] = False
 
     steps = server.job_steps({"parameters": parameters}, tmp_path)
 
@@ -233,25 +234,29 @@ def test_training_is_the_only_step_when_segmentation_is_off(tmp_path, parameters
 
 
 def test_segmentation_runs_before_training_when_asked_for(tmp_path, parameters):
-    parameters["run_segmentation"] = True
+    parameters["mask_people"] = True
 
     steps = server.job_steps({"parameters": parameters}, tmp_path)
 
     assert [name for name, _ in steps] == ["segmentation", "gsplat training"]
 
 
-@pytest.mark.parametrize("mask_sky, flag", [(True, "--mask-sky"), (False, "--no-mask-sky")])
-def test_job_steps_passes_the_sky_choice_to_segmentation(tmp_path, parameters, mask_sky, flag):
-    parameters["run_segmentation"] = True
+@pytest.mark.parametrize("mask_people, mask_sky", [(True, False), (False, True), (True, True)])
+def test_job_steps_passes_independent_mask_choices(tmp_path, parameters, mask_people, mask_sky):
+    parameters["mask_people"] = mask_people
     parameters["mask_sky"] = mask_sky
 
-    (_, command), _ = server.job_steps({"parameters": parameters}, tmp_path)
+    (name, command), _ = server.job_steps({"parameters": parameters}, tmp_path)
 
-    assert command[-1] == flag
+    assert name == "segmentation"
+    assert command[-2:] == [
+        "--mask-people" if mask_people else "--no-mask-people",
+        "--mask-sky" if mask_sky else "--no-mask-sky",
+    ]
 
 
 def test_depth_runs_between_segmentation_and_training(tmp_path, parameters):
-    parameters["run_segmentation"] = True
+    parameters["mask_people"] = True
     parameters["run_depth"] = True
 
     steps = server.job_steps({"parameters": parameters}, tmp_path)
@@ -270,7 +275,7 @@ def test_depth_reads_the_model_and_writes_beside_it(tmp_path, parameters):
 
 
 def test_an_uploaded_depths_directory_is_never_overwritten(tmp_path, parameters):
-    parameters["run_segmentation"] = False
+    parameters["mask_people"] = False
     parameters["run_depth"] = True
     (tmp_path / "model" / "depths").mkdir(parents=True)
 
@@ -279,8 +284,10 @@ def test_an_uploaded_depths_directory_is_never_overwritten(tmp_path, parameters)
     assert [name for name, _ in steps] == ["gsplat training"]
 
 
-def test_an_uploaded_masks_directory_is_never_overwritten(tmp_path, parameters):
-    parameters["run_segmentation"] = True
+@pytest.mark.parametrize("mask_people, mask_sky", [(True, False), (False, True), (True, True)])
+def test_an_uploaded_masks_directory_is_never_overwritten(tmp_path, parameters, mask_people, mask_sky):
+    parameters["mask_people"] = mask_people
+    parameters["mask_sky"] = mask_sky
     (tmp_path / "model" / "masks").mkdir(parents=True)
 
     steps = server.job_steps({"parameters": parameters}, tmp_path)
