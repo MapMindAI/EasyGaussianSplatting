@@ -8,6 +8,7 @@ from gsplat_server.parameters import (
     load_parameters,
     parameters_from_dict,
     parameters_to_dict,
+    parameters_to_complete_text,
     parameters_to_text,
 )
 from gsplat_server.proto import gsplat_pb2
@@ -126,3 +127,14 @@ def test_dict_of_defaults_reparses_to_the_same_message():
     original = load_default_parameters()
 
     assert parameters_from_dict(parameters_to_dict(original)) == original
+
+
+def test_complete_text_keeps_zeros_over_nonzero_defaults(tmp_path):
+    parameters = load_default_parameters()
+    parameters.opacity_reg_weight = 0
+    parameters.absgrad = False
+    parameters.strategy = gsplat_pb2.STRATEGY_DEFAULT
+    path = tmp_path / "resolved.proto.txt"
+    path.write_text(parameters_to_complete_text(parameters))
+
+    assert load_parameters(path) == parameters
