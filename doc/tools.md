@@ -105,9 +105,10 @@ ${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.triton.
   --triton-url ${GSPLAT_HOST}:8011
 ```
 
-`scripts/run_pipeline.sh` reads `mask_people` and `mask_sky` from its parameters
-file. Direct invocation enables both by default: `--no-mask-people` skips
-Mask R-CNN, and `--no-mask-sky` skips SegFormer.
+`scripts/run_pipeline.sh` and `scripts/gsplat_train.sh` read `mask_people` and
+`mask_sky` from their parameters file through `scripts/gsplat_segment.sh`.
+Direct invocation of `segment_people.py` enables both by default:
+`--no-mask-people` skips Mask R-CNN, and `--no-mask-sky` skips SegFormer.
 `--dilation` grows each person mask (1 pixel), and `--num-threads` sets how many
 images infer at once (4). Masks mirror
 any nested folders under `images/`, so each keeps the image's relative path and
@@ -161,9 +162,9 @@ run_depth: true
 depth_lambda: 0.01
 ```
 
-Direct local training does not generate masks or depth from the parameters
-file. The server honors `mask_people`, `mask_sky`, and `run_depth`;
-`scripts/run_pipeline.sh` honors the two mask flags (see
+Calling `mapping/train_gsplat_with_masks.py` directly does not generate masks
+or depth. The server honors `mask_people`, `mask_sky`, and `run_depth`;
+`scripts/run_pipeline.sh` and `scripts/gsplat_train.sh` honor the two mask flags (see
 [gsplat_server.md](gsplat_server.md#submitting-a-model)).
 
 ## TSDF mesh from a Gaussian Splat

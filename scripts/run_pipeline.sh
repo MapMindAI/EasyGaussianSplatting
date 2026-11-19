@@ -61,23 +61,7 @@ python3 -m mapping.mapping_pipeline \
   "${MAPPING_ARGUMENTS[@]}"
 
 # --- 3. Mask out people and sky, then train --------------------------------
-python3 - <<'PY'
-import os
-import subprocess
-import sys
-from pathlib import Path
-
-from gsplat_server.parameters import load_parameters
-
-parameters = load_parameters(os.environ["PARAMETERS_FILE"])
-directory = Path(os.environ["RECONSTRUCTION_DIR"])
-subprocess.run([
-    sys.executable, "-m", "mapping.triton.segment_people",
-    str(directory / "images"), str(directory / "masks"),
-    "--mask-people" if parameters.mask_people else "--no-mask-people",
-    "--mask-sky" if parameters.mask_sky else "--no-mask-sky",
-], check=True)
-PY
+bash scripts/gsplat_segment.sh "${RECONSTRUCTION_DIR}" "${PARAMETERS_FILE}"
 
 export PYTORCH_ALLOC_CONF="${PYTORCH_ALLOC_CONF:-expandable_segments:True}"
 python3 mapping/train_gsplat_with_masks.py default \
