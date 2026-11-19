@@ -165,7 +165,7 @@ depth_lambda: 0.01
 ```
 
 Calling `mapping/train_gsplat_with_masks.py` directly does not generate masks
-or depth. The server honors `mask_people`, `mask_sky`, and `run_depth`;
+or depth. The server honors `mask_people`, `mask_sky`, and `run_depth`.
 The pipeline and training scripts honor the two mask flags (see
 [gsplat_server.md](gsplat_server.md#submitting-a-model)).
 

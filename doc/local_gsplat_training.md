@@ -36,9 +36,10 @@ docker run -it --rm --gpus all --shm-size=8g \
   '
 ```
 
-Direct segmentation enables both models by default. `--no-mask-people` skips
-Mask R-CNN, and `--no-mask-sky` skips SegFormer and its Triton dependency; see
-[panorama mapping](panorama_mapping.md). Training works without `masks/`.
+Direct invocation of `segment_people.py` enables both models by default.
+`--no-mask-people` skips Mask R-CNN, and `--no-mask-sky` skips SegFormer and its
+Triton dependency; see [panorama mapping](panorama_mapping.md).
+Training works without `masks/`.
 
 ## Train
 

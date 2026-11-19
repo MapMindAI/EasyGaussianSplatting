@@ -106,7 +106,7 @@ def person_overlay(image, people, alpha=0.5):
     return cv2.addWeighted(image, 1.0 - alpha, colours, alpha, 0.0)
 
 
-def main():
+def main(arguments=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image_dir", type=Path)
     parser.add_argument("mask_dir", type=Path)
@@ -136,7 +136,7 @@ def main():
         help="also write the whole label map overlaid on each image here",
     )
     parser.add_argument("--overwrite", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(arguments)
 
     if not (args.mask_people or args.mask_sky):
         print("People and sky masking disabled; skipping segmentation")

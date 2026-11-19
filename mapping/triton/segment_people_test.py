@@ -135,9 +135,9 @@ def test_mask_choices_only_run_enabled_models(tmp_path, monkeypatch, mask_people
     monkeypatch.delenv("TRITON_URL", raising=False)
     if mask_sky:
         arguments.extend(["--triton-url", "triton:8001"])
-    monkeypatch.setattr(sys, "argv", arguments)
+    monkeypatch.setattr(sys, "argv", ["segment_people"])
 
-    segment_people.main()
+    segment_people.main(arguments[1:])
 
     assert ("load people" in calls) == mask_people
     assert ("mask people" in calls) == mask_people
@@ -161,5 +161,6 @@ def test_mask_choices_only_run_enabled_models(tmp_path, monkeypatch, mask_people
     assert (tmp_path / "debug/label_colours.png").exists() == mask_sky
 
     calls.clear()
+    monkeypatch.setattr(sys, "argv", arguments)
     segment_people.main()
     assert calls == []
