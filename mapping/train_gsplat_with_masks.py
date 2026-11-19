@@ -276,7 +276,10 @@ import gsplat.strategy  # noqa: E402
 from datasets.colmap import Dataset, Parser  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
-from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402
+from mapping.gsplat_regularization import (  # noqa: E402
+    add_opacity_entropy,
+    stop_regularization_after_refinement,
+)
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
     capture_scene_transform,
@@ -405,6 +408,9 @@ if parameters is not None and parameters.stop_regularization_after_refinement:
     stop_regularization_after_refinement(
         gsplat.losses, [gsplat.strategy.DefaultStrategy, gsplat.strategy.MCMCStrategy],
         parameters.refine_stop_iter)
+if parameters is not None and parameters.opacity_entropy_weight > 0:
+    add_opacity_entropy(
+        [gsplat.strategy.DefaultStrategy, gsplat.strategy.MCMCStrategy], parameters.opacity_entropy_weight)
 if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)
 downsample_images(Parser)

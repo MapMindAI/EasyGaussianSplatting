@@ -220,6 +220,11 @@ omitted `scale_reg_weight` takes the shipped default.
 `refine_stop_iter` on. With MCMC nothing relocates after that step, so the
 opacity term only dims every Gaussian; position noise still runs.
 
+`opacity_entropy_weight` adds the mean binary entropy of the opacities, which
+pushes each one to 0 or 1: visible Gaussians turn opaque, and unused ones still
+sink below `min_opacity` for MCMC to relocate. It applies on every step and is
+off at 0.
+
 An uploaded `masks/` always wins. Segmentation runs inference on
 `segment_people.py --num-threads` worker threads, through the same helper the
 feature stages use.
