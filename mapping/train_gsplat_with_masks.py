@@ -272,9 +272,11 @@ import gsplat  # noqa: E402
 import gsplat.distributed  # noqa: E402
 import gsplat.losses  # noqa: E402
 import gsplat.rendering  # noqa: E402
+import gsplat.strategy  # noqa: E402
 from datasets.colmap import Dataset, Parser  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
+from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
     capture_scene_transform,
@@ -399,6 +401,10 @@ if block_option is not None:
     block, block_index, block_points, block_owners = block_gaussians.load_block(manifest_path, block_name)
     restrict_to_images(Dataset, set(block["training_images"]))
     block_training = (coarse_checkpoint, block_points, block_owners, block_index)
+if parameters is not None and parameters.stop_regularization_after_refinement:
+    stop_regularization_after_refinement(
+        gsplat.losses, [gsplat.strategy.DefaultStrategy, gsplat.strategy.MCMCStrategy],
+        parameters.refine_stop_iter)
 if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)
 downsample_images(Parser)

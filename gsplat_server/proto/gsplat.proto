@@ -101,6 +101,9 @@ message JobParameters {
   // Weight of the mean-scale penalty (gsplat scale_reg). It pushes the largest
   // Gaussians hardest; smaller Gaussians overall need a larger cap_max.
   float scale_reg_weight = 34;
+  // Drop both regularization terms from refine_stop_iter on. With MCMC nothing
+  // relocates after that, so the opacity term only dims every Gaussian.
+  bool stop_regularization_after_refinement = 35;
 
   message Color {
     // Channel intensities in [0, 1].
