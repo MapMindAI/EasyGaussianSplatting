@@ -23,10 +23,6 @@ export PYTORCH_ALLOC_CONF=expandable_segments:True
 
 mkdir -p "$(dirname "${RESULT_DIR}")"
 
-if [ ! -f gsplat_server/proto/gsplat_pb2.py ]; then
-  bash gsplat_server/proto/build.sh
-fi
-
 bash scripts/gsplat_segment.sh "${WORKSPACE_PATH}" "${PARAMETERS_PATH}"
 
 python3 mapping/train_gsplat_with_masks.py default \

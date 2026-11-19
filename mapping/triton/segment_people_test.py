@@ -159,3 +159,7 @@ def test_mask_choices_only_run_enabled_models(tmp_path, monkeypatch, mask_people
     }
     assert overlay[0, :2].tolist() == expected_pixels[mask_people, mask_sky]
     assert (tmp_path / "debug/label_colours.png").exists() == mask_sky
+
+    calls.clear()
+    segment_people.main()
+    assert calls == []

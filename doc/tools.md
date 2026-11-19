@@ -107,6 +107,8 @@ ${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.triton.
 
 `scripts/run_pipeline.sh` and `scripts/gsplat_train.sh` read `mask_people` and
 `mask_sky` from their parameters file through `scripts/gsplat_segment.sh`.
+`scripts/gsplat_train_blocks.sh` generates masks enabled in either its coarse
+or block parameters before partitioning.
 Direct invocation of `segment_people.py` enables both by default:
 `--no-mask-people` skips Mask R-CNN, and `--no-mask-sky` skips SegFormer.
 `--dilation` grows each person mask (1 pixel), and `--num-threads` sets how many
@@ -164,7 +166,7 @@ depth_lambda: 0.01
 
 Calling `mapping/train_gsplat_with_masks.py` directly does not generate masks
 or depth. The server honors `mask_people`, `mask_sky`, and `run_depth`;
-`scripts/run_pipeline.sh` and `scripts/gsplat_train.sh` honor the two mask flags (see
+The pipeline and training scripts honor the two mask flags (see
 [gsplat_server.md](gsplat_server.md#submitting-a-model)).
 
 ## TSDF mesh from a Gaussian Splat

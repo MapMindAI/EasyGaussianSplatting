@@ -25,6 +25,11 @@ Results go to `<workspace>/block_training_<YYYYmmdd_HHMMSS>/{partition,coarse,bl
 A stage whose output exists is skipped, so passing an earlier run's folder as
 `output_dir` resumes it at the first unfinished block.
 
+Before partitioning, the script generates masks enabled by `mask_people` or
+`mask_sky` in either the coarse or block parameters. All training stages share
+these masks; existing masks are reused. Sky masking requires `TRITON_URL`.
+Segmentation errors stop the run before partitioning or training.
+
 Next step, not in this design: StitchGS's overlap stitching (SIS) and global
 appearance refinement with frozen geometry (GCR). Stage 2 keeps every block's
 expanded-region Gaussians so SIS can replace the stage-3 crop. LoD is out of
