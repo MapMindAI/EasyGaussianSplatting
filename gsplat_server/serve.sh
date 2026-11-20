@@ -13,7 +13,4 @@ source "${REPO_ROOT}/scripts/gsplat_env.sh"
 # The image installs gsplat at /opt/gsplat; third_party/gsplat is only source.
 export GSPLAT_DIR="${GSPLAT_DIR:-/opt/gsplat}"
 
-# SegFormer's endpoint for mask_sky jobs; matches docker_common.sh.
-export TRITON_URL="${TRITON_URL:-host.docker.internal:8011}"
-
 PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}" python3 "${SCRIPT_DIR}/server.py" --jobs-dir "${JOBS_DIR}" --port "${PORT}"

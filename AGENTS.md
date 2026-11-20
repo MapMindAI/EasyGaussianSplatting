@@ -29,7 +29,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── benchmark/                # Parameter sweeps and their Markdown report.
 │   │   ├── summarize_gsplat_sweep_test.py # Report sections and PLY geometry.
 │   ├── triton/                   # Everything served by Triton.
-│   │   ├── clients.py      # SuperPoint/LightGlue/SALAD/SegFormer/DA3 clients.
+│   │   ├── clients.py      # SuperPoint/LightGlue/SALAD/DA3 clients.
 │   │   ├── extraction.py         # Features into the database and its sidecar.
 │   │   ├── matching.py           # Pair selection and LightGlue matching.
 │   │   ├── segment_people.py     # Person and sky masks for the training images.
@@ -44,9 +44,9 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   │   ├── point_cloud_test.py   # Unprojection, voxel merge, and the PLY round trip.
 │   │   ├── scale_alignment.py    # Group depth scale from sparse depths and cameras.
 │   │   └── scale_alignment_test.py # Pose-baseline and robust sparse fits.
-│   ├── sky_segmentation/         # U²-Net sky probability, run locally from ONNX.
+│   ├── sky_segmentation/         # U²-Net sky probability for the masks, run locally from ONNX.
 │   │   ├── sky_segmenter.py      # ONNX Runtime session over models/skyseg.onnx.
-│   │   ├── sky_segmenter_test.py # Model input and the example's overlay.
+│   │   ├── sky_segmenter_test.py # Model input.
 │   │   └── example.py            # Sky probability maps and overlays for a few images.
 │   ├── vggt_omega/               # VGGT-Omega depth, run locally from ONNX.
 │   │   ├── depth_estimator.py    # ONNX Runtime session over models/vggt_omega_416.onnx.

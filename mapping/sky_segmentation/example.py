@@ -4,8 +4,8 @@
     python3 -m mapping.sky_segmentation.example output/ a.jpg b.jpg
 
 Writes "<stem>_sky.png" (the sky probability as 0-255) and "<stem>_overlay.jpg"
-(the image with pixels above --threshold tinted magenta) per image, where <stem>
-prefixes the parent folder, such as a cube face.
+(segment_people.py's overlay of the pixels above --threshold) per image, where
+<stem> prefixes the parent folder, such as a cube face.
 """
 
 import argparse
@@ -16,15 +16,7 @@ import cv2
 import numpy as np
 
 from mapping.sky_segmentation.sky_segmenter import DEFAULT_MODEL_PATH, SkySegmenter
-
-SKY_TINT = np.array([255, 0, 255], dtype=np.float32)
-
-
-def sky_overlay(image, sky, alpha=0.5):
-    """`image` with the `sky` pixels washed in magenta."""
-    overlay = image.astype(np.float32)
-    overlay[sky] = (1 - alpha) * overlay[sky] + alpha * SKY_TINT
-    return overlay.astype(np.uint8)
+from mapping.triton.segment_people import SKY_THRESHOLD, mask_overlay
 
 
 def main():
@@ -32,7 +24,7 @@ def main():
     parser.add_argument("output_dir", type=Path)
     parser.add_argument("images", type=Path, nargs="+")
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
-    parser.add_argument("--threshold", type=float, default=0.5, help="sky probability above which a pixel is sky")
+    parser.add_argument("--threshold", type=float, default=SKY_THRESHOLD, help="sky probability above which a pixel is sky")
     args = parser.parse_args()
 
     segmenter = SkySegmenter(args.model)
@@ -47,7 +39,7 @@ def main():
         sky = probability > args.threshold
         stem = f"{path.parent.name}_{path.stem}"
         cv2.imwrite(str(args.output_dir / f"{stem}_sky.png"), np.round(probability * 255).astype(np.uint8))
-        cv2.imwrite(str(args.output_dir / f"{stem}_overlay.jpg"), sky_overlay(image, sky))
+        cv2.imwrite(str(args.output_dir / f"{stem}_overlay.jpg"), mask_overlay(image, np.zeros_like(sky), sky))
         print(f"{path}: {sky.mean():.1%} sky, {seconds:.2f} s")
 
 

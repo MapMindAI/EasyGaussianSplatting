@@ -1,8 +1,7 @@
-"""Tests for the sky segmenter's input and the example's overlay."""
+"""Tests for the sky segmenter's input."""
 
 import numpy as np
 
-from mapping.sky_segmentation.example import SKY_TINT, sky_overlay
 from mapping.sky_segmentation.sky_segmenter import IMAGENET_MEAN, IMAGENET_STD, model_input
 
 
@@ -14,10 +13,3 @@ def test_model_input_is_normalized_rgb_at_the_model_size():
     assert tensor.dtype == np.float32
     np.testing.assert_allclose(tensor[0, :, 0, 0], (np.array([0, 0, 1]) - IMAGENET_MEAN) / IMAGENET_STD, rtol=1e-6)
 
-
-def test_overlay_tints_only_sky():
-    image = np.full((2, 2, 3), 100, np.uint8)
-    sky = np.array([[True, False], [False, False]])
-    overlay = sky_overlay(image, sky)
-    np.testing.assert_array_equal(overlay[0, 0], ((100 + SKY_TINT) / 2).astype(np.uint8))
-    np.testing.assert_array_equal(overlay[1, 1], [100, 100, 100])

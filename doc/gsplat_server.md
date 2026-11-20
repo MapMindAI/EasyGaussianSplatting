@@ -203,8 +203,10 @@ mask_sky: true
 ```
 
 `mask_people` runs torchvision's COCO-trained Mask R-CNN locally. `mask_sky`
-runs SegFormer from `third_party/EasyTensorRT` (ADE20K class 2) over gRPC at
-`TRITON_URL`. Both default to false; enabling both combines their masks.
+runs the U²-Net sky model at `models/skyseg.onnx` locally (see
+[tools.md](tools.md#sky-segmentation)), so that file has to be present in the
+repo checkout the server runs from. Both default to false; enabling both
+combines their masks.
 
 Before upgrading, rename `run_segmentation` to `mask_people` in existing
 parameter files and saved `job.json` parameters. Protobuf field number 20
@@ -245,14 +247,14 @@ directory. An uploaded `depths/` always wins, the same way `masks/` does.
 VGGT-Omega reconstructs several views at once, so
 `mapping/vggt_omega/generate_depth.py` groups up to 12 images that view the
 same part of the scene, by their shared sparse points and relative poses (see
-[tools.md](tools.md#masks-and-depth-from-triton)). It runs the ONNX export at
+[tools.md](tools.md#depth-from-triton)). It runs the ONNX export at
 `models/vggt_omega_416.onnx` on the server's own GPU, so that file has to be
 present in the repo checkout the server runs from (see
 [tools.md](tools.md#vggt-omega-instead-of-da3)). The Triton DA3 stage,
 `mapping/depth/generate_depth.py`, stays available for manual runs.
 
-Server preprocessing runs in the `gsplat` environment, which includes the
-Triton gRPC client, ONNX Runtime, and pycolmap. Rebuild the image after
+Server preprocessing runs in the `gsplat` environment, which includes ONNX
+Runtime and pycolmap. Rebuild the image after
 upgrading an existing server so depth and sky masking use those dependencies.
 
 Each group is reconstructed in its own arbitrary scale, which is the part worth
