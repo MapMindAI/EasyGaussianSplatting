@@ -107,7 +107,7 @@ pose_opt: false
 # Learning rate for camera-pose optimization. Only read when pose_opt is set.
 pose_opt_lr: 0.00001
 # Generate masks before training when none are supplied.
-# Mask R-CNN masks people; SegFormer masks sky through Triton.
+# Mask R-CNN masks people; U²-Net (models/skyseg.onnx) masks sky.
 mask_people: false
 mask_sky: false
 # Colour the splats are composited over, in [0, 1] per channel. Leave it out

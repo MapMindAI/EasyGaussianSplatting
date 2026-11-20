@@ -21,24 +21,21 @@ pixels are ignored:
 
 ```bash
 WORKSPACE_PATH=data/pano_mapping
-GSPLAT_HOST=192.168.11.194
 
 docker run -it --rm --gpus all --shm-size=8g \
   -v "$PWD":/workspace -w /workspace \
   --mount type=volume,source=easygaussiansplatting-torch-cache,target=/root/.cache/torch \
-  --add-host host.docker.internal:host-gateway \
   ghcr.io/mapmindai/gaussiansplatting:latest \
   bash -lc '
     source scripts/gsplat_env.sh
     python3 mapping/triton/segment_people.py \
-      "'"${WORKSPACE_PATH}"'/images" "'"${WORKSPACE_PATH}"'/masks" \
-      --triton-url "'"${GSPLAT_HOST}"':8011
+      "'"${WORKSPACE_PATH}"'/images" "'"${WORKSPACE_PATH}"'/masks"
   '
 ```
 
 Direct invocation of `segment_people.py` enables both models by default.
-`--no-mask-people` skips Mask R-CNN, and `--no-mask-sky` skips SegFormer and its
-Triton dependency; see [panorama mapping](panorama_mapping.md).
+`--no-mask-people` skips Mask R-CNN, and `--no-mask-sky` skips the U²-Net sky
+model, which needs `models/skyseg.onnx` (see [tools.md](tools.md#sky-segmentation)).
 Training works without `masks/`.
 
 ## Train
@@ -68,7 +65,7 @@ Inside the container, `scripts/gsplat_train.sh <workspace> [parameters] [result_
 runs segmentation according to `mask_people` and `mask_sky`, then trains into
 `<workspace>/gsplat_output_<YYYYmmdd_HHMMSS>` by default, and saves the resolved
 parameters, defaults included, as `cfg.proto.txt` there. Existing
-masks are reused. Sky masking requires `TRITON_URL`; people masking uses local Mask R-CNN.
+masks are reused. Both masks are inferred locally.
 Pass the script in place of the `bash -lc '...'` block. If the final PLY is
 2 GiB or larger, it also bisects it along the longer horizontal axis into
 `ply/split/point_cloud_<step>_NN.ply`, each under 2 GiB, for browser viewers.

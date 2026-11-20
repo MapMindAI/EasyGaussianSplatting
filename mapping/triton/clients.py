@@ -1,4 +1,4 @@
-"""SuperPoint, LightGlue, SALAD, SegFormer, and DA3 clients backed by a Triton server.
+"""SuperPoint, LightGlue, SALAD, and DA3 clients backed by a Triton server.
 
 Thin adapters over the clients vendored in
 `third_party/EasyTensorRT/triton_client`, which import each other by bare
@@ -29,7 +29,6 @@ if str(_TRITON_CLIENT_DIR) not in sys.path:
 from depthanything3 import DepthAnything3  # noqa: E402
 from lightglue import LightGlue  # noqa: E402
 from salad import SaladClient  # noqa: E402
-from segformer import SegformerClient  # noqa: E402
 from superpoint import SuperPoint  # noqa: E402
 
 # LightGlue's exported graph takes a fixed-size keypoint block per image (see
@@ -133,23 +132,6 @@ class FeatureMatcher:
         # either image's detections would corrupt the database.
         indices1 = np.flatnonzero((matched >= 0) & (matched < num_keypoints2))
         return np.column_stack([indices1, matched[indices1]]).astype(np.uint32)
-
-
-# ADE20K labels, which is what the server's SegFormer model is trained on:
-# 0 wall, 1 building, 2 sky, 3 floor, 4 tree, ... 12 person
-ADE20K_SKY_CLASS = 2
-ADE20K_PERSON_CLASS = 12
-
-
-class SemanticSegmenter:
-    """ADE20K class indices for every pixel, via the Triton SegFormer model."""
-
-    def __init__(self, triton_url, model_version="1"):
-        self._client = SegformerClient(triton_url=triton_url, model_version=model_version)
-
-    def classes(self, image_bgr) -> np.ndarray:
-        """A (H, W) uint8 array of ADE20K class indices."""
-        return self._client.run(image_bgr)
 
 
 class DepthEstimator:

@@ -21,7 +21,6 @@ flowchart TD
     LEVEL --> ALIGN --> SPARSE["Sparse COLMAP model"]
     SPARSE --> MASKS["Person and sky masks"]
     SPARSE --> DEPTH["VGGT-Omega or DA3 depth (optional)"]
-    TRITON --> MASKS
     TRITON --> DEPTH
     SPARSE --> TRAIN["gsplat training<br/>local or gRPC server"]
     MASKS --> TRAIN
@@ -48,7 +47,7 @@ keeps the panorama's angular resolution — and `parameters.proto.txt` to
 `gsplat_server/config/gsplat_train_defaults.proto.txt`. Pass a different
 text-format `JobParameters` file as the fifth argument to change training.
 Set `mask_people: true` to mask people with Mask R-CNN or `mask_sky: true` to
-mask sky with SegFormer through Triton. Both default to false.
+mask sky with U²-Net (`models/skyseg.onnx`); both run locally and default to false.
 Every stage skips work already on disk, so an interrupted run resumes; only
 the sparse mapping is always redone:
 
@@ -193,7 +192,7 @@ Or on the host, with the proto bindings already generated (see
 `mapping/train_gsplat_with_masks.py` is uncovered: it runs the trainer at
 import time, so covering its flag building needs a `__main__` guard first.
 `mapping/triton/segment_people.py` and `mapping/depth/generate_depth.py` are
-covered only for their pure helpers; the rest drives a Triton server.
+covered only for their pure helpers; the rest drives the models.
 
 ## Status
 

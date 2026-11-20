@@ -27,7 +27,7 @@ A stage whose output exists is skipped, so passing an earlier run's folder as
 
 Before partitioning, the script generates masks enabled by `mask_people` or
 `mask_sky` in either the coarse or block parameters. All training stages share
-these masks; existing masks are reused. Sky masking requires `TRITON_URL`.
+these masks; existing masks are reused.
 It then generates VGGT-Omega depths and `depth_points.ply` when either
 parameters file sets `run_depth` (`scripts/gsplat_depth.sh`), reusing existing
 ones. Segmentation or depth errors stop the run before partitioning or training.
