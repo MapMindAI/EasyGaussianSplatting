@@ -86,9 +86,12 @@ RUN bash /tmp/installers/install_gsplat.sh && rm /tmp/installers/install_gsplat.
 # cv2 without a GUI. pycolmap is pinned to the same version as the base image's COLMAP CLI.
 # tritonclient talks to the inference server the mapping stage extracts and
 # matches features against; matplotlib is imported by the SALAD client in
-# third_party/EasyTensorRT for its own plotting entrypoint.
+# third_party/EasyTensorRT for its own plotting entrypoint. onnxruntime-gpu
+# runs VGGT-Omega depth locally; grpcio-tools generates the server's proto
+# bindings against this env's protobuf.
 RUN conda run --no-capture-output -n gsplat \
-      pip install --no-cache-dir pycolmap==4.2.0.dev0 "tritonclient[grpc]" jupyterlab opencv-python-headless
+      pip install --no-cache-dir pycolmap==4.2.0.dev0 "tritonclient[grpc]" jupyterlab opencv-python-headless \
+      "onnxruntime-gpu>=1.21" grpcio-tools
 
 # Plain python3 runs the gsplat env, which holds every Python dependency.
 ENV PATH=$CONDA_DIR/envs/gsplat/bin:$PATH
