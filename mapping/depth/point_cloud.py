@@ -31,32 +31,48 @@ def scene_scale(camera_centers):
     return float(np.linalg.norm(camera_centers - camera_centers.mean(axis=0), axis=1).max())
 
 
+# Voxel indices are packed into one int64, 21 bits per axis: a voxel more than
+# a million voxel edges (a thousand scene scales) from the origin is dropped.
+_AXIS_BITS = 21
+_AXIS_OFFSET = 1 << (_AXIS_BITS - 1)
+# Voxels of unmerged sums held before folding them into the running total.
+_FOLD_ROWS = 8_000_000
+
+
+def _reduce_by_key(keys, values):
+    """(unique keys, the (N, C) `values` rows summed per key)."""
+    import torch
+
+    unique_keys, inverse = torch.unique(keys, return_inverse=True)
+    sums = torch.zeros((len(unique_keys), values.shape[1]), dtype=values.dtype, device=values.device)
+    return unique_keys, sums.index_add_(0, inverse, values)
+
+
 def voxel_sums(points, colours, voxel_size):
-    """(voxel keys, summed points, summed colours, counts) per occupied voxel."""
-    keys, inverse, counts = np.unique(
-        np.floor(points / voxel_size).astype(np.int64),
-        axis=0, return_inverse=True, return_counts=True,
-    )
-    inverse = inverse.reshape(-1)
-    point_sums = np.zeros((len(keys), 3))
-    colour_sums = np.zeros((len(keys), 3))
-    np.add.at(point_sums, inverse, points)
-    np.add.at(colour_sums, inverse, colours)
-    return keys, point_sums, colour_sums, counts
+    """(packed voxel keys, (V, 7) sums of count, point, and colour) per occupied
+    voxel, from (N, 3) float64 tensors."""
+    import torch
+
+    indices = torch.floor(points / voxel_size).long() + _AXIS_OFFSET
+    inside = ((indices >= 0) & (indices < 1 << _AXIS_BITS)).all(dim=1)
+    values = torch.cat([torch.ones_like(points[:, :1]), points, colours], dim=1)
+    if not inside.all():
+        indices, values = indices[inside], values[inside]
+    keys = (indices[:, 0] << 2 * _AXIS_BITS) | (indices[:, 1] << _AXIS_BITS) | indices[:, 2]
+    return _reduce_by_key(keys, values)
 
 
 def merge_voxel_sums(parts):
-    """Each voxel's mean point and colour over several voxel_sums results."""
-    keys = np.concatenate([part[0] for part in parts])
-    merged_keys, inverse = np.unique(keys, axis=0, return_inverse=True)
-    inverse = inverse.reshape(-1)
-    sums = []
-    for column in (1, 2):
-        total = np.zeros((len(merged_keys), 3))
-        np.add.at(total, inverse, np.concatenate([part[column] for part in parts]))
-        sums.append(total)
-    counts = np.bincount(inverse, weights=np.concatenate([part[3] for part in parts]))
-    return sums[0] / counts[:, None], sums[1] / counts[:, None]
+    """Several voxel_sums results as one."""
+    import torch
+
+    return _reduce_by_key(torch.cat([keys for keys, _ in parts]), torch.cat([sums for _, sums in parts]))
+
+
+def voxel_means(part):
+    """Each voxel's mean point and colour, as NumPy arrays."""
+    sums = part[1].cpu().numpy()
+    return sums[:, 1:4] / sums[:, :1], sums[:, 4:] / sums[:, :1]
 
 
 def write_point_cloud(path, points, colours_rgb):
@@ -92,23 +108,45 @@ def read_point_cloud(path):
     return points, np.column_stack([vertices["red"], vertices["green"], vertices["blue"]])
 
 
+def image_points(rows, image, intrinsics, camera_from_world, device):
+    """One image's depth rows lifted into the COLMAP frame, with their RGB
+    colours, as (N, 3) float64 tensors on `device`."""
+    import torch
+
+    def tensor(array):
+        return torch.as_tensor(np.asarray(array, dtype=np.float64), device=device)
+
+    rows = tensor(rows)
+    image = torch.as_tensor(image, device=device)
+    height, width = image.shape[:2]
+    columns = torch.round(rows[:, 0] * (width - 1)).long()
+    lines = torch.round(rows[:, 1] * (height - 1)).long()
+    # COLMAP puts pixel centres at half-integer coordinates.
+    pixels = torch.stack([columns, lines, torch.zeros_like(lines)], dim=1) + tensor([0.5, 0.5, 1])
+    camera_points = pixels @ tensor(np.linalg.inv(intrinsics)).T * rows[:, 2:]
+    rotation, translation = tensor(camera_from_world[:, :3]), tensor(camera_from_world[:, 3])
+    return (camera_points - translation) @ rotation, image[lines, columns].flip(-1).double()
+
+
 def depth_point_cloud(images, voxel_size):
     """Merged (points, uint8 RGB colours) over `images`, an iterable of
-    (rows, image_bgr, intrinsics, camera_from_world)."""
-    parts = []
+    (rows, image_bgr, intrinsics, camera_from_world), on the GPU when there is one."""
+    import torch
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Folding once the parts outweigh the total re-sorts it only as often as it doubles.
+    parts, held_rows, folded_rows = [], 0, 0
     for rows, image, intrinsics, camera_from_world in images:
-        if len(rows) == 0:
+        if not len(rows):
             continue
-        height, width = image.shape[:2]
-        columns = np.rint(rows[:, 0] * (width - 1)).astype(np.int64)
-        lines = np.rint(rows[:, 1] * (height - 1)).astype(np.int64)
-        # COLMAP puts pixel centres at half-integer coordinates.
-        pixels = np.column_stack([columns, lines]) + 0.5
-        points = unproject(pixels, rows[:, 2], intrinsics, camera_from_world)
-        parts.append(voxel_sums(points, image[lines, columns, ::-1].astype(np.float64), voxel_size))
+        parts.append(voxel_sums(*image_points(rows, image, intrinsics, camera_from_world, device), voxel_size))
+        held_rows += len(parts[-1][0])
+        if held_rows > max(_FOLD_ROWS, folded_rows):
+            parts = [merge_voxel_sums(parts)]
+            held_rows, folded_rows = 0, len(parts[0][0])
     if not parts:
         return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.uint8)
-    points, colours = merge_voxel_sums(parts)
+    points, colours = voxel_means(merge_voxel_sums(parts))
     return points, np.clip(np.rint(colours), 0, 255).astype(np.uint8)
 
 
