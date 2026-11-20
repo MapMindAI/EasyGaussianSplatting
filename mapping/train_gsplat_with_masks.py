@@ -155,13 +155,13 @@ UNRENDERED_DEPTH = 1e-3
 
 
 def initialize_from_depth_points(parser_class, maximum_points=None):
-    """Seed the Gaussians from the merged depth cloud, when the workspace has one.
+    """Seed the Gaussians from the sparse SfM points plus the merged depth cloud.
 
-    simple_trainer's sfm init reads parser.points and parser.points_rgb, the
-    sparse COLMAP points. depth_points.ply is denser and covers what SfM never
-    triangulated; it is in the COLMAP frame, so it goes through the same
-    normalizing transform the parser solved from the sparse points. With
-    `maximum_points` set, a larger cloud is randomly thinned to that many.
+    simple_trainer's sfm init reads parser.points and parser.points_rgb.
+    depth_points.ply covers what SfM never triangulated; it is in the COLMAP
+    frame, so it goes through the normalizing transform the parser solved from
+    the sparse points. With `maximum_points` set, the depth points are randomly
+    thinned so the total stays within it.
     """
     original_init = parser_class.__init__
 
@@ -171,14 +171,19 @@ def initialize_from_depth_points(parser_class, maximum_points=None):
         if not os.path.exists(path):
             return
         points, colours = read_point_cloud(path)
-        if maximum_points is not None and len(points) > maximum_points:
-            print(f"Randomly keeping {maximum_points} of {len(points)} depth points")
-            kept = np.random.default_rng(0).choice(len(points), maximum_points, replace=False)
-            points, colours = points[kept], colours[kept]
-        self.points = transform_points(self.transform, points).astype(np.float32)
-        self.points_rgb = colours
-        self.points_err = np.zeros(len(points), dtype=np.float32)
-        print(f"Initializing from {len(points)} points in {path}")
+        if maximum_points is not None:
+            depth_budget = max(maximum_points - len(self.points), 0)
+            if len(points) > depth_budget:
+                print(f"Randomly keeping {depth_budget} of {len(points)} depth points")
+                kept = np.random.default_rng(0).choice(len(points), depth_budget, replace=False)
+                points, colours = points[kept], colours[kept]
+        sfm_count = len(self.points)
+        self.points = np.concatenate(
+            [self.points, transform_points(self.transform, points)]).astype(np.float32)
+        self.points_rgb = np.concatenate([self.points_rgb, colours]).astype(np.uint8)
+        self.points_err = np.concatenate(
+            [self.points_err, np.zeros(len(points))]).astype(np.float32)
+        print(f"Initializing from {sfm_count} SfM points and {len(points)} depth points in {path}")
 
     parser_class.__init__ = __init__
 

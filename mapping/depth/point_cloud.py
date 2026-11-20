@@ -4,7 +4,7 @@ Each image's rows are lifted through its COLMAP intrinsics and pose into the
 COLMAP frame, coloured from the image, and averaged per voxel. The voxel edge is
 a fraction of the scene scale -- the largest camera distance from the cameras'
 mean, as gsplat measures it -- so one factor suits any capture size. gsplat
-seeds its Gaussians from the result in place of the sparse SfM points.
+seeds its Gaussians from the result alongside the sparse SfM points.
 """
 
 import numpy as np

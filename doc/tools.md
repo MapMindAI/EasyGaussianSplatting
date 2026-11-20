@@ -210,9 +210,9 @@ python3 -m mapping.vggt_omega.example output/vggt_omega a.jpg b.jpg c.jpg
 
 Training reads `depths/` only when the parameters file sets `run_depth: true`
 and a positive `depth_lambda`, which weights gsplat's depth term; with
-`run_depth: true`, a `depth_points.ply` in the workspace also replaces the
-sparse SfM points as the Gaussians' initialization, randomly thinned to
-0.8 × `cap_max` under MCMC when larger:
+`run_depth: true`, a `depth_points.ply` in the workspace is also added to the
+sparse SfM points that initialize the Gaussians, its points randomly thinned
+under MCMC to keep the total within 0.8 × `cap_max`:
 
 ```
 run_depth: true

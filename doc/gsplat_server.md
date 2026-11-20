@@ -226,10 +226,10 @@ feature stages use.
 ### Depth supervision
 
 `run_depth: true` predicts depth for the uploaded images with VGGT-Omega,
-seeds the Gaussians from the merged depth cloud (`depth_points.ply`) instead of
-the sparse SfM points, and adds gsplat's depth term to the loss, weighted by
-`depth_lambda`; `depth_lambda: 0` keeps the initialization without the term. Under MCMC, a
-cloud larger than `cap_max` is randomly thinned to 0.8 × `cap_max`.
+seeds the Gaussians from the sparse SfM points plus the merged depth cloud
+(`depth_points.ply`), and adds gsplat's depth term to the loss, weighted by
+`depth_lambda`; `depth_lambda: 0` keeps the initialization without the term. Under MCMC, the depth
+points are randomly thinned to keep the total within 0.8 × `cap_max`.
 `depth_voxel_factor` sets the cloud's voxel edge as a fraction of the scene
 scale:
 
