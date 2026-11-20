@@ -154,13 +154,14 @@ def attach_depths(dataset_class):
 UNRENDERED_DEPTH = 1e-3
 
 
-def initialize_from_depth_points(parser_class):
+def initialize_from_depth_points(parser_class, maximum_points=None):
     """Seed the Gaussians from the merged depth cloud, when the workspace has one.
 
     simple_trainer's sfm init reads parser.points and parser.points_rgb, the
     sparse COLMAP points. depth_points.ply is denser and covers what SfM never
     triangulated; it is in the COLMAP frame, so it goes through the same
-    normalizing transform the parser solved from the sparse points.
+    normalizing transform the parser solved from the sparse points. With
+    `maximum_points` set, a larger cloud is randomly thinned to that many.
     """
     original_init = parser_class.__init__
 
@@ -170,6 +171,10 @@ def initialize_from_depth_points(parser_class):
         if not os.path.exists(path):
             return
         points, colours = read_point_cloud(path)
+        if maximum_points is not None and len(points) > maximum_points:
+            print(f"Randomly keeping {maximum_points} of {len(points)} depth points")
+            kept = np.random.default_rng(0).choice(len(points), maximum_points, replace=False)
+            points, colours = points[kept], colours[kept]
         self.points = transform_points(self.transform, points).astype(np.float32)
         self.points_rgb = colours
         self.points_err = np.zeros(len(points), dtype=np.float32)
@@ -445,7 +450,11 @@ if parameters is not None and depth_loss_enabled(parameters):
     attach_depths(Dataset)
     guard_depth_loss(gsplat.losses)
 if parameters is not None and parameters.run_depth:
-    initialize_from_depth_points(Parser)
+    # MCMC never grows past cap_max, so leave it room to relocate and add.
+    maximum_points = (
+        int(0.8 * parameters.cap_max) if parameters.strategy == gsplat_pb2.STRATEGY_MCMC else None
+    )
+    initialize_from_depth_points(Parser, maximum_points)
 capture_scene_transform(Parser)
 export_in_colmap_frame(gsplat)
 runpy.run_path(os.path.join(EXAMPLES_DIR, "simple_trainer.py"), run_name="__main__")
