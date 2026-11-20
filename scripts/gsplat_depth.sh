@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Container: generate VGGT-Omega depths and their merged point cloud in the
 # active gsplat environment when any parameters file sets run_depth. Existing
-# depths/ and depth_points.ply are kept.
+# depth files are kept and only missing images are predicted.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

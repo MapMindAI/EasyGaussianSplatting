@@ -275,7 +275,7 @@ def test_depth_reads_the_model_and_writes_beside_it(tmp_path, parameters):
     ]
 
 
-def test_an_uploaded_depths_directory_is_never_overwritten(tmp_path, parameters):
+def test_depth_runs_over_an_existing_depths_directory_to_fill_it(tmp_path, parameters):
     parameters["mask_people"] = False
     parameters["mask_sky"] = False
     parameters["run_depth"] = True
@@ -283,7 +283,7 @@ def test_an_uploaded_depths_directory_is_never_overwritten(tmp_path, parameters)
 
     steps = server.job_steps({"parameters": parameters}, tmp_path)
 
-    assert [name for name, _ in steps] == ["gsplat training"]
+    assert [name for name, _ in steps] == ["depth", "gsplat training"]
 
 
 @pytest.mark.parametrize("mask_people, mask_sky", [(True, False), (False, True), (True, True)])

@@ -154,10 +154,10 @@ def depth_command(model_directory, voxel_factor):
 def job_steps(job, directory):
     """The commands to run for a job, in order.
 
-    Segmentation and depth only run when asked for and when the upload brought
-    no masks or depths of its own, so an uploaded directory is never
-    overwritten. Depth follows segmentation, which gives it the masks that say
-    which pixels are worth predicting for.
+    Segmentation only runs when asked for and when the upload brought no masks
+    of its own. Depth runs whenever asked for; it keeps existing depth files and
+    predicts the rest. Depth follows segmentation, which gives it the masks
+    that say which pixels are worth predicting for.
     """
     model_directory = directory / "model"
     parameters = parameters_from_dict(job["parameters"])
@@ -168,7 +168,7 @@ def job_steps(job, directory):
         steps.append(("segmentation", segmentation_command(
             model_directory, parameters.mask_people, parameters.mask_sky
         )))
-    if parameters.run_depth and not (model_directory / "depths").is_dir():
+    if parameters.run_depth:
         steps.append(("depth", depth_command(model_directory, parameters.depth_voxel_factor)))
     steps.append(("gsplat training", training_command(directory)))
     return steps

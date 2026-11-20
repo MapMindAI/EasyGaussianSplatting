@@ -242,7 +242,8 @@ depth_voxel_factor: 0.001
 ```
 
 It runs after segmentation and before training, writing `depths/` into the job
-directory. An uploaded `depths/` always wins, the same way `masks/` does.
+directory. Existing depth files, uploaded or from an interrupted run, are kept;
+only images without one are predicted.
 
 VGGT-Omega reconstructs several views at once, so
 `mapping/vggt_omega/generate_depth.py` groups up to 12 images that view the
