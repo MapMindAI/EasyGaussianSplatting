@@ -12,6 +12,11 @@ mapping/depth/scale_alignment.py). Groups without enough of that evidence are
 skipped rather than written at a guessed scale. A frame in several groups keeps
 the prediction that best matches its own sparse depths.
 
+Every image in the model ends up with a file: one no group predicted -- an
+up/down face, a frame in no covisible group, or one whose group failed -- gets
+an empty one. Existing files are kept, so an interrupted run resumes by
+predicting only the groups that still have an image without one.
+
 The output is one "<image_name>.npy" per image under --depth-dir, holding the
 (M, 3) float32 columns (x, y, depth) that the trainer supervises on: depth in
 the frame of the input model, and x and y normalized to [0, 1] so the file
@@ -23,6 +28,7 @@ $TRITON_URL; mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
 """
 
 import argparse
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -186,6 +192,20 @@ def depth_groups(points, observations, group_size, minimum_group_size):
     )
 
 
+def pending_groups(groups, done):
+    """The groups with at least one image not in `done`."""
+    return [group for group in groups if not set(group) <= done]
+
+
+def save_rows(path, rows):
+    """np.save through a temporary file, so an interrupted run leaves no partial file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_name(f"{path.name}.partial")
+    with open(temporary_path, "wb") as file:
+        np.save(file, rows)
+    os.replace(temporary_path, path)
+
+
 def parse_depth_arguments(parser):
     """`parser`'s arguments, plus those every depth stage shares."""
     parser.add_argument("model_dir", type=Path, help="holds images/ and sparse/")
@@ -228,16 +248,12 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     over groups of `minimum_group_size` to `group_size` images.
 
     The estimator's run(images_bgr) returns per-image `depth_list` and
-    `depth_conf_list` maps and its predicted `camera_from_world_list`.
+    `depth_conf_list` maps and its predicted `camera_from_world_list`. Returns
+    how many depth files it wrote.
     """
     # Deferred so the helpers above stay testable without pycolmap or tqdm installed.
     import pycolmap
     from tqdm import tqdm
-
-    # Groups share frames, so a partial run cannot be resumed group by group.
-    if not args.overwrite and any(args.depth_dir.rglob("*.npy")):
-        print(f"Depths already exist in {args.depth_dir}; pass --overwrite to regenerate")
-        return
 
     started = time.monotonic()
     images_dir = args.model_dir / "images"
@@ -248,23 +264,36 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
         f"Loaded {args.model_dir / 'sparse' / '0'}: {len(observations)} images, "
         f"{len(points)} points ({time.monotonic() - started:.1f} s)", flush=True
     )
+    done = set() if args.overwrite else {
+        name for name in observations if (args.depth_dir / f"{name}.npy").is_file()
+    }
+    if len(done) == len(observations):
+        print(f"Depths already exist in {args.depth_dir} for all {len(done)} images; "
+              "pass --overwrite to regenerate")
+        return 0
 
     stage_started = time.monotonic()
     groups, ungrouped = depth_groups(points, observations, group_size, minimum_group_size)
-    if not groups:
-        raise SystemExit(f"No covisible group of {minimum_group_size} images in {args.model_dir}")
-    sizes = [len(group) for group in groups]
+    sizes = [len(group) for group in groups] or [0]
     print(
         f"Grouped {len({name for group in groups for name in group})} images "
         f"into {len(groups)} groups of {min(sizes)}-{max(sizes)} (mean {np.mean(sizes):.1f}); "
         f"{len(ungrouped)} images in no group ({time.monotonic() - stage_started:.1f} s)",
         flush=True,
     )
+    if done:
+        all_groups = len(groups)
+        groups = pending_groups(groups, done)
+        print(
+            f"Resuming: {len(done)} of {len(observations)} images already have depth; "
+            f"{len(groups)} of {all_groups} groups still to predict", flush=True
+        )
 
-    stage_started = time.monotonic()
     args.depth_dir.mkdir(parents=True, exist_ok=True)
-    estimator = make_estimator()
-    print(f"Loaded the depth model ({time.monotonic() - stage_started:.1f} s)", flush=True)
+    if groups:
+        stage_started = time.monotonic()
+        estimator = make_estimator()
+        print(f"Loaded the depth model ({time.monotonic() - stage_started:.1f} s)", flush=True)
 
     mask_dir = args.mask_dir
     if mask_dir is not None and not mask_dir.is_dir():
@@ -347,9 +376,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
             if name in best_error and error >= best_error[name]:
                 continue
             best_error[name] = error
-            output_path = args.depth_dir / f"{name}.npy"
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            np.save(output_path, rows)
+            save_rows(args.depth_dir / f"{name}.npy", rows)
             if overlay is not None:
                 overlay_path = depth_debug_path(args.debug_dir, name)
                 overlay_path.parent.mkdir(parents=True, exist_ok=True)
@@ -358,7 +385,8 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     # Groups share frames, so the writes stay on this thread: two workers
     # saving the same image's file would race.
     stage_started = time.monotonic()
-    best_error = {}
+    # A resumed run keeps every file already written, whatever its error.
+    best_error = dict.fromkeys(done, -np.inf)
     skipped = {UNREADABLE: 0, UNSCALED: 0}
     group_scaled_by_cameras = []
     with ThreadPoolExecutor(max_workers=args.num_threads) as pool:
@@ -376,10 +404,16 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
                 unreadable=skipped[UNREADABLE], refresh=False,
             )
 
+    predicted = len(best_error) - len(done)
+    without_depth = sorted(set(observations) - set(best_error))
+    for name in without_depth:
+        save_rows(args.depth_dir / f"{name}.npy", np.zeros((0, 3), dtype=np.float32))
+
     errors = [error for error in best_error.values() if np.isfinite(error)]
     print(
-        f"Depths written to {args.depth_dir} ({len(best_error)} images from "
-        f"{len(groups)} groups in {time.monotonic() - stage_started:.1f} s; "
+        f"Depths written to {args.depth_dir} ({predicted} images from "
+        f"{len(groups)} groups in {time.monotonic() - stage_started:.1f} s, "
+        f"{len(without_depth)} left empty; "
         f"{sum(group_scaled_by_cameras)} groups scaled with camera baselines; "
         f"{skipped[UNSCALED]} skipped for lack of scale evidence, "
         f"{skipped[UNREADABLE]} for unreadable images; {len(ungrouped)} images in no group "
@@ -388,6 +422,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     )
     if args.debug_dir is not None:
         print(f"Depth overlays written to {args.debug_dir}")
+    return predicted + len(without_depth)
 
 
 def main():

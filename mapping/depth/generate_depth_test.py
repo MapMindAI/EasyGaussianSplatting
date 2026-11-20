@@ -6,12 +6,15 @@ import numpy as np
 import pytest
 
 from mapping.depth.generate_depth import (
+    Observations,
     depth_debug_path,
     depth_edge_mask,
     depth_groups,
     depth_overlay,
     observed_depths,
+    pending_groups,
     sample_at,
+    save_rows,
     supervised_points,
 )
 
@@ -243,3 +246,81 @@ def test_observed_depths_accepts_callable_camera_from_world():
     )
 
     assert observed_depths(reconstruction)[1]["a.jpg"].depths.tolist() == [30.0]
+
+
+def test_pending_groups_keep_any_group_with_an_image_still_missing():
+    groups = [["a", "b"], ["b", "c"], ["c", "d"]]
+
+    assert pending_groups(groups, {"a", "b", "c"}) == [["c", "d"]]
+    assert pending_groups(groups, set()) == groups
+
+
+def test_save_rows_leaves_only_the_finished_file(tmp_path):
+    path = tmp_path / "front" / "frame.jpg.npy"
+    rows = np.arange(6, dtype=np.float32).reshape(2, 3)
+
+    save_rows(path, rows)
+
+    np.testing.assert_array_equal(np.load(path), rows)
+    assert [entry.name for entry in path.parent.iterdir()] == ["frame.jpg.npy"]
+
+
+def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(tmp_path, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    import cv2
+
+    from mapping.depth import generate_depth
+
+    names = ["front/a.jpg", "front/b.jpg", "front/c.jpg", "up/d.jpg"]
+    (tmp_path / "images" / "front").mkdir(parents=True)
+    (tmp_path / "images" / "up").mkdir()
+    for name in names:
+        cv2.imwrite(str(tmp_path / "images" / name), np.full((4, 4, 3), 128, np.uint8))
+    observation = Observations(np.eye(3, 4), np.zeros((1, 2)), np.ones(1), np.zeros(1, np.int64))
+    monkeypatch.setitem(sys.modules, "pycolmap", SimpleNamespace(Reconstruction=lambda path: None))
+
+    class Progress(list):
+        set_postfix = staticmethod(lambda **values: None)
+        write = staticmethod(print)
+
+    monkeypatch.setitem(sys.modules, "tqdm", SimpleNamespace(tqdm=lambda items, **options: Progress(items)))
+    monkeypatch.setattr(generate_depth, "observed_depths", lambda reconstruction: (
+        np.zeros((1, 3)), {name: observation for name in names}
+    ))
+    # "c" is in no group and "up/d" is an up face; neither is ever predicted.
+    monkeypatch.setattr(generate_depth, "depth_groups", lambda *arguments: (
+        [["front/a.jpg", "front/b.jpg"]], ["front/c.jpg"]
+    ))
+    monkeypatch.setattr(generate_depth, "pose_depth_scale", lambda *arguments: 1.0)
+    monkeypatch.setattr(generate_depth, "align_sparse_depth", lambda *arguments: 1.0)
+    runs = []
+
+    class Estimator:
+        def run(self, images):
+            runs.append(len(images))
+            return {
+                "depth_list": [np.ones((4, 4), np.float32)] * len(images),
+                "depth_conf_list": [np.ones((4, 4), np.float32)] * len(images),
+                "camera_from_world_list": [np.eye(3, 4)] * len(images),
+            }
+
+    depth_dir = tmp_path / "depths"
+    args = SimpleNamespace(
+        model_dir=tmp_path, depth_dir=depth_dir, overwrite=False, mask_dir=None, debug_dir=None,
+        num_threads=1, samples_per_image=-1, min_confidence=0.5, min_depth=0.1, max_depth=5.0,
+    )
+    # An interrupted run already wrote "a".
+    save_rows(depth_dir / "front/a.jpg.npy", np.full((1, 3), 7, np.float32))
+
+    assert generate_depth.generate_depths(args, Estimator, 2, 2) == 3
+
+    assert runs == [2]
+    np.testing.assert_array_equal(np.load(depth_dir / "front/a.jpg.npy"), np.full((1, 3), 7))
+    assert len(np.load(depth_dir / "front/b.jpg.npy")) > 0
+    assert np.load(depth_dir / "front/c.jpg.npy").shape == (0, 3)
+    assert np.load(depth_dir / "up/d.jpg.npy").shape == (0, 3)
+
+    assert generate_depth.generate_depths(args, Estimator, 2, 2) == 0
+    assert runs == [2]
