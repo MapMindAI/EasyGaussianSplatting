@@ -5,7 +5,9 @@ import pytest
 
 from mapping.depth.point_cloud import (
     depth_point_cloud,
+    image_points,
     merge_voxel_sums,
+    voxel_means,
     read_point_cloud,
     scene_scale,
     unproject,
@@ -39,11 +41,45 @@ def test_voxels_average_points_and_colours_across_parts():
     first = voxel_sums(np.array([[0.1, 0.1, 0.1], [0.3, 0.1, 0.1]]), np.array([[0, 0, 0], [100, 0, 0]]), 1.0)
     second = voxel_sums(np.array([[0.2, 0.4, 0.1], [5.5, 0.5, 0.5]]), np.array([[50, 0, 0], [9, 9, 9]]), 1.0)
 
-    points, colours = merge_voxel_sums([first, second])
+    points, colours = voxel_means(merge_voxel_sums([first, second]))
 
     order = np.argsort(points[:, 0])
     np.testing.assert_allclose(points[order], [[0.2, 0.2, 0.1], [5.5, 0.5, 0.5]])
     np.testing.assert_allclose(colours[order], [[50, 0, 0], [9, 9, 9]])
+
+
+def test_voxels_on_either_side_of_the_origin_stay_apart_and_far_points_are_dropped():
+    points = np.array([[-0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [-0.4, 0.6, 0.5], [3e6, 0, 0]])
+
+    keys, point_sums, colour_sums, counts = voxel_sums(points, np.zeros((4, 3)), 1.0)
+
+    assert sorted(counts) == [1, 2]
+    np.testing.assert_allclose(sorted(point_sums[:, 0]), [-0.9, 0.5])
+
+
+def test_depth_point_cloud_folds_to_the_same_cloud_as_one_merge(monkeypatch):
+    from mapping.depth import point_cloud
+
+    monkeypatch.setattr(point_cloud, "_FOLD_ROWS", 60)
+    generator = np.random.default_rng(0)
+    image = generator.integers(0, 255, (20, 30, 3), dtype=np.uint8)
+    camera_from_world = np.column_stack([np.eye(3), [0, 0, 1]])
+    images = [
+        (np.column_stack([generator.random((50, 2)), generator.uniform(1, 3, 50)]).astype(np.float32),
+         image, INTRINSICS, camera_from_world)
+        for _ in range(12)
+    ]
+
+    points, colours = depth_point_cloud(images, 0.2)
+
+    expected_points, expected_colours = voxel_means(merge_voxel_sums([
+        voxel_sums(*image_points(*item), 0.2) for item in images
+    ]))
+    order, expected_order = np.lexsort(points.T), np.lexsort(expected_points.T)
+    np.testing.assert_allclose(points[order], expected_points[expected_order])
+    np.testing.assert_array_equal(
+        colours[order], np.clip(np.rint(expected_colours[expected_order]), 0, 255).astype(np.uint8)
+    )
 
 
 def test_depth_rows_land_where_the_camera_saw_them_coloured_from_the_image():

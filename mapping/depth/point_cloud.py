@@ -7,7 +7,10 @@ mean, as gsplat measures it -- so one factor suits any capture size. gsplat
 seeds its Gaussians from the result alongside the sparse SfM points.
 """
 
+import itertools
 import os
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -31,32 +34,43 @@ def scene_scale(camera_centers):
     return float(np.linalg.norm(camera_centers - camera_centers.mean(axis=0), axis=1).max())
 
 
+# Voxel indices are packed into one int64, 21 bits per axis: a voxel more than
+# a million voxel edges (a thousand scene scales) from the origin is dropped.
+_AXIS_BITS = 21
+_AXIS_OFFSET = 1 << (_AXIS_BITS - 1)
+# Rows of unmerged voxel sums held before folding them into the running total.
+_FOLD_ROWS = 8_000_000
+
+
+def reduce_by_key(keys, counts, *columns):
+    """(unique keys, each (N, 3) column summed per key, counts summed per key)."""
+    unique_keys, inverse = np.unique(keys, return_inverse=True)
+    sums = [
+        np.stack([np.bincount(inverse, weights=column[:, axis], minlength=len(unique_keys))
+                  for axis in range(3)], axis=1)
+        for column in columns
+    ]
+    return unique_keys, *sums, np.bincount(inverse, weights=counts, minlength=len(unique_keys))
+
+
 def voxel_sums(points, colours, voxel_size):
-    """(voxel keys, summed points, summed colours, counts) per occupied voxel."""
-    keys, inverse, counts = np.unique(
-        np.floor(points / voxel_size).astype(np.int64),
-        axis=0, return_inverse=True, return_counts=True,
-    )
-    inverse = inverse.reshape(-1)
-    point_sums = np.zeros((len(keys), 3))
-    colour_sums = np.zeros((len(keys), 3))
-    np.add.at(point_sums, inverse, points)
-    np.add.at(colour_sums, inverse, colours)
-    return keys, point_sums, colour_sums, counts
+    """(packed voxel keys, summed points, summed colours, counts) per occupied voxel."""
+    indices = np.floor(points / voxel_size).astype(np.int64) + _AXIS_OFFSET
+    inside = np.all((indices >= 0) & (indices < 1 << _AXIS_BITS), axis=1)
+    indices = indices[inside]
+    keys = (indices[:, 0] << 2 * _AXIS_BITS) | (indices[:, 1] << _AXIS_BITS) | indices[:, 2]
+    return reduce_by_key(keys, np.ones(len(keys)), points[inside], colours[inside])
 
 
 def merge_voxel_sums(parts):
-    """Each voxel's mean point and colour over several voxel_sums results."""
-    keys = np.concatenate([part[0] for part in parts])
-    merged_keys, inverse = np.unique(keys, axis=0, return_inverse=True)
-    inverse = inverse.reshape(-1)
-    sums = []
-    for column in (1, 2):
-        total = np.zeros((len(merged_keys), 3))
-        np.add.at(total, inverse, np.concatenate([part[column] for part in parts]))
-        sums.append(total)
-    counts = np.bincount(inverse, weights=np.concatenate([part[3] for part in parts]))
-    return sums[0] / counts[:, None], sums[1] / counts[:, None]
+    """Several voxel_sums results as one."""
+    return reduce_by_key(*(np.concatenate([part[index] for part in parts]) for index in (0, 3, 1, 2)))
+
+
+def voxel_means(part):
+    """Each voxel's mean point and colour."""
+    keys, point_sums, colour_sums, counts = part
+    return point_sums / counts[:, None], colour_sums / counts[:, None]
 
 
 def write_point_cloud(path, points, colours_rgb):
@@ -92,23 +106,41 @@ def read_point_cloud(path):
     return points, np.column_stack([vertices["red"], vertices["green"], vertices["blue"]])
 
 
+def image_points(rows, image, intrinsics, camera_from_world):
+    """One image's depth rows lifted into the COLMAP frame, with their RGB colours."""
+    height, width = image.shape[:2]
+    columns = np.rint(rows[:, 0] * (width - 1)).astype(np.int64)
+    lines = np.rint(rows[:, 1] * (height - 1)).astype(np.int64)
+    # COLMAP puts pixel centres at half-integer coordinates.
+    pixels = np.column_stack([columns, lines]) + 0.5
+    points = unproject(pixels, rows[:, 2], intrinsics, camera_from_world)
+    return points, image[lines, columns, ::-1].astype(np.float64)
+
+
 def depth_point_cloud(images, voxel_size):
     """Merged (points, uint8 RGB colours) over `images`, an iterable of
     (rows, image_bgr, intrinsics, camera_from_world)."""
-    parts = []
-    for rows, image, intrinsics, camera_from_world in images:
-        if len(rows) == 0:
-            continue
-        height, width = image.shape[:2]
-        columns = np.rint(rows[:, 0] * (width - 1)).astype(np.int64)
-        lines = np.rint(rows[:, 1] * (height - 1)).astype(np.int64)
-        # COLMAP puts pixel centres at half-integer coordinates.
-        pixels = np.column_stack([columns, lines]) + 0.5
-        points = unproject(pixels, rows[:, 2], intrinsics, camera_from_world)
-        parts.append(voxel_sums(points, image[lines, columns, ::-1].astype(np.float64), voxel_size))
+    # Threads reduce images side by side, as NumPy's sorts release the GIL; at
+    # most twice as many images as threads are held at once. The unprojection
+    # stays on this thread: concurrent BLAS calls returned wrong points.
+    threads = 4
+    pending = deque()
+    # Parts are folded into one once they outweigh it, so the running total is
+    # re-sorted only as often as it doubles.
+    parts, held_rows, folded_rows = [], 0, 0
+    with ThreadPoolExecutor(max_workers=threads) as pool:
+        for item in itertools.chain(images, [None]):
+            if item is not None and len(item[0]):
+                pending.append(pool.submit(voxel_sums, *image_points(*item), voxel_size))
+            while pending and (item is None or len(pending) >= 2 * threads):
+                parts.append(pending.popleft().result())
+                held_rows += len(parts[-1][0])
+                if held_rows > max(_FOLD_ROWS, folded_rows):
+                    parts = [merge_voxel_sums(parts)]
+                    held_rows, folded_rows = 0, len(parts[0][0])
     if not parts:
         return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.uint8)
-    points, colours = merge_voxel_sums(parts)
+    points, colours = voxel_means(merge_voxel_sums(parts))
     return points, np.clip(np.rint(colours), 0, 255).astype(np.uint8)
 
 
