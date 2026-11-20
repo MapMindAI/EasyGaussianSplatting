@@ -5,6 +5,7 @@ fixed H and W, and returns `depth` (1, N, H, W, 1), `depth_conf` (1, N, H, W),
 and `pose_enc` (1, N, 9); see the `.json` exported beside the model.
 """
 
+import threading
 from pathlib import Path
 
 import cv2
@@ -62,6 +63,9 @@ class VggtOmegaDepthEstimator:
         model_input = self._session.get_inputs()[0]
         self._input_name = model_input.name
         self._height, self._width = model_input.shape[-2:]
+        # A 12-view group's attention alone takes 4.4 GB, so callers on several
+        # threads take turns on the GPU rather than each allocating their own.
+        self._run_lock = threading.Lock()
 
     def run(self, images_bgr):
         """Per input image: `depth_list` and `depth_conf_list` (H, W) maps,
@@ -80,9 +84,10 @@ class VggtOmegaDepthEstimator:
             for image in images_bgr
         ]).astype(np.float32) / 255.0
 
-        depth, confidence, pose_encodings = self._session.run(
-            ["depth", "depth_conf", "pose_enc"], {self._input_name: frames[None]}
-        )
+        with self._run_lock:
+            depth, confidence, pose_encodings = self._session.run(
+                ["depth", "depth_conf", "pose_enc"], {self._input_name: frames[None]}
+            )
         cameras = [
             decode_pose(pose_encoding, *image.shape[:2])
             for pose_encoding, image in zip(pose_encodings[0], images_bgr)
