@@ -208,7 +208,7 @@ ignoring aspect ratio, and the maps resized back. Groups of two views or more
 are kept. Whenever an image was predicted, it merges every `.npy` into
 `<model_dir>/depth_points.ply` (`mapping/depth/point_cloud.py`): rows lifted
 through the COLMAP intrinsics and poses, coloured from the images, and averaged
-per voxel. `--voxel-factor` (0.001) sets the voxel edge as a fraction of the
+per voxel, with torch on the GPU when there is one. `--voxel-factor` (0.001) sets the voxel edge as a fraction of the
 scene scale, the largest camera distance from the cameras' mean, as gsplat
 measures it; the server and training scripts pass the parameters file's
 `depth_voxel_factor`. It takes the flags above except

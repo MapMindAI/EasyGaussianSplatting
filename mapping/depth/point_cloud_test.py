@@ -1,5 +1,7 @@
 """Tests for lifting depth rows into the merged, downsampled cloud."""
 
+import importlib.util
+
 import numpy as np
 import pytest
 
@@ -20,6 +22,18 @@ from mapping.vggt_omega.depth_estimator import quaternion_to_matrix
 INTRINSICS = np.array([[100.0, 0, 32], [0, 120.0, 24], [0, 0, 1]])
 
 
+# The merge runs on torch, which the gsplat environment has and the slim CI image does not.
+requires_torch = pytest.mark.skipif(
+    importlib.util.find_spec("torch") is None, reason="needs torch"
+)
+
+
+def tensor(values):
+    import torch
+
+    return torch.tensor(values, dtype=torch.float64)
+
+
 def test_unproject_inverts_the_projection():
     rotation = quaternion_to_matrix([0.1, -0.2, 0.3, 0.9])
     camera_from_world = np.column_stack([rotation, [0.5, -1.0, 2.0]])
@@ -38,9 +52,10 @@ def test_scene_scale_is_the_largest_camera_distance_from_their_mean():
     assert scene_scale([[0, 0, 0], [2, 0, 0], [1, 3, 0]]) == pytest.approx(2.0)
 
 
+@requires_torch
 def test_voxels_average_points_and_colours_across_parts():
-    first = voxel_sums(np.array([[0.1, 0.1, 0.1], [0.3, 0.1, 0.1]]), np.array([[0, 0, 0], [100, 0, 0]]), 1.0)
-    second = voxel_sums(np.array([[0.2, 0.4, 0.1], [5.5, 0.5, 0.5]]), np.array([[50, 0, 0], [9, 9, 9]]), 1.0)
+    first = voxel_sums(tensor([[0.1, 0.1, 0.1], [0.3, 0.1, 0.1]]), tensor([[0, 0, 0], [100, 0, 0]]), 1.0)
+    second = voxel_sums(tensor([[0.2, 0.4, 0.1], [5.5, 0.5, 0.5]]), tensor([[50, 0, 0], [9, 9, 9]]), 1.0)
 
     points, colours = voxel_means(merge_voxel_sums([first, second]))
 
@@ -49,15 +64,17 @@ def test_voxels_average_points_and_colours_across_parts():
     np.testing.assert_allclose(colours[order], [[50, 0, 0], [9, 9, 9]])
 
 
+@requires_torch
 def test_voxels_on_either_side_of_the_origin_stay_apart_and_far_points_are_dropped():
-    points = np.array([[-0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [-0.4, 0.6, 0.5], [3e6, 0, 0]])
+    points = tensor([[-0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [-0.4, 0.6, 0.5], [3e6, 0, 0]])
 
-    keys, counts, point_sums, colour_sums = voxel_sums(points, np.zeros((4, 3)), 1.0)
+    keys, sums = voxel_sums(points, tensor(np.zeros((4, 3))), 1.0)
 
-    assert sorted(counts) == [1, 2]
-    np.testing.assert_allclose(sorted(point_sums[:, 0]), [-0.9, 0.5])
+    assert sorted(sums[:, 0].tolist()) == [1, 2]
+    np.testing.assert_allclose(sorted(sums[:, 1].tolist()), [-0.9, 0.5])
 
 
+@requires_torch
 def test_depth_point_cloud_folds_to_the_same_cloud_as_one_merge(monkeypatch):
     monkeypatch.setattr(point_cloud, "_FOLD_ROWS", 60)
     generator = np.random.default_rng(0)
@@ -72,7 +89,7 @@ def test_depth_point_cloud_folds_to_the_same_cloud_as_one_merge(monkeypatch):
     points, colours = depth_point_cloud(images, 0.2)
 
     expected_points, expected_colours = voxel_means(merge_voxel_sums([
-        voxel_sums(*image_points(*item), 0.2) for item in images
+        voxel_sums(*image_points(*item, "cpu"), 0.2) for item in images
     ]))
     order, expected_order = np.lexsort(points.T), np.lexsort(expected_points.T)
     np.testing.assert_allclose(points[order], expected_points[expected_order])
@@ -81,6 +98,7 @@ def test_depth_point_cloud_folds_to_the_same_cloud_as_one_merge(monkeypatch):
     )
 
 
+@requires_torch
 def test_depth_rows_land_where_the_camera_saw_them_coloured_from_the_image():
     camera_from_world = np.column_stack([np.eye(3), [0.0, 0.0, 0.0]])
     image = np.zeros((49, 65, 3), dtype=np.uint8)

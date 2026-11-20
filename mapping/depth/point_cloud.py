@@ -8,8 +8,6 @@ seeds its Gaussians from the result alongside the sparse SfM points.
 """
 
 import os
-from collections import deque
-from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -37,43 +35,44 @@ def scene_scale(camera_centers):
 # a million voxel edges (a thousand scene scales) from the origin is dropped.
 _AXIS_BITS = 21
 _AXIS_OFFSET = 1 << (_AXIS_BITS - 1)
-# Rows of unmerged voxel sums held before folding them into the running total.
+# Voxels of unmerged sums held before folding them into the running total.
 _FOLD_ROWS = 8_000_000
-_THREADS = 4
 
 
-def _reduce_by_key(keys, counts, *columns):
-    """(unique keys, counts, each (N, 3) column) summed per key; `counts` of
-    None counts the rows."""
-    unique_keys, inverse = np.unique(keys, return_inverse=True)
-    counts = np.bincount(inverse, weights=counts, minlength=len(unique_keys))
-    sums = [
-        np.stack([np.bincount(inverse, weights=column[:, axis], minlength=len(unique_keys))
-                  for axis in range(3)], axis=1)
-        for column in columns
-    ]
-    return unique_keys, counts, *sums
+def _reduce_by_key(keys, values):
+    """(unique keys, the (N, C) `values` rows summed per key)."""
+    import torch
+
+    unique_keys, inverse = torch.unique(keys, return_inverse=True)
+    sums = torch.zeros((len(unique_keys), values.shape[1]), dtype=values.dtype, device=values.device)
+    return unique_keys, sums.index_add_(0, inverse, values)
 
 
 def voxel_sums(points, colours, voxel_size):
-    """(packed voxel keys, counts, summed points, summed colours) per occupied voxel."""
-    indices = np.floor(points / voxel_size).astype(np.int64) + _AXIS_OFFSET
-    inside = np.all((indices >= 0) & (indices < 1 << _AXIS_BITS), axis=1)
+    """(packed voxel keys, (V, 7) sums of count, point, and colour) per occupied
+    voxel, from (N, 3) float64 tensors."""
+    import torch
+
+    indices = torch.floor(points / voxel_size).long() + _AXIS_OFFSET
+    inside = ((indices >= 0) & (indices < 1 << _AXIS_BITS)).all(dim=1)
+    values = torch.cat([torch.ones_like(points[:, :1]), points, colours], dim=1)
     if not inside.all():
-        indices, points, colours = indices[inside], points[inside], colours[inside]
+        indices, values = indices[inside], values[inside]
     keys = (indices[:, 0] << 2 * _AXIS_BITS) | (indices[:, 1] << _AXIS_BITS) | indices[:, 2]
-    return _reduce_by_key(keys, None, points, colours)
+    return _reduce_by_key(keys, values)
 
 
 def merge_voxel_sums(parts):
     """Several voxel_sums results as one."""
-    return _reduce_by_key(*(np.concatenate(column) for column in zip(*parts)))
+    import torch
+
+    return _reduce_by_key(torch.cat([keys for keys, _ in parts]), torch.cat([sums for _, sums in parts]))
 
 
 def voxel_means(part):
-    """Each voxel's mean point and colour."""
-    keys, counts, point_sums, colour_sums = part
-    return point_sums / counts[:, None], colour_sums / counts[:, None]
+    """Each voxel's mean point and colour, as NumPy arrays."""
+    sums = part[1].cpu().numpy()
+    return sums[:, 1:4] / sums[:, :1], sums[:, 4:] / sums[:, :1]
 
 
 def write_point_cloud(path, points, colours_rgb):
@@ -109,43 +108,42 @@ def read_point_cloud(path):
     return points, np.column_stack([vertices["red"], vertices["green"], vertices["blue"]])
 
 
-def image_points(rows, image, intrinsics, camera_from_world):
-    """One image's depth rows lifted into the COLMAP frame, with their RGB colours."""
+def image_points(rows, image, intrinsics, camera_from_world, device):
+    """One image's depth rows lifted into the COLMAP frame, with their RGB
+    colours, as (N, 3) float64 tensors on `device`."""
+    import torch
+
+    def tensor(array):
+        return torch.as_tensor(np.asarray(array, dtype=np.float64), device=device)
+
+    rows = tensor(rows)
+    image = torch.as_tensor(image, device=device)
     height, width = image.shape[:2]
-    columns = np.rint(rows[:, 0] * (width - 1)).astype(np.int64)
-    lines = np.rint(rows[:, 1] * (height - 1)).astype(np.int64)
+    columns = torch.round(rows[:, 0] * (width - 1)).long()
+    lines = torch.round(rows[:, 1] * (height - 1)).long()
     # COLMAP puts pixel centres at half-integer coordinates.
-    pixels = np.column_stack([columns, lines]) + 0.5
-    points = unproject(pixels, rows[:, 2], intrinsics, camera_from_world)
-    return points, image[lines, columns, ::-1].astype(np.float64)
+    pixels = torch.stack([columns, lines, torch.zeros_like(lines)], dim=1) + tensor([0.5, 0.5, 1])
+    camera_points = pixels @ tensor(np.linalg.inv(intrinsics)).T * rows[:, 2:]
+    rotation, translation = tensor(camera_from_world[:, :3]), tensor(camera_from_world[:, 3])
+    return (camera_points - translation) @ rotation, image[lines, columns].flip(-1).double()
 
 
 def depth_point_cloud(images, voxel_size):
     """Merged (points, uint8 RGB colours) over `images`, an iterable of
-    (rows, image_bgr, intrinsics, camera_from_world)."""
-    pending = deque()
-    parts, held_rows, folded_rows = [], 0, 0
+    (rows, image_bgr, intrinsics, camera_from_world), on the GPU when there is one."""
+    import torch
 
-    def collect():
-        # Folding once the parts outweigh the total re-sorts it only as often as it doubles.
-        nonlocal parts, held_rows, folded_rows
-        parts.append(pending.popleft().result())
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Folding once the parts outweigh the total re-sorts it only as often as it doubles.
+    parts, held_rows, folded_rows = [], 0, 0
+    for rows, image, intrinsics, camera_from_world in images:
+        if not len(rows):
+            continue
+        parts.append(voxel_sums(*image_points(rows, image, intrinsics, camera_from_world, device), voxel_size))
         held_rows += len(parts[-1][0])
         if held_rows > max(_FOLD_ROWS, folded_rows):
             parts = [merge_voxel_sums(parts)]
             held_rows, folded_rows = 0, len(parts[0][0])
-
-    # Not map_with_progress: pool.map would read every image up front. The
-    # unprojection stays on this thread, as concurrent BLAS calls returned wrong points.
-    with ThreadPoolExecutor(max_workers=_THREADS) as pool:
-        for rows, image, intrinsics, camera_from_world in images:
-            if len(rows):
-                points = image_points(rows, image, intrinsics, camera_from_world)
-                pending.append(pool.submit(voxel_sums, *points, voxel_size))
-            if len(pending) >= 2 * _THREADS:
-                collect()
-        while pending:
-            collect()
     if not parts:
         return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.uint8)
     points, colours = voxel_means(merge_voxel_sums(parts))
