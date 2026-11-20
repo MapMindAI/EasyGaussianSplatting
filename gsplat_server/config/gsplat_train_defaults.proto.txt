@@ -4,9 +4,9 @@
 # prune_opa, or raise refine_stop_iter, to retain more detail at the cost of
 # GPU memory. DefaultStrategy has no upper bound on the count.
 #
-# floater_reg_weight is applied to both opacity_reg and scale_reg. It suppresses
-# low-opacity and oversized Gaussians; lower it for more detail and higher GPU
-# memory use.
+# opacity_reg_weight pulls every Gaussian's opacity down, so unused ones sink
+# below min_opacity and MCMC relocates them; scale_reg_weight shrinks
+# oversized Gaussians. Lower either for more detail and higher GPU memory use.
 #
 # grow_grad2d is the image-plane gradient threshold for splitting or duplicating
 # Gaussians. absgrad uses absolute rather than averaged gradients and therefore
@@ -35,13 +35,17 @@ iterations: 30000
 test_every: 8
 # COLMAP image downsample factor used by the trainer.
 data_factor: 1
-# Regularization weight applied to both opacity and scale terms.
-floater_reg_weight: 0.01
+# Weight of the mean-opacity penalty (gsplat opacity_reg).
+opacity_reg_weight: 0.01
+# Weight of the mean-scale penalty (gsplat scale_reg).
+scale_reg_weight: 0.01
+# Drop both terms from refine_stop_iter on, when MCMC no longer relocates.
+stop_regularization_after_refinement: false
 
 # Minimum opacity below which a Gaussian is pruned. It also sets the opacity
 # reset floor, which gsplat takes as prune_opa * 2, so lowering it does not
 # simply prune less: at 0.002 every reset clamps opacities to 0.004, and with
-# floater_reg_weight 0.01 pushing them down they never recover above the prune
+# opacity_reg_weight 0.01 pushing them down they never recover above the prune
 # threshold. That collapses this dataset from 409k Gaussians to 10k.
 prune_opa: 0.005    # 0.005
 # Image-plane gradient threshold for Gaussian splitting or duplication.

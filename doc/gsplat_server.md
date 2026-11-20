@@ -162,7 +162,7 @@ min_opacity: 0.01
 
 For the Wixi Chongansi drone scene, use
 `gsplat_server/config/gsplat_train_drone.proto.txt`; its
-`floater_reg_weight: 0.003` produced the best reported PSNR and SSIM in the
+`opacity_reg_weight` and `scale_reg_weight` of 0.003 produced the best reported PSNR and SSIM in the
 [scene benchmark](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Wixi-Chongansi-Drone-Scene).
 
 With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
@@ -210,6 +210,15 @@ runs SegFormer from `third_party/EasyTensorRT` (ADE20K class 2) over gRPC at
 Before upgrading, rename `run_segmentation` to `mask_people` in existing
 parameter files and saved `job.json` parameters. Protobuf field number 20
 is unchanged.
+
+`opacity_reg_weight` and `scale_reg_weight` replace `floater_reg_weight`,
+which set both. Rename it to `opacity_reg_weight` (field number 3 is unchanged)
+and add `scale_reg_weight` with the same value to keep a run's behaviour; an
+omitted `scale_reg_weight` takes the shipped default.
+
+`stop_regularization_after_refinement: true` drops both terms from
+`refine_stop_iter` on. With MCMC nothing relocates after that step, so the
+opacity term only dims every Gaussian; position noise still runs.
 
 An uploaded `masks/` always wins. Segmentation runs inference on
 `segment_people.py --num-threads` worker threads, through the same helper the

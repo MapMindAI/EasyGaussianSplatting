@@ -43,3 +43,23 @@ def parameters_to_dict(parameters):
 
 def parameters_to_text(parameters):
     return text_format.MessageToString(parameters)
+
+
+def parameters_to_complete_text(parameters):
+    """Text that load_parameters reads back unchanged, whatever the defaults.
+
+    Text format omits proto3 scalars at zero, and load_parameters would then
+    fill them from the shipped defaults; the zeros are written out explicitly.
+    """
+    lines = [parameters_to_text(parameters).rstrip("\n")]
+    for field in parameters.DESCRIPTOR.fields:
+        if field.message_type is not None or getattr(parameters, field.name):
+            continue
+        if field.enum_type is not None:
+            zero = field.enum_type.values_by_number[0].name
+        elif field.type == field.TYPE_BOOL:
+            zero = "false"
+        else:
+            zero = "0"
+        lines.append(f"{field.name}: {zero}")
+    return "\n".join(line for line in lines if line) + "\n"
