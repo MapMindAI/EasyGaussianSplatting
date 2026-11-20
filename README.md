@@ -20,7 +20,7 @@ flowchart TD
     IFACES --> EXIF --> ALIGN["Optional GPS alignment"]
     LEVEL --> ALIGN --> SPARSE["Sparse COLMAP model"]
     SPARSE --> MASKS["Person and sky masks"]
-    SPARSE --> DEPTH["DA3 depth (optional)"]
+    SPARSE --> DEPTH["VGGT-Omega or DA3 depth (optional)"]
     TRITON --> MASKS
     TRITON --> DEPTH
     SPARSE --> TRAIN["gsplat training<br/>local or gRPC server"]

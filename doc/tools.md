@@ -156,6 +156,32 @@ image, preserving nested image paths and adding `_depth.png` to the filename.
 [gsplat_server.md](gsplat_server.md#depth-supervision) covers the file format
 and the limits of the depth term.
 
+### VGGT-Omega instead of DA3
+
+`mapping/vggt_omega/generate_depth.py` is the same stage with VGGT-Omega in
+place of DA3, run locally through ONNX Runtime rather than on Triton, and is
+what the server's `run_depth` uses. The weights are not public: place the
+export at `models/vggt_omega_416.onnx` (with its `.onnx.data`), or pass
+`--model`. The graph takes 1 to 10 views at a fixed 416x416; images are resized
+to that, ignoring aspect ratio, and the maps resized back. It takes the flags
+above except `--triton-url`, and defaults `--num-threads` to 2. Its confidence
+is at least 1, so the default `--min-confidence` keeps every pixel.
+
+```bash
+${DOCKER_RUN} python3 -m mapping.vggt_omega.generate_depth \
+  ${WORKSPACE_PATH} ${WORKSPACE_PATH}/depths \
+  --mask-dir ${WORKSPACE_PATH}/masks \
+  --samples-per-image -1
+```
+
+To try the model on a few images, `example.py` writes each one's raw depth
+(`<stem>_depth.npy`, in the model's arbitrary scale) and a colourized overlay
+(`<stem>_depth.png`):
+
+```bash
+python3 -m mapping.vggt_omega.example output/vggt_omega a.jpg b.jpg c.jpg
+```
+
 Training reads `depths/` only when the parameters file sets `run_depth: true`,
 which adds gsplat's depth term weighted by `depth_lambda`:
 

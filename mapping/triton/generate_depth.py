@@ -196,16 +196,15 @@ def camera_groups(reconstruction, group_size):
     return groups
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+def parse_depth_arguments(parser):
+    """`parser`'s arguments, plus those every depth stage shares."""
     parser.add_argument("model_dir", type=Path, help="holds images/ and sparse/")
     parser.add_argument("depth_dir", type=Path)
-    add_endpoint_argument(parser, "depth model")
     parser.add_argument(
         "--samples-per-image", type=int, default=4096, help="supervised pixels kept"
     )
     parser.add_argument(
-        "--min-confidence", type=float, default=1.0, help="DA3 confidence floor"
+        "--min-confidence", type=float, default=1.0, help="depth confidence floor"
     )
     parser.add_argument(
         "--min-depth", type=float, default=0.5, help="minimum scaled depth to keep"
@@ -230,15 +229,19 @@ def main():
     if args.min_depth is not None and args.max_depth is not None:
         if args.min_depth > args.max_depth:
             parser.error("--min-depth cannot exceed --max-depth")
+    return args
 
-    triton_url = resolve_endpoint(args.triton_url)
 
-    # Deferred so the helpers above stay testable without pycolmap, the
-    # EasyTensorRT submodule, or the Triton client installed.
+def generate_depths(args, make_estimator):
+    """Write depth rows for `args.model_dir` with `make_estimator()`'s model.
+
+    The estimator's run(images_bgr) returns per-image `depth_list` and
+    `depth_conf_list` maps.
+    """
+    # Deferred so the helpers above stay testable without pycolmap installed.
     import pycolmap
 
     from mapping.triton.progress import map_with_progress
-    from mapping.triton.clients import DepthEstimator
 
     images_dir = args.model_dir / "images"
     reconstruction = pycolmap.Reconstruction(args.model_dir / "sparse" / "0")
@@ -267,7 +270,7 @@ def main():
         return
 
     observations = observed_depths(reconstruction)
-    estimator = DepthEstimator(triton_url, expected_num_images=GROUP_SIZE)
+    estimator = make_estimator()
 
     def training_mask(name, shape):
         """The segmentation mask for `name` at `shape`, or None if there is none."""
@@ -366,6 +369,22 @@ def main():
     )
     if args.debug_dir is not None:
         print(f"Depth overlays written to {args.debug_dir}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_endpoint_argument(parser, "depth model")
+    args = parse_depth_arguments(parser)
+    triton_url = resolve_endpoint(args.triton_url)
+
+    def make_estimator():
+        # Deferred so the helpers above stay testable without the EasyTensorRT
+        # submodule or the Triton client installed.
+        from mapping.triton.clients import DepthEstimator
+
+        return DepthEstimator(triton_url, expected_num_images=GROUP_SIZE)
+
+    generate_depths(args, make_estimator)
 
 
 if __name__ == "__main__":

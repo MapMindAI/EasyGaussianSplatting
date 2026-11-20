@@ -23,7 +23,7 @@ from gsplat_server.proto import gsplat_pb2, gsplat_pb2_grpc
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRAIN_ENTRYPOINT = REPO_ROOT / "mapping" / "train_gsplat_with_masks.py"
 SEGMENT_ENTRYPOINT = REPO_ROOT / "mapping" / "triton" / "segment_people.py"
-DEPTH_ENTRYPOINT = REPO_ROOT / "mapping" / "triton" / "generate_depth.py"
+DEPTH_ENTRYPOINT = REPO_ROOT / "mapping" / "vggt_omega" / "generate_depth.py"
 QUEUED, RUNNING, SUCCEEDED, FAILED = "queued", "running", "succeeded", "failed"
 
 
