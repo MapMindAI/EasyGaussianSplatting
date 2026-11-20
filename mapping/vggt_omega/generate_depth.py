@@ -33,8 +33,8 @@ def main():
         default=0.001,
         help="point cloud voxel edge as a fraction of the scene scale",
     )
-    # Two workers share the one session: one infers while the other reads and
-    # filters. More would only queue on the GPU.
+    # Two workers share the one session, which runs one group at a time: one
+    # infers while the other reads and filters. More would only queue on it.
     parser.set_defaults(num_threads=2)
     args = parse_depth_arguments(parser)
     predicted = generate_depths(
