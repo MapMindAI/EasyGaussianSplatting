@@ -163,7 +163,8 @@ The `up/` and `down/` cube faces are skipped: their sky and ground views do not
 need depth supervision.
 `--samples-per-image` (4096) sets how many pixels each `.npy` keeps,
 `--min-confidence` (1.0) the DA3 confidence floor, and `--min-depth` (0.1) /
-`--max-depth` (unbounded) discard scaled depths, in COLMAP units, outside that range.
+`--max-depth` (unbounded) discard depths outside that range, in the depth
+model's units before scaling.
 Colour and DA3-depth discontinuities are also excluded, so depth supervision
 does not pull geometry across foliage and other detail edges. Debug overlays
 show only the depth that remains after filtering.

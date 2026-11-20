@@ -197,10 +197,12 @@ def parse_depth_arguments(parser):
         "--min-confidence", type=float, default=0.5, help="depth confidence floor"
     )
     parser.add_argument(
-        "--min-depth", type=float, default=0.1, help="minimum scaled depth to keep"
+        "--min-depth", type=float, default=0.1,
+        help="minimum depth to keep, in the depth model's units before scaling"
     )
     parser.add_argument(
-        "--max-depth", type=float, default=float("inf"), help="maximum scaled depth to keep"
+        "--max-depth", type=float, default=5.0,
+        help="maximum depth to keep, in the depth model's units before scaling"
     )
     parser.add_argument(
         "--mask-dir", type=Path, default=None, help="skip pixels these masks block"
@@ -216,9 +218,8 @@ def parse_depth_arguments(parser):
     )
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
-    if args.min_depth is not None and args.max_depth is not None:
-        if args.min_depth > args.max_depth:
-            parser.error("--min-depth cannot exceed --max-depth")
+    if args.min_depth > args.max_depth:
+        parser.error("--min-depth cannot exceed --max-depth")
     return args
 
 
@@ -327,8 +328,9 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
                 confidence,
                 training_mask(name, depth.shape[:2]),
                 args.min_confidence,
-                args.min_depth,
-                args.max_depth,
+                # The depth range is in the model's own units, before scaling.
+                args.min_depth * scale,
+                args.max_depth * scale,
             )
             filtered_depth = np.where(usable & ~depth_edge_mask(image, depth), depth, 0)
             rows = supervised_points(
