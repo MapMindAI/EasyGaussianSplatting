@@ -200,7 +200,8 @@ ${DOCKER_RUN} python3 -m mapping.vggt_omega.generate_depth \
 ```
 
 To try the model on a few images, `example.py` writes each one's raw depth
-(`<stem>_depth.npy`, in the model's arbitrary scale), a colourized overlay
+(`<stem>_depth.npy`, in the model's arbitrary scale), its confidence
+(`<stem>_confidence.npy`), a colourized overlay
 (`<stem>_depth.png`), and `points.ply`: the more confident half of every
 image's pixels, lifted through the model's own predicted cameras into one
 coloured cloud:

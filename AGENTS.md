@@ -47,7 +47,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── vggt_omega/               # VGGT-Omega depth, run locally from ONNX.
 │   │   ├── depth_estimator.py    # ONNX Runtime session over models/vggt_omega_416.onnx.
 │   │   ├── depth_estimator_test.py # Pose-encoding decoding.
-│   │   ├── example.py            # Depth maps, overlays, and a merged cloud for a few images.
+│   │   ├── example.py            # Depth and confidence maps, overlays, and a merged cloud for a few images.
 │   │   ├── example_test.py       # Pixel selection for the example's cloud.
 │   │   └── generate_depth.py     # depth/generate_depth.py with this model instead of DA3.
 │   ├── block_partition.py        # Grid, tree, and covisibility-graph training blocks.

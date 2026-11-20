@@ -4,7 +4,8 @@
     python3 -m mapping.vggt_omega.example output/ a.jpg b.jpg c.jpg
 
 Writes "<stem>_depth.npy" (the raw (H, W) float32 depth, in the model's
-arbitrary scale) and "<stem>_depth.png" (a colourized overlay) per image, and
+arbitrary scale), "<stem>_confidence.npy" (its (H, W) float32 confidence, at
+least 1), and "<stem>_depth.png" (a colourized overlay) per image, and
 "points.ply": every image's confident pixels lifted through its predicted
 camera into the model's shared world frame, coloured from the image.
 """
@@ -64,10 +65,12 @@ def main():
         result["intrinsics_list"],
     ):
         np.save(args.output_dir / f"{path.stem}_depth.npy", depth)
+        np.save(args.output_dir / f"{path.stem}_confidence.npy", confidence)
         cv2.imwrite(str(args.output_dir / f"{path.stem}_depth.png"), depth_overlay(image, depth))
         print(
             f"{path.name}: depth {np.percentile(depth, 2):.3f}..{np.percentile(depth, 98):.3f}, "
-            f"median confidence {np.median(confidence):.2f}"
+            "confidence p5/p50/p95 "
+            + "/".join(f"{value:.2f}" for value in np.percentile(confidence, (5, 50, 95)))
         )
         pixels = cloud_pixels(confidence)
         depths = depth[pixels[:, 1], pixels[:, 0]]
