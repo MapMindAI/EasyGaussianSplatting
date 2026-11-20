@@ -58,8 +58,17 @@ class VggtOmegaDepthEstimator:
             options,
             providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
         )
-        if self._session.get_providers()[0] != "CUDAExecutionProvider":
+        if self._session.get_providers()[0] == "CUDAExecutionProvider":
+            device_id = self._session.get_provider_options()["CUDAExecutionProvider"]["device_id"]
+            arena = f"gpu:{device_id}"
+        else:
             print(f"CUDA unavailable to ONNX Runtime; running {model_path.name} on the CPU")
+            arena = "cpu:0"
+        # Group sizes vary, so the memory arena would otherwise keep every
+        # differently sized buffer it ever grew for until the GPU runs out.
+        # Shrinking returns its unused regions after each run.
+        self._run_options = onnxruntime.RunOptions()
+        self._run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", arena)
         model_input = self._session.get_inputs()[0]
         self._input_name = model_input.name
         self._height, self._width = model_input.shape[-2:]
@@ -86,7 +95,8 @@ class VggtOmegaDepthEstimator:
 
         with self._run_lock:
             depth, confidence, pose_encodings = self._session.run(
-                ["depth", "depth_conf", "pose_enc"], {self._input_name: frames[None]}
+                ["depth", "depth_conf", "pose_enc"], {self._input_name: frames[None]},
+                self._run_options,
             )
         cameras = [
             decode_pose(pose_encoding, *image.shape[:2])

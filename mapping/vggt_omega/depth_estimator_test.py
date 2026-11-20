@@ -32,7 +32,7 @@ def test_run_infers_one_group_at_a_time_across_threads():
     counter_lock = threading.Lock()
 
     class Session:
-        def run(self, names, feeds):
+        def run(self, names, feeds, run_options):
             with counter_lock:
                 active[0] += 1
                 peak[0] = max(peak[0], active[0])
@@ -49,7 +49,7 @@ def test_run_infers_one_group_at_a_time_across_threads():
     estimator = VggtOmegaDepthEstimator.__new__(VggtOmegaDepthEstimator)
     estimator._session, estimator._input_name = Session(), "images"
     estimator._height = estimator._width = 4
-    estimator._run_lock = threading.Lock()
+    estimator._run_lock, estimator._run_options = threading.Lock(), None
     images = [np.zeros((8, 8, 3), np.uint8)] * 2
 
     with ThreadPoolExecutor(max_workers=3) as pool:
