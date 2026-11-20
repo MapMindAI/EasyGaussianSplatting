@@ -73,6 +73,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── insta360_stitch_video.sh  # Container: Insta360 capture to panorama video.
 │   ├── docker_common.sh          # Shared helpers for the host-side scripts.
 │   ├── gsplat_env.sh             # Container: activate the gsplat conda env.
+│   ├── gsplat_depth.sh           # Container: VGGT-Omega depths when run_depth is set.
 │   ├── gsplat_train.sh           # Container: train a splat from a workspace.
 │   └── gsplat_train_blocks.sh    # Container: partition, coarse, blocks, merge.
 ├── third_party/

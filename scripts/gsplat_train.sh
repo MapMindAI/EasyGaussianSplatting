@@ -29,14 +29,7 @@ sys.stdout.write(parameters_to_complete_text(load_parameters(sys.argv[1])))' \
   "${PARAMETERS_PATH}" > "${RESULT_DIR}/cfg.proto.txt"
 
 bash scripts/gsplat_segment.sh "${WORKSPACE_PATH}" "${PARAMETERS_PATH}"
-
-if python3 -c 'import sys; from gsplat_server.parameters import load_parameters
-sys.exit(not load_parameters(sys.argv[1]).run_depth)' "${PARAMETERS_PATH}"; then
-  python3 -m mapping.vggt_omega.generate_depth \
-    "${WORKSPACE_PATH}" "${WORKSPACE_PATH}/depths" \
-    --mask-dir "${WORKSPACE_PATH}/masks" \
-    --samples-per-image -1
-fi
+bash scripts/gsplat_depth.sh "${WORKSPACE_PATH}" "${PARAMETERS_PATH}"
 
 python3 mapping/train_gsplat_with_masks.py default \
   --job_parameters "${PARAMETERS_PATH}" \

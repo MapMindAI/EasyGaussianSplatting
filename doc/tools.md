@@ -217,9 +217,10 @@ depth_lambda: 0.01
 ```
 
 Calling `mapping/train_gsplat_with_masks.py` directly does not generate masks
-or depth. The server and `scripts/gsplat_train.sh` honor `mask_people`,
-`mask_sky`, and `run_depth`; the pipeline and block-training scripts honor the
-two mask flags (see [gsplat_server.md](gsplat_server.md#submitting-a-model)).
+or depth. The server, `scripts/gsplat_train.sh`, and
+`scripts/gsplat_train_blocks.sh` honor `mask_people`, `mask_sky`, and
+`run_depth`; the pipeline script honors the two mask flags (see
+[gsplat_server.md](gsplat_server.md#submitting-a-model)).
 
 ## TSDF mesh from a Gaussian Splat
 

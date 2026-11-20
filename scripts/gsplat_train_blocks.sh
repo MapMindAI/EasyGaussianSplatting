@@ -3,7 +3,7 @@
 #
 # Usage: scripts/gsplat_train_blocks.sh <workspace> [max_images] [coarse.proto.txt] [block.proto.txt] [output_dir]
 #
-# Generates masks enabled by either parameters file, then partitions sparse/0
+# Generates masks and depths enabled by either parameters file, then partitions sparse/0
 # into tree blocks of at most max_images training images
 # (default 4000), trains a coarse model of the whole scene, fine-tunes each
 # block from it in turn, concatenates the Gaussians each block owns, and
@@ -26,6 +26,7 @@ source scripts/gsplat_env.sh
 export PYTHONPATH="$PWD"
 
 bash scripts/gsplat_segment.sh "${WORKSPACE_PATH}" "${COARSE_PARAMETERS}" "${BLOCK_PARAMETERS}"
+bash scripts/gsplat_depth.sh "${WORKSPACE_PATH}" "${COARSE_PARAMETERS}" "${BLOCK_PARAMETERS}"
 
 # Checkpoints are only written at the last step, so one means the run finished.
 latest_checkpoint() {
