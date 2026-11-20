@@ -9,6 +9,7 @@ Gaussians from (see mapping/depth/point_cloud.py).
 """
 
 import argparse
+import time
 from pathlib import Path
 
 from mapping.depth.generate_depth import generate_depths, parse_depth_arguments
@@ -43,8 +44,12 @@ def main():
     if cloud_path.exists() and not args.overwrite:
         print(f"{cloud_path} already exists; pass --overwrite to rebuild it")
         return
+    started = time.monotonic()
     count = write_depth_point_cloud(args.model_dir, args.depth_dir, cloud_path, args.voxel_factor)
-    print(f"Merged depth point cloud ({count} points) written to {cloud_path}")
+    print(
+        f"Merged depth point cloud ({count} points) written to {cloud_path} "
+        f"({time.monotonic() - started:.1f} s)"
+    )
 
 
 if __name__ == "__main__":

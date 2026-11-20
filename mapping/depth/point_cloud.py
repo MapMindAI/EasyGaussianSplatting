@@ -112,6 +112,7 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
     `model_dir` into `output_path`; returns the point count."""
     import cv2
     import pycolmap
+    from tqdm import tqdm
 
     from mapping.depth.covisibility_groups import centre_and_rotation
 
@@ -122,16 +123,21 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
         if callable(camera_from_world):
             camera_from_world = camera_from_world()
         poses[image.name] = np.asarray(camera_from_world.matrix(), dtype=np.float64)
-    voxel_size = voxel_factor * scene_scale(
-        [centre_and_rotation(pose)[0] for pose in poses.values()]
-    )
+    scale = scene_scale([centre_and_rotation(pose)[0] for pose in poses.values()])
+    voxel_size = voxel_factor * scale
+    print(f"Voxel edge {voxel_size:.4g}: {voxel_factor} of the scene scale {scale:.4g}", flush=True)
+
+    with_depth = [
+        image for image in reconstruction.images.values()
+        if (depth_dir / f"{image.name}.npy").exists()
+    ]
 
     def images():
-        for image in reconstruction.images.values():
-            depth_path = depth_dir / f"{image.name}.npy"
+        for image in tqdm(with_depth, desc="Point cloud", unit="image", dynamic_ncols=True):
             bgr = cv2.imread(str(model_dir / "images" / image.name))
-            if not depth_path.exists() or bgr is None:
+            if bgr is None:
                 continue
+            depth_path = depth_dir / f"{image.name}.npy"
             yield (
                 np.load(depth_path),
                 bgr,

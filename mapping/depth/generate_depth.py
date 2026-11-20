@@ -23,6 +23,8 @@ $TRITON_URL; mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
 """
 
 import argparse
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import NamedTuple
 
@@ -37,8 +39,6 @@ from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
 # to match the deployed model (see third_party/EasyTensorRT).
 GROUP_SIZE = 5
 SKIPPED_DEPTH_FACES = {"up", "down"}
-# Groups per progress log line.
-_LOG_EVERY = 20
 EDGE_DILATION = 2
 DEPTH_EDGE_THRESHOLD = 0.15
 # Why a group produced nothing.
@@ -229,25 +229,41 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     The estimator's run(images_bgr) returns per-image `depth_list` and
     `depth_conf_list` maps and its predicted `camera_from_world_list`.
     """
-    # Deferred so the helpers above stay testable without pycolmap installed.
+    # Deferred so the helpers above stay testable without pycolmap or tqdm installed.
     import pycolmap
-
-    from mapping.triton.progress import map_with_progress
+    from tqdm import tqdm
 
     # Groups share frames, so a partial run cannot be resumed group by group.
     if not args.overwrite and any(args.depth_dir.rglob("*.npy")):
         print(f"Depths already exist in {args.depth_dir}; pass --overwrite to regenerate")
         return
 
+    started = time.monotonic()
     images_dir = args.model_dir / "images"
     points, observations = observed_depths(
         pycolmap.Reconstruction(args.model_dir / "sparse" / "0")
     )
+    print(
+        f"Loaded {args.model_dir / 'sparse' / '0'}: {len(observations)} images, "
+        f"{len(points)} points ({time.monotonic() - started:.1f} s)", flush=True
+    )
+
+    stage_started = time.monotonic()
     groups, ungrouped = depth_groups(points, observations, group_size, minimum_group_size)
     if not groups:
         raise SystemExit(f"No covisible group of {minimum_group_size} images in {args.model_dir}")
+    sizes = [len(group) for group in groups]
+    print(
+        f"Grouped {len({name for group in groups for name in group})} images "
+        f"into {len(groups)} groups of {min(sizes)}-{max(sizes)} (mean {np.mean(sizes):.1f}); "
+        f"{len(ungrouped)} images in no group ({time.monotonic() - stage_started:.1f} s)",
+        flush=True,
+    )
+
+    stage_started = time.monotonic()
     args.depth_dir.mkdir(parents=True, exist_ok=True)
     estimator = make_estimator()
+    print(f"Loaded the depth model ({time.monotonic() - stage_started:.1f} s)", flush=True)
 
     def training_mask(name, shape):
         """The segmentation mask for `name` at `shape`, or None if there is none."""
@@ -266,7 +282,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
         for name in group:
             image = cv2.imread(str(images_dir / name))
             if image is None:
-                print(f"Skipping unreadable image: {name}", flush=True)
+                tqdm.write(f"Skipping a group with unreadable image {name}")
                 return None, UNREADABLE
             images.append(image)
 
@@ -288,6 +304,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
         )
         if scale is None:
             return None, UNSCALED
+        group_scaled_by_cameras.append(pose_scale is not None)
 
         # Seeded per group so a rerun samples the same pixels; the groups run
         # on worker threads, which would otherwise interleave the draws.
@@ -315,16 +332,8 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
             rows_by_name.append((name, rows, error, overlay))
         return rows_by_name, None
 
-    # Groups share frames, so the writes stay on this thread: two workers
-    # saving the same image's file would race.
-    best_error = {}
-    skipped = {UNREADABLE: 0, UNSCALED: 0}
-    for rows_by_name, failure in map_with_progress(
-        estimate, groups, "Depth for group", args.num_threads, _LOG_EVERY
-    ):
-        if failure is not None:
-            skipped[failure] += 1
-            continue
+    def write_best(rows_by_name):
+        """Save each image's rows unless an earlier group fitted it better."""
         for name, rows, error, overlay in rows_by_name:
             if name in best_error and error >= best_error[name]:
                 continue
@@ -337,11 +346,36 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
                 overlay_path.parent.mkdir(parents=True, exist_ok=True)
                 cv2.imwrite(str(overlay_path), depth_overlay(*overlay))
 
+    # Groups share frames, so the writes stay on this thread: two workers
+    # saving the same image's file would race.
+    stage_started = time.monotonic()
+    best_error = {}
+    skipped = {UNREADABLE: 0, UNSCALED: 0}
+    group_scaled_by_cameras = []
+    with ThreadPoolExecutor(max_workers=args.num_threads) as pool:
+        progress = tqdm(
+            pool.map(estimate, groups), total=len(groups), desc="Depth", unit="group",
+            dynamic_ncols=True,
+        )
+        for rows_by_name, failure in progress:
+            if failure is not None:
+                skipped[failure] += 1
+            else:
+                write_best(rows_by_name)
+            progress.set_postfix(
+                images=len(best_error), unscaled=skipped[UNSCALED],
+                unreadable=skipped[UNREADABLE], refresh=False,
+            )
+
+    errors = [error for error in best_error.values() if np.isfinite(error)]
     print(
         f"Depths written to {args.depth_dir} ({len(best_error)} images from "
-        f"{len(groups)} groups; {skipped[UNSCALED]} groups skipped for lack of scale "
-        f"evidence, {skipped[UNREADABLE]} for unreadable images; {len(ungrouped)} images "
-        f"in no group of {minimum_group_size} or more)"
+        f"{len(groups)} groups in {time.monotonic() - stage_started:.1f} s; "
+        f"{sum(group_scaled_by_cameras)} groups scaled with camera baselines; "
+        f"{skipped[UNSCALED]} skipped for lack of scale evidence, "
+        f"{skipped[UNREADABLE]} for unreadable images; {len(ungrouped)} images in no group "
+        f"of {minimum_group_size} or more; median sparse depth error "
+        f"{np.median(errors) if errors else float('nan'):.3f})"
     )
     if args.debug_dir is not None:
         print(f"Depth overlays written to {args.debug_dir}")
