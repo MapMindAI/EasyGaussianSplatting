@@ -67,7 +67,7 @@ message JobParameters {
   bool pose_opt = 19;
   // Mask people with Mask R-CNN before training when the upload has no masks/.
   bool mask_people = 20;
-  // Mask sky with SegFormer before training when the upload has no masks/.
+  // Mask sky with U²-Net before training when the upload has no masks/.
   bool mask_sky = 21;
   // Colour the splats are composited over, so a region no Gaussian covers --
   // the masked sky above all -- renders as this instead of black. Left unset,

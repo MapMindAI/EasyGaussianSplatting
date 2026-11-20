@@ -68,7 +68,7 @@ are 90-degree-FOV `PINHOLE` cameras, which gsplat's COLMAP loader supports and
 `EQUIRECTANGULAR` it does not.
 
 `scripts/run_pipeline.sh` runs Mask R-CNN when `mask_people` is true and
-SegFormer when `mask_sky` is true, then trains a
+U²-Net when `mask_sky` is true, then trains a
 [gsplat](https://github.com/nerfstudio-project/gsplat) model from that cube-map
 reconstruction. Both flags default to false.
 Every training setting comes from the parameters file, whose
@@ -79,30 +79,22 @@ a bus error.
 The densification settings live in `gsplat_server/config/gsplat_train_defaults.proto.txt`, shared
 with the sweep so its baseline cannot drift from what ships; `mapping/train_gsplat_with_masks.py` only attaches the masks and passes every argument through to simple_trainer. The trained model lands in `data/pano_mapping/gsplat_output`.
 
-## Masks and depth from Triton
+## Masks
 
-Two stages under `mapping/triton/` annotate a reconstruction before training,
-both against the Triton server that already serves the mapping features (see
-[panorama_mapping.md](panorama_mapping.md)). `--triton-url` locates it, or
-`$TRITON_URL` when the flag is left out. Run segmentation in the gsplat
-environment, which includes torchvision; depth uses the image's default
-`python3`, which has pycolmap and the Triton gRPC client. Mount the repo at
-`/workspace` so `data/` and `mapping/` both come along.
-
-`segment_people.py` writes the training masks -- white where gsplat should
-supervise, black over people and sky:
+`mapping/triton/segment_people.py` writes the training masks -- white where
+gsplat should supervise, black over people and sky. Both models run locally in
+the gsplat environment: torchvision's Mask R-CNN for people and the U²-Net
+below for sky. Mount the repo at `/workspace` so `data/`, `mapping/`, and
+`models/` all come along:
 
 ```bash
-GSPLAT_HOST=192.168.11.194
 WORKSPACE_PATH=data/VID_20260904_155849_009
-DOCKER_RUN="docker run --rm -v $(pwd):/workspace -w /workspace \
-  --add-host host.docker.internal:host-gateway \
-  ghcr.io/mapmindai/gaussiansplatting:latest"
 
-${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.triton.segment_people \
+docker run --rm --gpus all -v $(pwd):/workspace -w /workspace \
+  ghcr.io/mapmindai/gaussiansplatting:latest \
+  conda run --no-capture-output -n gsplat python3 -m mapping.triton.segment_people \
   ${WORKSPACE_PATH}/images ${WORKSPACE_PATH}/masks \
-  --debug-dir ${WORKSPACE_PATH}/debug --no-mask-sky \
-  --triton-url ${GSPLAT_HOST}:8011
+  --debug-dir ${WORKSPACE_PATH}/debug
 ```
 
 `scripts/run_pipeline.sh` and `scripts/gsplat_train.sh` read `mask_people` and
@@ -110,20 +102,49 @@ ${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.triton.
 `scripts/gsplat_train_blocks.sh` generates masks enabled in either its coarse
 or block parameters before partitioning.
 Direct invocation of `segment_people.py` enables both by default:
-`--no-mask-people` skips Mask R-CNN, and `--no-mask-sky` skips SegFormer.
+`--no-mask-people` skips Mask R-CNN, and `--no-mask-sky` skips U²-Net.
 `--dilation` grows each person mask (1 pixel), and `--num-threads` sets how many
 images infer at once (4). Masks mirror
 any nested folders under `images/`, so each keeps the image's relative path and
 adds `.png` to its filename. Existing masks are kept unless `--overwrite` is
-given. SegFormer runs a 512-pixel model on overlapping tiles, so masks retain
-the image's local detail; large images take proportionally longer to segment.
+given.
 
-`--debug-dir` additionally writes each image with people in red over the source
-image; when sky is enabled, it also washes the SegFormer label map over it.
-It also writes `label_colours.png`, the exact ADE20K label-index colour legend.
+`--debug-dir` additionally writes each image with people in red and sky in
+magenta. Adding it to an already-segmented directory re-runs the images whose
+overlay is missing, so the masks do not have to be thrown away to get the views.
 
-Adding it to an already-segmented directory re-runs the images whose overlay is
-missing, so the masks do not have to be thrown away to get the views.
+### Sky segmentation
+
+`mapping/sky_segmentation/sky_segmenter.py` runs the U²-Net from
+[xiongzhu666/Sky-Segmentation-and-Post-processing](https://github.com/xiongzhu666/Sky-Segmentation-and-Post-processing)
+with ONNX Runtime, on CUDA when available and otherwise on the CPU (about
+0.5 s per image). Download its export to `models/skyseg.onnx`:
+
+```bash
+wget -O models/skyseg.onnx https://huggingface.co/JianyuanWang/skyseg/resolve/main/skyseg.onnx
+```
+
+Pixels above 0.5 sky probability are masked. It also masks a featureless white
+indoor ceiling, so leave `mask_sky` off for indoor captures. The example writes
+each image's sky probability and its overlay, for checking a capture:
+
+```bash
+python3 -m mapping.sky_segmentation.example output/sky_segmentation \
+  ${WORKSPACE_PATH}/images/up/000150.jpg ${WORKSPACE_PATH}/images/front/000150.jpg
+```
+
+## Depth from Triton
+
+Depth runs against the Triton server that already serves the mapping features
+(see [panorama_mapping.md](panorama_mapping.md)). `--triton-url` locates it, or
+`$TRITON_URL` when the flag is left out:
+
+```bash
+GSPLAT_HOST=192.168.11.194
+DOCKER_RUN="docker run --rm -v $(pwd):/workspace -w /workspace \
+  --add-host host.docker.internal:host-gateway \
+  ghcr.io/mapmindai/gaussiansplatting:latest"
+```
 
 `mapping/depth/generate_depth.py` predicts depth with Depth Anything 3 on
 Triton. It is not part of `run_pipeline.sh`, so run it yourself. Segmentation

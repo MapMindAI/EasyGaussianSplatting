@@ -11,6 +11,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from mapping.onnx_session import onnx_session
+
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "vggt_omega_416.onnx"
 # VGGT confidence starts at 1 and runs to tens; sky and far background sit
 # below 2.5, so this puts that cut at the shared --min-confidence default of 0.5.
@@ -46,23 +48,14 @@ class VggtOmegaDepthEstimator:
     def __init__(self, model_path=DEFAULT_MODEL_PATH):
         import onnxruntime
 
-        if not model_path.is_file():
-            raise FileNotFoundError(f"No VGGT-Omega ONNX model at {model_path}")
-        # onnxruntime-gpu ships without cuDNN; load the one torch's nvidia wheels carry.
-        onnxruntime.preload_dlls()
         options = onnxruntime.SessionOptions()
         # The export's unused initializers otherwise log a warning each.
         options.log_severity_level = 3
-        self._session = onnxruntime.InferenceSession(
-            str(model_path),
-            options,
-            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
-        )
+        self._session = onnx_session(model_path, options)
         if self._session.get_providers()[0] == "CUDAExecutionProvider":
             device_id = self._session.get_provider_options()["CUDAExecutionProvider"]["device_id"]
             arena = f"gpu:{device_id}"
         else:
-            print(f"CUDA unavailable to ONNX Runtime; running {model_path.name} on the CPU")
             arena = "cpu:0"
         # Group sizes vary, so the memory arena would otherwise keep every
         # differently sized buffer it ever grew for until the GPU runs out.
