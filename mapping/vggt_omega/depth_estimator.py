@@ -11,6 +11,9 @@ import cv2
 import numpy as np
 
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "vggt_omega_416.onnx"
+# VGGT confidence starts at 1 and runs to tens; sky and far background sit
+# below 2.5, so this puts that cut at the shared --min-confidence default of 0.5.
+CONFIDENCE_SCALE = 1 / 5
 
 
 def quaternion_to_matrix(quaternion):
@@ -64,7 +67,7 @@ class VggtOmegaDepthEstimator:
         """Per input image: `depth_list` and `depth_conf_list` (H, W) maps,
         `camera_from_world_list` (3, 4), and `intrinsics_list` (3, 3).
 
-        Each image is resized to the model's input, ignoring aspect ratio, and
+        Confidence is the model's, times CONFIDENCE_SCALE. Each image is resized to the model's input, ignoring aspect ratio, and
         its maps and intrinsics are scaled back to the image's own resolution.
         Depths and translations share one arbitrary scale across the call, in
         a world frame of the model's choosing.
@@ -93,7 +96,7 @@ class VggtOmegaDepthEstimator:
 
         return {
             "depth_list": at_source_size(depth),
-            "depth_conf_list": at_source_size(confidence),
+            "depth_conf_list": at_source_size(confidence * CONFIDENCE_SCALE),
             "camera_from_world_list": [camera_from_world for camera_from_world, _ in cameras],
             "intrinsics_list": [intrinsics for _, intrinsics in cameras],
         }

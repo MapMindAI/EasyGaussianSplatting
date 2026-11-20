@@ -5,7 +5,7 @@
 
 Writes "<stem>_depth.npy" (the raw (H, W) float32 depth, in the model's
 arbitrary scale), "<stem>_confidence.npy" (its (H, W) float32 confidence, at
-least 1), and "<stem>_depth.png" (a colourized overlay) per image, and
+least 0.2), and "<stem>_depth.png" (a colourized overlay) per image, and
 "points.ply": every image's confident pixels lifted through its predicted
 camera into the model's shared world frame, coloured from the image.
 """

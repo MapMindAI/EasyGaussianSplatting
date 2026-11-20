@@ -162,7 +162,7 @@ Groups share images, so an existing `depths/` is kept whole; pass
 The `up/` and `down/` cube faces are skipped: their sky and ground views do not
 need depth supervision.
 `--samples-per-image` (4096) sets how many pixels each `.npy` keeps,
-`--min-confidence` (1.0) the DA3 confidence floor, and `--min-depth` (0.1) /
+`--min-confidence` (0.5) the confidence floor, and `--min-depth` (0.1) /
 `--max-depth` (unbounded) discard depths outside that range, in the depth
 model's units before scaling.
 Colour and DA3-depth discontinuities are also excluded, so depth supervision
@@ -189,8 +189,9 @@ per voxel. `--voxel-factor` (0.001) sets the voxel edge as a fraction of the
 scene scale, the largest camera distance from the cameras' mean, as gsplat
 measures it; the server and training scripts pass the parameters file's
 `depth_voxel_factor`. It takes the flags above except
-`--triton-url`, and defaults `--num-threads` to 2. Its confidence is at least
-1, so the default `--min-confidence` keeps every pixel.
+`--triton-url`, and defaults `--num-threads` to 2. Its confidence is VGGT's
+divided by 5, so it starts at 0.2 and the default `--min-confidence` of 0.5 drops
+pixels below VGGT's 2.5: mostly sky and far background.
 
 ```bash
 ${DOCKER_RUN} python3 -m mapping.vggt_omega.generate_depth \

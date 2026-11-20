@@ -194,7 +194,7 @@ def parse_depth_arguments(parser):
         "--samples-per-image", type=int, default=4096, help="supervised pixels kept"
     )
     parser.add_argument(
-        "--min-confidence", type=float, default=0.75, help="depth confidence floor"
+        "--min-confidence", type=float, default=0.5, help="depth confidence floor"
     )
     parser.add_argument(
         "--min-depth", type=float, default=0.1,
