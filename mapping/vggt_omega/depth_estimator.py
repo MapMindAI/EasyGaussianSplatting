@@ -1,8 +1,8 @@
 """VGGT-Omega depth from an exported ONNX model, run locally with ONNX Runtime.
 
 The graph takes `images`, float32 RGB in [0, 1] shaped (1, N, 3, H, W) at a
-fixed H and W, and returns `depth` (1, N, H, W, 1) and `depth_conf`
-(1, N, H, W); see the `.json` exported beside the model.
+fixed H and W, and returns `depth` (1, N, H, W, 1), `depth_conf` (1, N, H, W),
+and `pose_enc` (1, N, 9); see the `.json` exported beside the model.
 """
 
 from pathlib import Path
@@ -11,6 +11,31 @@ import cv2
 import numpy as np
 
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "vggt_omega_416.onnx"
+
+
+def quaternion_to_matrix(quaternion):
+    """The rotation for an (x, y, z, w) quaternion."""
+    x, y, z, w = np.asarray(quaternion, dtype=np.float64) / np.linalg.norm(quaternion)
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ])
+
+
+def decode_pose(pose_encoding, height, width):
+    """(3, 4) OpenCV camera-from-world and (3, 3) intrinsics for an image of
+    `height` x `width`, from VGGT-Omega's (tx, ty, tz, qx, qy, qz, qw,
+    vertical fov, horizontal fov) encoding."""
+    translation, quaternion = pose_encoding[:3], pose_encoding[3:7]
+    vertical_fov, horizontal_fov = pose_encoding[7], pose_encoding[8]
+    camera_from_world = np.column_stack([quaternion_to_matrix(quaternion), translation])
+    intrinsics = np.array([
+        [width / 2 / np.tan(horizontal_fov / 2), 0, width / 2],
+        [0, height / 2 / np.tan(vertical_fov / 2), height / 2],
+        [0, 0, 1],
+    ])
+    return camera_from_world, intrinsics
 
 
 class VggtOmegaDepthEstimator:
@@ -36,12 +61,13 @@ class VggtOmegaDepthEstimator:
         self._height, self._width = model_input.shape[-2:]
 
     def run(self, images_bgr):
-        """`depth_list` and `depth_conf_list`, one (H, W) array per input image.
+        """Per input image: `depth_list` and `depth_conf_list` (H, W) maps,
+        `camera_from_world_list` (3, 4), and `intrinsics_list` (3, 3).
 
         Each image is resized to the model's input, ignoring aspect ratio, and
-        its maps are resized back to the image's own resolution. The depths
-        share one arbitrary scale across the call; the predicted cameras are
-        dropped, since callers already have the COLMAP poses.
+        its maps and intrinsics are scaled back to the image's own resolution.
+        Depths and translations share one arbitrary scale across the call, in
+        a world frame of the model's choosing.
         """
         frames = np.stack([
             cv2.cvtColor(
@@ -51,9 +77,13 @@ class VggtOmegaDepthEstimator:
             for image in images_bgr
         ]).astype(np.float32) / 255.0
 
-        depth, confidence = self._session.run(
-            ["depth", "depth_conf"], {self._input_name: frames[None]}
+        depth, confidence, pose_encodings = self._session.run(
+            ["depth", "depth_conf", "pose_enc"], {self._input_name: frames[None]}
         )
+        cameras = [
+            decode_pose(pose_encoding, *image.shape[:2])
+            for pose_encoding, image in zip(pose_encodings[0], images_bgr)
+        ]
 
         def at_source_size(maps):
             return [
@@ -64,4 +94,6 @@ class VggtOmegaDepthEstimator:
         return {
             "depth_list": at_source_size(depth),
             "depth_conf_list": at_source_size(confidence),
+            "camera_from_world_list": [camera_from_world for camera_from_world, _ in cameras],
+            "intrinsics_list": [intrinsics for _, intrinsics in cameras],
         }

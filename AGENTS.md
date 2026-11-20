@@ -39,7 +39,9 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   │   └── progress.py           # Thread pool with progress logging.
 │   ├── vggt_omega/               # VGGT-Omega depth, run locally from ONNX.
 │   │   ├── depth_estimator.py    # ONNX Runtime session over models/vggt_omega_416.onnx.
-│   │   ├── example.py            # Depth maps and overlays for a few images.
+│   │   ├── depth_estimator_test.py # Pose-encoding decoding.
+│   │   ├── example.py            # Depth maps, overlays, and a merged cloud for a few images.
+│   │   ├── example_test.py       # Back-projection and the PLY writer.
 │   │   └── generate_depth.py     # triton/generate_depth.py with this model instead of DA3.
 │   ├── block_partition.py        # Grid, tree, and covisibility-graph training blocks.
 │   ├── block_partition_test.py   # Splits, ownership, and frame assignment.
