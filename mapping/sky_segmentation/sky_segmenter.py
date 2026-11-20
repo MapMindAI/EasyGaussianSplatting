@@ -10,9 +10,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from mapping.onnx_session import onnx_session
+
 DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "skyseg.onnx"
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+# Sky probability above which a pixel is sky.
+SKY_THRESHOLD = 0.5
 
 
 def model_input(image_bgr, height, width):
@@ -24,20 +28,7 @@ def model_input(image_bgr, height, width):
 
 class SkySegmenter:
     def __init__(self, model_path=DEFAULT_MODEL_PATH):
-        import onnxruntime
-
-        if not model_path.is_file():
-            raise FileNotFoundError(f"No sky segmentation ONNX model at {model_path}")
-        # onnxruntime-gpu ships without cuDNN; load the one torch's nvidia wheels carry.
-        onnxruntime.preload_dlls()
-        providers = [
-            provider
-            for provider in ("CUDAExecutionProvider", "CPUExecutionProvider")
-            if provider in onnxruntime.get_available_providers()
-        ]
-        self._session = onnxruntime.InferenceSession(str(model_path), providers=providers)
-        if self._session.get_providers()[0] != "CUDAExecutionProvider":
-            print(f"CUDA unavailable to ONNX Runtime; running {model_path.name} on the CPU")
+        self._session = onnx_session(model_path)
         model_input_info = self._session.get_inputs()[0]
         self._input_name = model_input_info.name
         self._height, self._width = model_input_info.shape[-2:]
@@ -55,3 +46,7 @@ class SkySegmenter:
         return cv2.resize(
             probability[0, 0], (image_bgr.shape[1], image_bgr.shape[0]), interpolation=cv2.INTER_LINEAR
         )
+
+    def mask(self, image_bgr):
+        """(H, W) bool, true where the sky probability is above SKY_THRESHOLD."""
+        return self.probability(image_bgr) > SKY_THRESHOLD

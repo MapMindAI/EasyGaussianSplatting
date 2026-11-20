@@ -53,7 +53,7 @@ def test_mask_choices_only_run_enabled_models(tmp_path, monkeypatch, mask_people
     image = np.full((2, 3, 3), 80, dtype=np.uint8)
     cv2.imwrite(str(image_directory / "frame.png"), image)
     people = np.array([[True, False, False], [False, False, False]])
-    sky_probability = np.array([[0.0, 0.9, 0.4], [0.0, 0.0, 0.0]], dtype=np.float32)
+    sky = np.array([[False, True, False], [False, False, False]])
     calls = []
 
     class PersonSegmenter:
@@ -70,9 +70,9 @@ def test_mask_choices_only_run_enabled_models(tmp_path, monkeypatch, mask_people
             assert mask_sky
             calls.append("load sky")
 
-        def probability(self, source):
+        def mask(self, source):
             calls.append("mask sky")
-            return sky_probability
+            return sky
 
     monkeypatch.setitem(sys.modules, "mapping.triton.people", SimpleNamespace(
         PersonSegmenter=PersonSegmenter,
@@ -100,7 +100,7 @@ def test_mask_choices_only_run_enabled_models(tmp_path, monkeypatch, mask_people
         assert not (tmp_path / "debug").exists()
         return
 
-    blocked = (people & mask_people) | ((sky_probability > 0.5) & mask_sky)
+    blocked = (people & mask_people) | (sky & mask_sky)
     mask = cv2.imread(str(tmp_path / "masks/front/frame.png.png"), cv2.IMREAD_GRAYSCALE)
     assert np.array_equal(mask, training_mask(blocked))
     overlay = cv2.imread(str(tmp_path / "debug/front/frame.png.png"))

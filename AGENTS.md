@@ -59,6 +59,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── block_gaussians.py        # Coarse Gaussians per block, and the block merge.
 │   ├── block_gaussians_test.py   # Ownership, expanded regions, and checkpoints.
 │   ├── mapping_pipeline.py       # The four mapping stages end to end.
+│   ├── onnx_session.py           # ONNX Runtime sessions on CUDA, else the CPU.
 │   ├── gps.py                    # Capture GPS as face EXIF, UTM priors, and map alignment.
 │   ├── gps_test.py               # Track parsing, the fit, and the alignment.
 │   ├── gsplat_world_frame.py     # Undo gsplat's world normalization on export.

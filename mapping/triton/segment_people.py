@@ -10,8 +10,6 @@ convention). Nested image folders are mirrored under the mask directory.
 
 --debug-dir additionally writes, per image, people in red and sky in magenta
 washed over the image they came from.
-
-Inference runs on --num-threads worker threads.
 """
 
 import argparse
@@ -21,8 +19,6 @@ import cv2
 import numpy as np
 
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
-# Sky probability above which a pixel is masked.
-SKY_THRESHOLD = 0.5
 # Images per progress log line.
 _LOG_EVERY = 200
 
@@ -138,7 +134,7 @@ def main(arguments=None):
             people = dilate(person_segmenter.mask(image), args.dilation)
         sky = np.zeros(image.shape[:2], dtype=bool)
         if sky_segmenter is not None:
-            sky = sky_segmenter.probability(image) > SKY_THRESHOLD
+            sky = sky_segmenter.mask(image)
         blocked = people | sky
         cv2.imwrite(str(mask_path), training_mask(blocked))
         if debug_path is not None:
