@@ -160,9 +160,9 @@ keeps the prediction whose scaled depth best matches its own sparse depths.
 The `up/` and `down/` cube faces are skipped: their sky and ground views do not
 need depth supervision. Every image ends up with a `.npy`: one no group
 predicted (an up/down face, an image in no group, or a skipped group) gets an
-empty one. Existing files are kept, so rerunning an interrupted stage predicts
-only the groups that still have an image without a file; `--overwrite`
-regenerates them all.
+empty one, so a skipped group is not retried. Existing files are kept, so
+rerunning an interrupted stage predicts only the groups that still have an
+image without a file; `--overwrite` regenerates them all.
 `--samples-per-image` (4096) sets how many pixels each `.npy` keeps,
 `--min-confidence` (0.5) the confidence floor, and `--min-depth` (0.1) /
 `--max-depth` (unbounded) discard depths outside that range, in the depth
@@ -184,7 +184,7 @@ export at `models/vggt_omega_416.onnx` (with its `.onnx.data`), or pass
 `--model`. Groups hold up to 12 views, though the export's `.json` lists
 10 as its maximum. Inputs are a fixed 416x416; images are resized to that,
 ignoring aspect ratio, and the maps resized back. Groups of two views or more
-are kept. Whenever a depth file was written, it merges every `.npy` into
+are kept. Whenever an image was predicted, it merges every `.npy` into
 `<model_dir>/depth_points.ply` (`mapping/depth/point_cloud.py`): rows lifted
 through the COLMAP intrinsics and poses, coloured from the images, and averaged
 per voxel. `--voxel-factor` (0.001) sets the voxel edge as a fraction of the

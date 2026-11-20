@@ -155,10 +155,9 @@ def job_steps(job, directory):
     """The commands to run for a job, in order.
 
     Segmentation only runs when asked for and when the upload brought no masks
-    of its own. Depth runs whenever asked for: it keeps every depth file
-    already there, uploaded or from an interrupted run, and predicts the rest.
-    Depth follows segmentation, which gives it the masks that say which pixels
-    are worth predicting for.
+    of its own. Depth runs whenever asked for; it keeps existing depth files and
+    predicts the rest. Depth follows segmentation, which gives it the masks
+    that say which pixels are worth predicting for.
     """
     model_directory = directory / "model"
     parameters = parameters_from_dict(job["parameters"])

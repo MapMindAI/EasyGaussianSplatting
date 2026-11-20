@@ -279,7 +279,10 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
     for name in names:
         cv2.imwrite(str(tmp_path / "images" / name), np.full((4, 4, 3), 128, np.uint8))
     observation = Observations(np.eye(3, 4), np.zeros((1, 2)), np.ones(1), np.zeros(1, np.int64))
-    monkeypatch.setitem(sys.modules, "pycolmap", SimpleNamespace(Reconstruction=lambda path: None))
+    reconstruction = SimpleNamespace(images={
+        index: SimpleNamespace(name=name) for index, name in enumerate(names)
+    })
+    monkeypatch.setitem(sys.modules, "pycolmap", SimpleNamespace(Reconstruction=lambda path: reconstruction))
 
     class Progress(list):
         set_postfix = staticmethod(lambda **values: None)
@@ -314,7 +317,7 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
     # An interrupted run already wrote "a".
     save_rows(depth_dir / "front/a.jpg.npy", np.full((1, 3), 7, np.float32))
 
-    assert generate_depth.generate_depths(args, Estimator, 2, 2) == 3
+    assert generate_depth.generate_depths(args, Estimator, 2, 2) == 1
 
     assert runs == [2]
     np.testing.assert_array_equal(np.load(depth_dir / "front/a.jpg.npy"), np.full((1, 3), 7))

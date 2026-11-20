@@ -5,8 +5,8 @@ The same stage as mapping/depth/generate_depth.py -- covisibility grouping,
 scale fitting to COLMAP, filtering, and the (x, y, depth) output -- with the
 ONNX model at --model in place of the Triton DA3 one. It then merges every
 written depth into <model_dir>/depth_points.ply, the cloud gsplat seeds its
-Gaussians from (see mapping/depth/point_cloud.py), rebuilding it whenever a
-depth file was written.
+Gaussians from (see mapping/depth/point_cloud.py), rebuilding it whenever an
+image was predicted.
 """
 
 import argparse
@@ -37,13 +37,13 @@ def main():
     # filters. More would only queue on the GPU.
     parser.set_defaults(num_threads=2)
     args = parse_depth_arguments(parser)
-    written = generate_depths(
+    predicted = generate_depths(
         args, lambda: VggtOmegaDepthEstimator(args.model), GROUP_SIZE, MINIMUM_GROUP_SIZE
     )
 
     cloud_path = args.model_dir / POINT_CLOUD_NAME
-    if cloud_path.exists() and not written:
-        print(f"{cloud_path} already exists and no depth changed; keeping it")
+    if cloud_path.exists() and not predicted:
+        print(f"{cloud_path} already exists and no depth was predicted; keeping it")
         return
     started = time.monotonic()
     count = write_depth_point_cloud(args.model_dir, args.depth_dir, cloud_path, args.voxel_factor)

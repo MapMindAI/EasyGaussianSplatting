@@ -5,8 +5,8 @@
 #
 # The workspace holds images/ and sparse/0/. The parameters file is layered over
 # gsplat_server/config/gsplat_train_defaults.proto.txt; mask_people and mask_sky
-# generate masks before training, then run_depth generates VGGT-Omega depths and
-# their merged point cloud unless depths/ already holds some. Results default to
+# generate masks before training, then run_depth generates VGGT-Omega depths for
+# images without one and their merged point cloud. Results default to
 # <workspace>/gsplat_output_<YYYYmmdd_HHMMSS>, with the resolved parameters in
 # cfg.proto.txt. Further flags go to
 # train_gsplat_with_masks.py. A final PLY of 2 GiB or more is also bisected

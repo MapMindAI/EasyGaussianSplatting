@@ -9,8 +9,9 @@ Each group is reconstructed in its own arbitrary scale, so the depth it predicts
 is fitted to the COLMAP points the group's images observe and to the COLMAP
 camera baselines against the predicted cameras (see
 mapping/depth/scale_alignment.py). Groups without enough of that evidence are
-skipped rather than written at a guessed scale. A frame in several groups keeps
-the prediction that best matches its own sparse depths.
+skipped rather than written at a guessed scale, and are not retried by a
+rerun. A frame in several groups keeps the prediction that best matches its own
+sparse depths.
 
 Every image in the model ends up with a file: one no group predicted -- an
 up/down face, a frame in no covisible group, or one whose group failed -- gets
@@ -249,7 +250,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
 
     The estimator's run(images_bgr) returns per-image `depth_list` and
     `depth_conf_list` maps and its predicted `camera_from_world_list`. Returns
-    how many depth files it wrote.
+    how many images it predicted, not counting the empty files.
     """
     # Deferred so the helpers above stay testable without pycolmap or tqdm installed.
     import pycolmap
@@ -257,20 +258,20 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
 
     started = time.monotonic()
     images_dir = args.model_dir / "images"
-    points, observations = observed_depths(
-        pycolmap.Reconstruction(args.model_dir / "sparse" / "0")
-    )
+    reconstruction = pycolmap.Reconstruction(args.model_dir / "sparse" / "0")
+    names = [image.name for image in reconstruction.images.values()]
+    done = set() if args.overwrite else {
+        name for name in names if (args.depth_dir / f"{name}.npy").is_file()
+    }
+    if len(done) == len(names):
+        print(f"Depths already exist in {args.depth_dir} for all {len(done)} images; "
+              "pass --overwrite to regenerate")
+        return 0
+    points, observations = observed_depths(reconstruction)
     print(
         f"Loaded {args.model_dir / 'sparse' / '0'}: {len(observations)} images, "
         f"{len(points)} points ({time.monotonic() - started:.1f} s)", flush=True
     )
-    done = set() if args.overwrite else {
-        name for name in observations if (args.depth_dir / f"{name}.npy").is_file()
-    }
-    if len(done) == len(observations):
-        print(f"Depths already exist in {args.depth_dir} for all {len(done)} images; "
-              "pass --overwrite to regenerate")
-        return 0
 
     stage_started = time.monotonic()
     groups, ungrouped = depth_groups(points, observations, group_size, minimum_group_size)
@@ -281,15 +282,14 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
         f"{len(ungrouped)} images in no group ({time.monotonic() - stage_started:.1f} s)",
         flush=True,
     )
+    pending = pending_groups(groups, done)
     if done:
-        all_groups = len(groups)
-        groups = pending_groups(groups, done)
         print(
             f"Resuming: {len(done)} of {len(observations)} images already have depth; "
-            f"{len(groups)} of {all_groups} groups still to predict", flush=True
+            f"{len(pending)} of {len(groups)} groups still to predict", flush=True
         )
+    groups = pending
 
-    args.depth_dir.mkdir(parents=True, exist_ok=True)
     if groups:
         stage_started = time.monotonic()
         estimator = make_estimator()
@@ -422,7 +422,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     )
     if args.debug_dir is not None:
         print(f"Depth overlays written to {args.debug_dir}")
-    return predicted + len(without_depth)
+    return predicted
 
 
 def main():

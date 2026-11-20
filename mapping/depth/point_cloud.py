@@ -7,6 +7,8 @@ mean, as gsplat measures it -- so one factor suits any capture size. gsplat
 seeds its Gaussians from the result alongside the sparse SfM points.
 """
 
+import os
+
 import numpy as np
 
 POINT_CLOUD_NAME = "depth_points.ply"
@@ -69,9 +71,12 @@ def write_point_cloud(path, points, colours_rgb):
         *(f"property uchar {channel}" for channel in ("red", "green", "blue")),
         "end_header",
     ])
-    with open(path, "wb") as file:
+    # Through a temporary file, so an interrupted write never leaves a partial cloud.
+    temporary_path = path.with_name(f"{path.name}.partial")
+    with open(temporary_path, "wb") as file:
         file.write((header + "\n").encode("ascii"))
         file.write(vertices.tobytes())
+    os.replace(temporary_path, path)
 
 
 def read_point_cloud(path):
@@ -134,12 +139,14 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
 
     def images():
         for image in tqdm(with_depth, desc="Point cloud", unit="image", dynamic_ncols=True):
+            rows = np.load(depth_dir / f"{image.name}.npy")
+            if len(rows) == 0:
+                continue
             bgr = cv2.imread(str(model_dir / "images" / image.name))
             if bgr is None:
                 continue
-            depth_path = depth_dir / f"{image.name}.npy"
             yield (
-                np.load(depth_path),
+                rows,
                 bgr,
                 np.asarray(reconstruction.cameras[image.camera_id].calibration_matrix()),
                 poses[image.name],
