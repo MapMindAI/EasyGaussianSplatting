@@ -154,6 +154,30 @@ def attach_depths(dataset_class):
 UNRENDERED_DEPTH = 1e-3
 
 
+def initialize_from_depth_points(parser_class):
+    """Seed the Gaussians from the merged depth cloud, when the workspace has one.
+
+    simple_trainer's sfm init reads parser.points and parser.points_rgb, the
+    sparse COLMAP points. depth_points.ply is denser and covers what SfM never
+    triangulated; it is in the COLMAP frame, so it goes through the same
+    normalizing transform the parser solved from the sparse points.
+    """
+    original_init = parser_class.__init__
+
+    def __init__(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        path = os.path.join(self.data_dir, POINT_CLOUD_NAME)
+        if not os.path.exists(path):
+            return
+        points, colours = read_point_cloud(path)
+        self.points = transform_points(self.transform, points).astype(np.float32)
+        self.points_rgb = colours
+        self.points_err = np.zeros(len(points), dtype=np.float32)
+        print(f"Initializing from {len(points)} points in {path}")
+
+    parser_class.__init__ = __init__
+
+
 def guard_depth_loss(losses_module):
     """Supervise depth only where the render has geometry to supervise.
 
@@ -274,8 +298,10 @@ import gsplat.losses  # noqa: E402
 import gsplat.rendering  # noqa: E402
 import gsplat.strategy  # noqa: E402
 from datasets.colmap import Dataset, Parser  # noqa: E402
+from datasets.normalize import transform_points  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
+from mapping.depth.point_cloud import POINT_CLOUD_NAME, read_point_cloud  # noqa: E402
 from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
@@ -283,6 +309,12 @@ from mapping.gsplat_world_frame import (  # noqa: E402
     depth_supervision_in_normalized_frame,
     export_in_colmap_frame,
 )
+
+
+def depth_loss_enabled(parameters):
+    """Generated depths seed the Gaussians whenever run_depth is set, but only
+    supervise them with a positive weight."""
+    return parameters.run_depth and parameters.depth_lambda > 0
 
 
 def number(value):
@@ -358,7 +390,7 @@ def load_job_parameters():
         "--pose_opt" if parameters.pose_opt else "--no-pose_opt",
         "--pose_opt_lr", number(parameters.pose_opt_lr),
     ]
-    if parameters.run_depth:
+    if depth_loss_enabled(parameters):
         flags += ["--depth_loss", "--depth_lambda", number(parameters.depth_lambda)]
     if parameters.packed:
         flags.append("--packed")
@@ -409,9 +441,11 @@ if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)
 downsample_images(Parser)
 attach_masks(Dataset)
-if parameters is not None and parameters.run_depth:
+if parameters is not None and depth_loss_enabled(parameters):
     attach_depths(Dataset)
     guard_depth_loss(gsplat.losses)
+if parameters is not None and parameters.run_depth:
+    initialize_from_depth_points(Parser)
 capture_scene_transform(Parser)
 export_in_colmap_frame(gsplat)
 runpy.run_path(os.path.join(EXAMPLES_DIR, "simple_trainer.py"), run_name="__main__")

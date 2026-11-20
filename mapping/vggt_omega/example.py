@@ -16,6 +16,7 @@ import cv2
 import numpy as np
 
 from mapping.depth.generate_depth import depth_overlay
+from mapping.depth.point_cloud import unproject, write_point_cloud
 from mapping.vggt_omega.depth_estimator import DEFAULT_MODEL_PATH, VggtOmegaDepthEstimator
 
 # Pixels below this percentile of their image's confidence stay out of the
@@ -34,39 +35,6 @@ def cloud_pixels(confidence):
     sampled = confidence[rows, columns]
     keep = sampled >= np.percentile(sampled, CONFIDENCE_PERCENTILE)
     return np.stack([columns[keep], rows[keep]], axis=1)
-
-
-def world_points(depth, camera_from_world, intrinsics, pixels):
-    """The (P, 3) world points seen at the (P, 2) (x, y) `pixels`."""
-    x, y = pixels[:, 0], pixels[:, 1]
-    z = depth[y, x]
-    camera_points = np.stack([
-        (x - intrinsics[0, 2]) / intrinsics[0, 0] * z,
-        (y - intrinsics[1, 2]) / intrinsics[1, 1] * z,
-        z,
-    ], axis=1)
-    rotation, translation = camera_from_world[:, :3], camera_from_world[:, 3]
-    return (camera_points - translation) @ rotation
-
-
-def write_point_cloud(path, points, colours_rgb):
-    vertices = np.empty(len(points), dtype=[
-        ("x", "<f4"), ("y", "<f4"), ("z", "<f4"),
-        ("red", "u1"), ("green", "u1"), ("blue", "u1"),
-    ])
-    vertices["x"], vertices["y"], vertices["z"] = points.T
-    vertices["red"], vertices["green"], vertices["blue"] = colours_rgb.T
-    header = "\n".join([
-        "ply",
-        "format binary_little_endian 1.0",
-        f"element vertex {len(vertices)}",
-        *(f"property float {axis}" for axis in "xyz"),
-        *(f"property uchar {channel}" for channel in ("red", "green", "blue")),
-        "end_header",
-    ])
-    with open(path, "wb") as file:
-        file.write((header + "\n").encode("ascii"))
-        file.write(vertices.tobytes())
 
 
 def main():
@@ -102,7 +70,8 @@ def main():
             f"median confidence {np.median(confidence):.2f}"
         )
         pixels = cloud_pixels(confidence)
-        all_points.append(world_points(depth, camera_from_world, intrinsics, pixels))
+        depths = depth[pixels[:, 1], pixels[:, 0]]
+        all_points.append(unproject(pixels, depths, intrinsics, camera_from_world))
         all_colours.append(image[pixels[:, 1], pixels[:, 0], ::-1])
 
     cloud_path = args.output_dir / "points.ply"

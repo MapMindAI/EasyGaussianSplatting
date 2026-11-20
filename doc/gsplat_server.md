@@ -225,8 +225,10 @@ feature stages use.
 
 ### Depth supervision
 
-`run_depth: true` predicts depth for the uploaded images with VGGT-Omega
-and adds gsplat's depth term to the loss, weighted by `depth_lambda`:
+`run_depth: true` predicts depth for the uploaded images with VGGT-Omega,
+seeds the Gaussians from the merged depth cloud (`depth_points.ply`) instead of
+the sparse SfM points, and adds gsplat's depth term to the loss, weighted by
+`depth_lambda`; `depth_lambda: 0` keeps the initialization without the term:
 
 ```
 run_depth: true

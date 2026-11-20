@@ -180,7 +180,12 @@ export at `models/vggt_omega_416.onnx` (with its `.onnx.data`), or pass
 `--model`. Groups hold up to 12 views, though the export's `.json` lists
 10 as its maximum. Inputs are a fixed 416x416; images are resized to that,
 ignoring aspect ratio, and the maps resized back. Groups of two views or more
-are kept. It takes the flags above except
+are kept. Once depth is written, it merges every `.npy` into
+`<model_dir>/depth_points.ply` (`mapping/depth/point_cloud.py`): rows lifted
+through the COLMAP intrinsics and poses, coloured from the images, and averaged
+per voxel. `--voxel-factor` (0.001) sets the voxel edge as a fraction of the
+scene scale, the largest camera distance from the cameras' mean, as gsplat
+measures it. It takes the flags above except
 `--triton-url`, and defaults `--num-threads` to 2. Its confidence is at least
 1, so the default `--min-confidence` keeps every pixel.
 
@@ -201,8 +206,10 @@ coloured cloud:
 python3 -m mapping.vggt_omega.example output/vggt_omega a.jpg b.jpg c.jpg
 ```
 
-Training reads `depths/` only when the parameters file sets `run_depth: true`,
-which adds gsplat's depth term weighted by `depth_lambda`:
+Training reads `depths/` only when the parameters file sets `run_depth: true`
+and a positive `depth_lambda`, which weights gsplat's depth term; with
+`run_depth: true`, a `depth_points.ply` in the workspace also replaces the
+sparse SfM points as the Gaussians' initialization:
 
 ```
 run_depth: true
@@ -210,9 +217,9 @@ depth_lambda: 0.01
 ```
 
 Calling `mapping/train_gsplat_with_masks.py` directly does not generate masks
-or depth. The server honors `mask_people`, `mask_sky`, and `run_depth`.
-The pipeline and training scripts honor the two mask flags (see
-[gsplat_server.md](gsplat_server.md#submitting-a-model)).
+or depth. The server and `scripts/gsplat_train.sh` honor `mask_people`,
+`mask_sky`, and `run_depth`; the pipeline and block-training scripts honor the
+two mask flags (see [gsplat_server.md](gsplat_server.md#submitting-a-model)).
 
 ## TSDF mesh from a Gaussian Splat
 
