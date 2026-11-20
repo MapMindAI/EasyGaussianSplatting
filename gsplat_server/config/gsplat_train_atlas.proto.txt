@@ -36,7 +36,7 @@ test_every: 8
 # COLMAP image downsample factor used by the trainer.
 data_factor: 1
 # Weight of the mean-opacity penalty (gsplat opacity_reg).
-opacity_reg_weight: 0.01
+opacity_reg_weight: 0.001
 # Weight of the mean-scale penalty (gsplat scale_reg).
 scale_reg_weight: 0.01
 # Drop both terms from refine_stop_iter on, when MCMC no longer relocates.
@@ -93,9 +93,9 @@ packed: true
 
 # Gaussian learning rates. These match simple_trainer's defaults.
 # Positions are scaled by the scene size internally, so keep means_lr small.
-means_lr: 0.00008
-scales_lr: 0.001
-opacities_lr: 0.025
+means_lr: 0.00016
+scales_lr: 0.005
+opacities_lr: 0.05
 quats_lr: 0.001
 # Degree-zero spherical harmonics control base colour; higher degrees control
 # view-dependent detail and train more slowly.
@@ -120,7 +120,7 @@ background_color { red: 1.0 green: 1.0 blue: 1.0 }
 # Predict depth with Depth Anything 3 and supervise training on it, when the
 # upload carried no depths/ of its own. Off by default: it costs another pass
 # over the images and needs the depth model served alongside the others.
-run_depth: false
+run_depth: true
 # Weight of the depth term in the loss. gsplat's own default, which is tuned
 # for the sparse SfM depths rather than the denser ones generate_depth.py
 # writes, so lower it if depth starts to dominate the photometric terms.
