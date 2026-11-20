@@ -19,3 +19,40 @@ def test_intrinsics_follow_each_field_of_view_at_the_image_size():
     np.testing.assert_allclose(camera_from_world, np.column_stack([np.eye(3), [1, 2, 3]]))
     np.testing.assert_allclose(intrinsics[0], [200 / np.tan(np.pi / 6), 0, 200])
     np.testing.assert_allclose(intrinsics[1], [0, 150, 150])
+
+
+def test_run_infers_one_group_at_a_time_across_threads():
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    from mapping.vggt_omega.depth_estimator import VggtOmegaDepthEstimator
+
+    active, peak = [0], [0]
+    counter_lock = threading.Lock()
+
+    class Session:
+        def run(self, names, feeds, run_options):
+            with counter_lock:
+                active[0] += 1
+                peak[0] = max(peak[0], active[0])
+            time.sleep(0.05)
+            with counter_lock:
+                active[0] -= 1
+            count = feeds["images"].shape[1]
+            return (
+                np.ones((1, count, 4, 4, 1), np.float32),
+                np.ones((1, count, 4, 4), np.float32),
+                np.tile([0, 0, 0, 0, 0, 0, 1, 1, 1], (1, count, 1)).astype(np.float32),
+            )
+
+    estimator = VggtOmegaDepthEstimator.__new__(VggtOmegaDepthEstimator)
+    estimator._session, estimator._input_name = Session(), "images"
+    estimator._height = estimator._width = 4
+    estimator._run_lock, estimator._run_options = threading.Lock(), None
+    images = [np.zeros((8, 8, 3), np.uint8)] * 2
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        list(pool.map(lambda _: estimator.run(images), range(3)))
+
+    assert peak[0] == 1
