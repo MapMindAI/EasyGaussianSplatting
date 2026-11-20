@@ -126,8 +126,9 @@ Adding it to an already-segmented directory re-runs the images whose overlay is
 missing, so the masks do not have to be thrown away to get the views.
 
 `mapping/depth/generate_depth.py` predicts depth with Depth Anything 3 on
-Triton. It is not part of `run_pipeline.sh`, so run it yourself, after
-segmentation so the masks can gate what it samples:
+Triton. It is not part of `run_pipeline.sh`, so run it yourself. Segmentation
+is optional: run it first and its masks gate what depth samples; without
+masks, or for an image without one, every pixel is eligible:
 
 ```bash
 ${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.depth.generate_depth \
