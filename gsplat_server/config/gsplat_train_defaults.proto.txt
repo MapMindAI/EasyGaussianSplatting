@@ -117,11 +117,13 @@ background_color { red: 1.0 green: 1.0 blue: 1.0 }
 
 # TODO: depth loss still need more work. depth and render performance seems could
 #       be obtain at the same time
-# Predict depth with Depth Anything 3 and supervise training on it, when the
-# upload carried no depths/ of its own. Off by default: it costs another pass
-# over the images and needs the depth model served alongside the others.
+# Predict depth with VGGT-Omega, when the upload carried no depths/ of its own,
+# and start the Gaussians from the merged depth cloud. Off by default: it costs
+# another pass over the images on the GPU.
 run_depth: false
-# Weight of the depth term in the loss. gsplat's own default, which is tuned
-# for the sparse SfM depths rather than the denser ones generate_depth.py
-# writes, so lower it if depth starts to dominate the photometric terms.
+# Weight of the depth term in the loss; 0 keeps only the depth-cloud start.
+# gsplat's own default, which is tuned for the sparse SfM depths rather than the
+# denser generated ones, so lower it if depth dominates the photometric terms.
 depth_lambda: 0.01
+# Voxel edge of the merged depth cloud, as a fraction of the scene scale.
+depth_voxel_factor: 0.001

@@ -228,11 +228,14 @@ feature stages use.
 `run_depth: true` predicts depth for the uploaded images with VGGT-Omega,
 seeds the Gaussians from the merged depth cloud (`depth_points.ply`) instead of
 the sparse SfM points, and adds gsplat's depth term to the loss, weighted by
-`depth_lambda`; `depth_lambda: 0` keeps the initialization without the term:
+`depth_lambda`; `depth_lambda: 0` keeps the initialization without the term.
+`depth_voxel_factor` sets the cloud's voxel edge as a fraction of the scene
+scale:
 
 ```
 run_depth: true
 depth_lambda: 0.01
+depth_voxel_factor: 0.001
 ```
 
 It runs after segmentation and before training, writing `depths/` into the job

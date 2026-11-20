@@ -186,7 +186,8 @@ are kept. Once depth is written, it merges every `.npy` into
 through the COLMAP intrinsics and poses, coloured from the images, and averaged
 per voxel. `--voxel-factor` (0.001) sets the voxel edge as a fraction of the
 scene scale, the largest camera distance from the cameras' mean, as gsplat
-measures it. It takes the flags above except
+measures it; the server and training scripts pass the parameters file's
+`depth_voxel_factor`. It takes the flags above except
 `--triton-url`, and defaults `--num-threads` to 2. Its confidence is at least
 1, so the default `--min-confidence` keeps every pixel.
 
