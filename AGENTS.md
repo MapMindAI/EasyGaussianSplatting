@@ -46,8 +46,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── gps_test.py               # Track parsing, the fit, and the alignment.
 │   ├── gsplat_world_frame.py     # Undo gsplat's world normalization on export.
 │   ├── gsplat_world_frame_test.py # Similarity inverse and the export wiring.
-│   ├── gsplat_regularization.py  # Regularization stop and the opacity entropy term.
-│   ├── gsplat_regularization_test.py # The step gate and the entropy gradient.
+│   ├── gsplat_regularization.py  # Drop opacity and scale regularization after refinement.
+│   ├── gsplat_regularization_test.py # The step gate on both terms.
 │   ├── mapping_pipeline_test.py  # Gravity levelling of the solved map.
 │   ├── panorama_database.py      # Panorama video to a cube-map rig database.
 │   ├── panorama_database_test.py # Image counts and the FFmpeg decode commands.

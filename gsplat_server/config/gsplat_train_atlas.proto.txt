@@ -41,8 +41,6 @@ opacity_reg_weight: 0.01
 scale_reg_weight: 0.01
 # Drop both terms from refine_stop_iter on, when MCMC no longer relocates.
 stop_regularization_after_refinement: false
-# Weight of the opacity binary entropy, which pushes each opacity to 0 or 1.
-opacity_entropy_weight: 0
 
 # Minimum opacity below which a Gaussian is pruned. It also sets the opacity
 # reset floor, which gsplat takes as prune_opa * 2, so lowering it does not

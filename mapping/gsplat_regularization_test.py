@@ -1,16 +1,8 @@
-"""Tests for the regularization stop and the opacity entropy term."""
+"""Tests for stopping regularization after refinement."""
 
 import types
 
-import numpy as np
-import pytest
-
-from mapping import gsplat_regularization
-from mapping.gsplat_regularization import (
-    add_opacity_entropy,
-    binary_entropy,
-    stop_regularization_after_refinement,
-)
+from mapping.gsplat_regularization import stop_regularization_after_refinement
 
 
 class Values:
@@ -58,56 +50,3 @@ def test_scale_regularization_stops_with_opacity():
     run_step(strategy, 0)
 
     assert losses.scale_reg_loss(Values()) == 0.0
-
-
-class Logits(np.ndarray):
-    """The tensor methods binary_entropy uses, on numpy."""
-
-    def sigmoid(self):
-        return 1 / (1 + np.exp(-self))
-
-    def clamp(self, low, high):
-        return np.clip(self, low, high)
-
-    def log(self):
-        return np.log(self)
-
-
-def logits(*values):
-    return np.array(values, dtype=np.float64).view(Logits)
-
-
-def test_binary_entropy_peaks_at_half_opacity():
-    assert binary_entropy(logits(0.0)) == pytest.approx(np.log(2))
-    assert binary_entropy(logits(-20.0, 20.0)) < 1e-4
-
-
-class Loss:
-    def __init__(self):
-        self.weight = None
-        self.backpropagated = False
-
-    def __rmul__(self, weight):
-        self.weight = weight
-        return self
-
-    def backward(self):
-        self.backpropagated = True
-
-
-class PreBackwardStrategy:
-    def step_pre_backward(self, params, optimizers, state, step, info):
-        return params
-
-
-def test_opacity_entropy_backpropagates_before_the_strategy(monkeypatch):
-    loss = Loss()
-    monkeypatch.setattr(gsplat_regularization, "binary_entropy", lambda values: loss)
-    strategy_class = type("Strategy", (PreBackwardStrategy,), {})
-    add_opacity_entropy([strategy_class], 0.02)
-    params = {"opacities": None}
-
-    result = strategy_class().step_pre_backward(params=params, optimizers={}, state={}, step=0, info={})
-
-    assert result is params
-    assert loss.weight == 0.02 and loss.backpropagated
