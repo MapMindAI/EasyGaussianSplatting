@@ -212,7 +212,11 @@ per voxel, with torch on the GPU when there is one. `--voxel-factor` (0.001) set
 scene scale, the largest camera distance from the cameras' mean, as gsplat
 measures it; the server and training scripts pass the parameters file's
 `depth_voxel_factor`. It takes the flags above except
-`--triton-url`, and defaults `--num-threads` to 2. Its confidence is VGGT's
+`--triton-url`, and defaults `--num-threads` to 2; the threads overlap image
+reading with inference, which runs one group at a time, since a 12-view group's
+attention alone needs 4.4 GB of GPU memory. The session's memory arena returns
+its unused regions after each group: group sizes vary, and it would otherwise
+keep growing until the GPU runs out. Its confidence is VGGT's
 divided by 5, so it starts at 0.2 and the default `--min-confidence` of 0.5 drops
 pixels below VGGT's 2.5: mostly sky and far background.
 

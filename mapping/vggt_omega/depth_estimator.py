@@ -5,6 +5,7 @@ fixed H and W, and returns `depth` (1, N, H, W, 1), `depth_conf` (1, N, H, W),
 and `pose_enc` (1, N, 9); see the `.json` exported beside the model.
 """
 
+import threading
 from pathlib import Path
 
 import cv2
@@ -51,9 +52,22 @@ class VggtOmegaDepthEstimator:
         # The export's unused initializers otherwise log a warning each.
         options.log_severity_level = 3
         self._session = onnx_session(model_path, options)
+        if self._session.get_providers()[0] == "CUDAExecutionProvider":
+            device_id = self._session.get_provider_options()["CUDAExecutionProvider"]["device_id"]
+            arena = f"gpu:{device_id}"
+        else:
+            arena = "cpu:0"
+        # Group sizes vary, so the memory arena would otherwise keep every
+        # differently sized buffer it ever grew for until the GPU runs out.
+        # Shrinking returns its unused regions after each run.
+        self._run_options = onnxruntime.RunOptions()
+        self._run_options.add_run_config_entry("memory.enable_memory_arena_shrinkage", arena)
         model_input = self._session.get_inputs()[0]
         self._input_name = model_input.name
         self._height, self._width = model_input.shape[-2:]
+        # A 12-view group's attention alone takes 4.4 GB, so callers on several
+        # threads take turns on the GPU rather than each allocating their own.
+        self._run_lock = threading.Lock()
 
     def run(self, images_bgr):
         """Per input image: `depth_list` and `depth_conf_list` (H, W) maps,
@@ -72,9 +86,11 @@ class VggtOmegaDepthEstimator:
             for image in images_bgr
         ]).astype(np.float32) / 255.0
 
-        depth, confidence, pose_encodings = self._session.run(
-            ["depth", "depth_conf", "pose_enc"], {self._input_name: frames[None]}
-        )
+        with self._run_lock:
+            depth, confidence, pose_encodings = self._session.run(
+                ["depth", "depth_conf", "pose_enc"], {self._input_name: frames[None]},
+                self._run_options,
+            )
         cameras = [
             decode_pose(pose_encoding, *image.shape[:2])
             for pose_encoding, image in zip(pose_encodings[0], images_bgr)
