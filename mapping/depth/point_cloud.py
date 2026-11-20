@@ -7,7 +7,6 @@ mean, as gsplat measures it -- so one factor suits any capture size. gsplat
 seeds its Gaussians from the result alongside the sparse SfM points.
 """
 
-import itertools
 import os
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -40,36 +39,40 @@ _AXIS_BITS = 21
 _AXIS_OFFSET = 1 << (_AXIS_BITS - 1)
 # Rows of unmerged voxel sums held before folding them into the running total.
 _FOLD_ROWS = 8_000_000
+_THREADS = 4
 
 
-def reduce_by_key(keys, counts, *columns):
-    """(unique keys, each (N, 3) column summed per key, counts summed per key)."""
+def _reduce_by_key(keys, counts, *columns):
+    """(unique keys, counts, each (N, 3) column) summed per key; `counts` of
+    None counts the rows."""
     unique_keys, inverse = np.unique(keys, return_inverse=True)
+    counts = np.bincount(inverse, weights=counts, minlength=len(unique_keys))
     sums = [
         np.stack([np.bincount(inverse, weights=column[:, axis], minlength=len(unique_keys))
                   for axis in range(3)], axis=1)
         for column in columns
     ]
-    return unique_keys, *sums, np.bincount(inverse, weights=counts, minlength=len(unique_keys))
+    return unique_keys, counts, *sums
 
 
 def voxel_sums(points, colours, voxel_size):
-    """(packed voxel keys, summed points, summed colours, counts) per occupied voxel."""
+    """(packed voxel keys, counts, summed points, summed colours) per occupied voxel."""
     indices = np.floor(points / voxel_size).astype(np.int64) + _AXIS_OFFSET
     inside = np.all((indices >= 0) & (indices < 1 << _AXIS_BITS), axis=1)
-    indices = indices[inside]
+    if not inside.all():
+        indices, points, colours = indices[inside], points[inside], colours[inside]
     keys = (indices[:, 0] << 2 * _AXIS_BITS) | (indices[:, 1] << _AXIS_BITS) | indices[:, 2]
-    return reduce_by_key(keys, np.ones(len(keys)), points[inside], colours[inside])
+    return _reduce_by_key(keys, None, points, colours)
 
 
 def merge_voxel_sums(parts):
     """Several voxel_sums results as one."""
-    return reduce_by_key(*(np.concatenate([part[index] for part in parts]) for index in (0, 3, 1, 2)))
+    return _reduce_by_key(*(np.concatenate(column) for column in zip(*parts)))
 
 
 def voxel_means(part):
     """Each voxel's mean point and colour."""
-    keys, point_sums, colour_sums, counts = part
+    keys, counts, point_sums, colour_sums = part
     return point_sums / counts[:, None], colour_sums / counts[:, None]
 
 
@@ -120,24 +123,29 @@ def image_points(rows, image, intrinsics, camera_from_world):
 def depth_point_cloud(images, voxel_size):
     """Merged (points, uint8 RGB colours) over `images`, an iterable of
     (rows, image_bgr, intrinsics, camera_from_world)."""
-    # Threads reduce images side by side, as NumPy's sorts release the GIL; at
-    # most twice as many images as threads are held at once. The unprojection
-    # stays on this thread: concurrent BLAS calls returned wrong points.
-    threads = 4
     pending = deque()
-    # Parts are folded into one once they outweigh it, so the running total is
-    # re-sorted only as often as it doubles.
     parts, held_rows, folded_rows = [], 0, 0
-    with ThreadPoolExecutor(max_workers=threads) as pool:
-        for item in itertools.chain(images, [None]):
-            if item is not None and len(item[0]):
-                pending.append(pool.submit(voxel_sums, *image_points(*item), voxel_size))
-            while pending and (item is None or len(pending) >= 2 * threads):
-                parts.append(pending.popleft().result())
-                held_rows += len(parts[-1][0])
-                if held_rows > max(_FOLD_ROWS, folded_rows):
-                    parts = [merge_voxel_sums(parts)]
-                    held_rows, folded_rows = 0, len(parts[0][0])
+
+    def collect():
+        # Folding once the parts outweigh the total re-sorts it only as often as it doubles.
+        nonlocal parts, held_rows, folded_rows
+        parts.append(pending.popleft().result())
+        held_rows += len(parts[-1][0])
+        if held_rows > max(_FOLD_ROWS, folded_rows):
+            parts = [merge_voxel_sums(parts)]
+            held_rows, folded_rows = 0, len(parts[0][0])
+
+    # Not map_with_progress: pool.map would read every image up front. The
+    # unprojection stays on this thread, as concurrent BLAS calls returned wrong points.
+    with ThreadPoolExecutor(max_workers=_THREADS) as pool:
+        for rows, image, intrinsics, camera_from_world in images:
+            if len(rows):
+                points = image_points(rows, image, intrinsics, camera_from_world)
+                pending.append(pool.submit(voxel_sums, *points, voxel_size))
+            if len(pending) >= 2 * _THREADS:
+                collect()
+        while pending:
+            collect()
     if not parts:
         return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.uint8)
     points, colours = voxel_means(merge_voxel_sums(parts))

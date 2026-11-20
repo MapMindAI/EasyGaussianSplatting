@@ -3,14 +3,15 @@
 import numpy as np
 import pytest
 
+from mapping.depth import point_cloud
 from mapping.depth.point_cloud import (
     depth_point_cloud,
     image_points,
     merge_voxel_sums,
-    voxel_means,
     read_point_cloud,
     scene_scale,
     unproject,
+    voxel_means,
     voxel_sums,
     write_point_cloud,
 )
@@ -51,15 +52,13 @@ def test_voxels_average_points_and_colours_across_parts():
 def test_voxels_on_either_side_of_the_origin_stay_apart_and_far_points_are_dropped():
     points = np.array([[-0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [-0.4, 0.6, 0.5], [3e6, 0, 0]])
 
-    keys, point_sums, colour_sums, counts = voxel_sums(points, np.zeros((4, 3)), 1.0)
+    keys, counts, point_sums, colour_sums = voxel_sums(points, np.zeros((4, 3)), 1.0)
 
     assert sorted(counts) == [1, 2]
     np.testing.assert_allclose(sorted(point_sums[:, 0]), [-0.9, 0.5])
 
 
 def test_depth_point_cloud_folds_to_the_same_cloud_as_one_merge(monkeypatch):
-    from mapping.depth import point_cloud
-
     monkeypatch.setattr(point_cloud, "_FOLD_ROWS", 60)
     generator = np.random.default_rng(0)
     image = generator.integers(0, 255, (20, 30, 3), dtype=np.uint8)
