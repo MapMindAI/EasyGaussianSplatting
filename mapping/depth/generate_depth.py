@@ -194,13 +194,13 @@ def parse_depth_arguments(parser):
         "--samples-per-image", type=int, default=4096, help="supervised pixels kept"
     )
     parser.add_argument(
-        "--min-confidence", type=float, default=1.0, help="depth confidence floor"
+        "--min-confidence", type=float, default=0.5, help="depth confidence floor"
     )
     parser.add_argument(
-        "--min-depth", type=float, default=0.5, help="minimum scaled depth to keep"
+        "--min-depth", type=float, default=0.1, help="minimum scaled depth to keep"
     )
     parser.add_argument(
-        "--max-depth", type=float, default=5.0, help="maximum scaled depth to keep"
+        "--max-depth", type=float, default=float("inf"), help="maximum scaled depth to keep"
     )
     parser.add_argument(
         "--mask-dir", type=Path, default=None, help="skip pixels these masks block"
