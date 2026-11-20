@@ -125,6 +125,18 @@ It also writes `label_colours.png`, the exact ADE20K label-index colour legend.
 Adding it to an already-segmented directory re-runs the images whose overlay is
 missing, so the masks do not have to be thrown away to get the views.
 
+`mapping/sky_segmentation/` runs a U²-Net sky model
+([xiongzhu666/Sky-Segmentation-and-Post-processing](https://github.com/xiongzhu666/Sky-Segmentation-and-Post-processing))
+locally with ONNX Runtime, on CUDA when available and otherwise on the CPU
+(about 0.5 s per image). Put the export at `models/skyseg.onnx`. It is not yet
+wired into the masks; its example writes each image's sky probability and a
+magenta overlay of the pixels above `--threshold` (0.5):
+
+```bash
+python3 -m mapping.sky_segmentation.example output/sky_segmentation \
+  ${WORKSPACE_PATH}/images/up/000150.jpg ${WORKSPACE_PATH}/images/front/000150.jpg
+```
+
 `mapping/depth/generate_depth.py` predicts depth with Depth Anything 3 on
 Triton. It is not part of `run_pipeline.sh`, so run it yourself. Segmentation
 is optional: run it first and its masks gate what depth samples; without
