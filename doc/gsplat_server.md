@@ -53,16 +53,15 @@ Point `DOCKER_IMAGE` at the local tag to run it instead of the published one.
 
 ## Generating the proto bindings
 
-`gsplat_pb2.py` and `gsplat_pb2_grpc.py` are gitignored, and the image ships
-`grpcio` but no `protoc`, so generate them in the checkout before the first
-start:
+`gsplat_pb2.py` and `gsplat_pb2_grpc.py` are gitignored, so generate them in
+the checkout before the first start:
 
 ```
 bash gsplat_server/proto/build.sh
 ```
 
-Without `protoc` on `PATH` the script uses the one `grpcio-tools` bundles, which
-is how CI generates them.
+Without `protoc` on `PATH` the script uses the one `grpcio-tools` bundles, as CI
+does; the dev image's gsplat env includes `grpcio-tools`, so it can run there.
 
 Rerun it whenever `proto/gsplat.proto` changes, on both the server host and any
 client machine.
@@ -226,34 +225,45 @@ feature stages use.
 
 ### Depth supervision
 
-`run_depth: true` predicts depth for the uploaded images with Depth Anything 3
-and adds gsplat's depth term to the loss, weighted by `depth_lambda`:
+`run_depth: true` predicts depth for the uploaded images with VGGT-Omega,
+seeds the Gaussians from the sparse SfM points plus the merged depth cloud
+(`depth_points.ply`), and adds gsplat's depth term to the loss, weighted by
+`depth_lambda`; `depth_lambda: 0` keeps the initialization without the term. Under MCMC, the depth
+points are randomly thinned to keep the total within 0.8 × `cap_max`.
+`depth_voxel_factor` sets the cloud's voxel edge as a fraction of the scene
+scale:
 
 ```
 run_depth: true
 depth_lambda: 0.01
+depth_voxel_factor: 0.001
 ```
 
 It runs after segmentation and before training, writing `depths/` into the job
 directory. An uploaded `depths/` always wins, the same way `masks/` does.
 
-DA3 takes a fixed number of views at once, so `generate_depth.py` groups the
-model's images by camera and splits each camera into consecutive groups of five
--- for the cube-map rig, neighbouring frames of one face. The served model's
-input shape fixes that count, so it is a constant rather than a flag: changing
-it means deploying a different model (see `third_party/EasyTensorRT`).
+VGGT-Omega reconstructs several views at once, so
+`mapping/vggt_omega/generate_depth.py` groups up to 12 images that view the
+same part of the scene, by their shared sparse points and relative poses (see
+[tools.md](tools.md#masks-and-depth-from-triton)). It runs the ONNX export at
+`models/vggt_omega_416.onnx` on the server's own GPU, so that file has to be
+present in the repo checkout the server runs from (see
+[tools.md](tools.md#vggt-omega-instead-of-da3)). The Triton DA3 stage,
+`mapping/depth/generate_depth.py`, stays available for manual runs.
 
 Server preprocessing runs in the `gsplat` environment, which includes the
-Triton gRPC client and pycolmap. Rebuild the image after upgrading an existing
-server so depth and sky masking use those dependencies.
+Triton gRPC client, ONNX Runtime, and pycolmap. Rebuild the image after
+upgrading an existing server so depth and sky masking use those dependencies.
 
 Each group is reconstructed in its own arbitrary scale, which is the part worth
-understanding: the depth DA3 returns is not in the input model's units, and a
-different group gets a different scale. So each group's depth is fitted to the
-COLMAP points its own images already observe, by the median ratio between the
-two, before anything is written. A group whose images carry fewer than 20 such
-points is skipped rather than written at a guessed scale, and the stage reports
-how many it skipped. An image left without rows trains without a depth term:
+understanding: the depth VGGT-Omega returns is not in the input model's units,
+and a different group gets a different scale. So each group's depth is fitted to the
+COLMAP points its own images observe, and to the COLMAP camera baselines
+against the model's predicted ones, before anything is written. A group with
+neither enough sparse points nor consistent cameras is skipped rather than
+written at a guessed scale, and the stage reports how many it skipped. An image
+in several groups keeps the best-matching prediction. An image left without
+rows trains without a depth term:
 gsplat's own sparse-point depths do not stand in for them, since the images it
 skips are the ones SfM barely covered anyway.
 

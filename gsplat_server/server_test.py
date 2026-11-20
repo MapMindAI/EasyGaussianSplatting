@@ -265,12 +265,13 @@ def test_depth_runs_between_segmentation_and_training(tmp_path, parameters):
 
 
 def test_depth_reads_the_model_and_writes_beside_it(tmp_path, parameters):
-    command = server.depth_command(tmp_path)
+    command = server.depth_command(tmp_path, 0.002)
 
     assert str(server.DEPTH_ENTRYPOINT) in command
     assert str(tmp_path / "depths") in command
-    assert command[-4:] == [
+    assert command[-6:] == [
         "--mask-dir", str(tmp_path / "masks"), "--samples-per-image", "-1",
+        "--voxel-factor", "0.002",
     ]
 
 

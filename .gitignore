@@ -12,7 +12,7 @@ data
 *bash_history
 artifacts/docker/installers/libMediaSDK-dev.deb
 log.txt
-
+models
 # Generated protobuf bindings
 gsplat_server/proto/*_pb2*.py
 

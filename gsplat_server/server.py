@@ -23,7 +23,7 @@ from gsplat_server.proto import gsplat_pb2, gsplat_pb2_grpc
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRAIN_ENTRYPOINT = REPO_ROOT / "mapping" / "train_gsplat_with_masks.py"
 SEGMENT_ENTRYPOINT = REPO_ROOT / "mapping" / "triton" / "segment_people.py"
-DEPTH_ENTRYPOINT = REPO_ROOT / "mapping" / "triton" / "generate_depth.py"
+DEPTH_ENTRYPOINT = REPO_ROOT / "mapping" / "vggt_omega" / "generate_depth.py"
 QUEUED, RUNNING, SUCCEEDED, FAILED = "queued", "running", "succeeded", "failed"
 
 
@@ -141,12 +141,13 @@ def segmentation_command(model_directory, mask_people, mask_sky):
     ]
 
 
-def depth_command(model_directory):
+def depth_command(model_directory, voxel_factor):
     return [
         "python3", str(DEPTH_ENTRYPOINT),
         str(model_directory), str(model_directory / "depths"),
         "--mask-dir", str(model_directory / "masks"),
-        "--samples-per-image", "-1"
+        "--samples-per-image", "-1",
+        "--voxel-factor", f"{voxel_factor:.7g}",
     ]
 
 
@@ -168,7 +169,7 @@ def job_steps(job, directory):
             model_directory, parameters.mask_people, parameters.mask_sky
         )))
     if parameters.run_depth and not (model_directory / "depths").is_dir():
-        steps.append(("depth", depth_command(model_directory)))
+        steps.append(("depth", depth_command(model_directory, parameters.depth_voxel_factor)))
     steps.append(("gsplat training", training_command(directory)))
     return steps
 

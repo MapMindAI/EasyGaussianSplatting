@@ -163,16 +163,13 @@ class DepthEstimator:
         )
 
     def run(self, images_bgr):
-        """`depth_list` and `depth_conf_list`, one (H, W) array per input image.
-
-        The depths share one arbitrary scale across the group; DA3's own
-        intrinsics and extrinsics are dropped, since the caller already has the
-        COLMAP poses these views were reconstructed with.
-        """
+        """`depth_list` and `depth_conf_list`, one (H, W) array per input image,
+        and DA3's (3, 4) `camera_from_world_list`, all in one arbitrary scale."""
         result = self._client.run(images_bgr)
         return {
             "depth_list": result["depth_list"],
             "depth_conf_list": result["depth_conf_list"],
+            "camera_from_world_list": result["extrinsics_list"],
         }
 
 

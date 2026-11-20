@@ -154,6 +154,40 @@ def attach_depths(dataset_class):
 UNRENDERED_DEPTH = 1e-3
 
 
+def initialize_from_depth_points(parser_class, maximum_points=None):
+    """Seed the Gaussians from the sparse SfM points plus the merged depth cloud.
+
+    simple_trainer's sfm init reads parser.points and parser.points_rgb.
+    depth_points.ply covers what SfM never triangulated; it is in the COLMAP
+    frame, so it goes through the normalizing transform the parser solved from
+    the sparse points. With `maximum_points` set, the depth points are randomly
+    thinned so the total stays within it.
+    """
+    original_init = parser_class.__init__
+
+    def __init__(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        path = os.path.join(self.data_dir, POINT_CLOUD_NAME)
+        if not os.path.exists(path):
+            return
+        points, colours = read_point_cloud(path)
+        if maximum_points is not None:
+            depth_budget = max(maximum_points - len(self.points), 0)
+            if len(points) > depth_budget:
+                print(f"Randomly keeping {depth_budget} of {len(points)} depth points")
+                kept = np.random.default_rng(0).choice(len(points), depth_budget, replace=False)
+                points, colours = points[kept], colours[kept]
+        sfm_count = len(self.points)
+        self.points = np.concatenate(
+            [self.points, transform_points(self.transform, points)]).astype(np.float32)
+        self.points_rgb = np.concatenate([self.points_rgb, colours]).astype(np.uint8)
+        self.points_err = np.concatenate(
+            [self.points_err, np.zeros(len(points))]).astype(np.float32)
+        print(f"Initializing from {sfm_count} SfM points and {len(points)} depth points in {path}")
+
+    parser_class.__init__ = __init__
+
+
 def guard_depth_loss(losses_module):
     """Supervise depth only where the render has geometry to supervise.
 
@@ -274,8 +308,10 @@ import gsplat.losses  # noqa: E402
 import gsplat.rendering  # noqa: E402
 import gsplat.strategy  # noqa: E402
 from datasets.colmap import Dataset, Parser  # noqa: E402
+from datasets.normalize import transform_points  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
+from mapping.depth.point_cloud import POINT_CLOUD_NAME, read_point_cloud  # noqa: E402
 from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
@@ -283,6 +319,12 @@ from mapping.gsplat_world_frame import (  # noqa: E402
     depth_supervision_in_normalized_frame,
     export_in_colmap_frame,
 )
+
+
+def depth_loss_enabled(parameters):
+    """Generated depths seed the Gaussians whenever run_depth is set, but only
+    supervise them with a positive weight."""
+    return parameters.run_depth and parameters.depth_lambda > 0
 
 
 def number(value):
@@ -358,7 +400,7 @@ def load_job_parameters():
         "--pose_opt" if parameters.pose_opt else "--no-pose_opt",
         "--pose_opt_lr", number(parameters.pose_opt_lr),
     ]
-    if parameters.run_depth:
+    if depth_loss_enabled(parameters):
         flags += ["--depth_loss", "--depth_lambda", number(parameters.depth_lambda)]
     if parameters.packed:
         flags.append("--packed")
@@ -409,9 +451,15 @@ if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)
 downsample_images(Parser)
 attach_masks(Dataset)
-if parameters is not None and parameters.run_depth:
+if parameters is not None and depth_loss_enabled(parameters):
     attach_depths(Dataset)
     guard_depth_loss(gsplat.losses)
+if parameters is not None and parameters.run_depth:
+    # MCMC never grows past cap_max, so leave it room to relocate and add.
+    maximum_points = (
+        int(0.8 * parameters.cap_max) if parameters.strategy == gsplat_pb2.STRATEGY_MCMC else None
+    )
+    initialize_from_depth_points(Parser, maximum_points)
 capture_scene_transform(Parser)
 export_in_colmap_frame(gsplat)
 runpy.run_path(os.path.join(EXAMPLES_DIR, "simple_trainer.py"), run_name="__main__")
