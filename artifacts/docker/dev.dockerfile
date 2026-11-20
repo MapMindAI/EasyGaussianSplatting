@@ -91,7 +91,7 @@ RUN bash /tmp/installers/install_gsplat.sh && rm /tmp/installers/install_gsplat.
 # bindings against this env's protobuf.
 RUN conda run --no-capture-output -n gsplat \
       pip install --no-cache-dir pycolmap==4.2.0.dev0 "tritonclient[grpc]" jupyterlab opencv-python-headless \
-      onnxruntime-gpu grpcio-tools
+      "onnxruntime-gpu>=1.21" grpcio-tools
 
 # Plain python3 runs the gsplat env, which holds every Python dependency.
 ENV PATH=$CONDA_DIR/envs/gsplat/bin:$PATH
