@@ -34,15 +34,20 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   │   ├── matching.py           # Pair selection and LightGlue matching.
 │   │   ├── segment_people.py     # Person and sky masks for the training images.
 │   │   ├── segment_people_test.py # Mask helpers and the sky toggle.
-│   │   ├── generate_depth.py     # DA3 depth, grouped by camera and scaled to COLMAP.
-│   │   ├── generate_depth_test.py # Grouping, scale fitting, and sampling.
 │   │   └── progress.py           # Thread pool with progress logging.
+│   ├── depth/                    # Depth supervision; grouping and scale ported from ArSession.
+│   │   ├── covisibility_groups.py # Groups of frames viewing the same scene.
+│   │   ├── covisibility_groups_test.py # Links and greedy group selection.
+│   │   ├── generate_depth.py     # Shared depth stage, and its Triton DA3 entrypoint.
+│   │   ├── generate_depth_test.py # Grouping inputs, sampling, and observations.
+│   │   ├── scale_alignment.py    # Group depth scale from sparse depths and cameras.
+│   │   └── scale_alignment_test.py # Pose-baseline and robust sparse fits.
 │   ├── vggt_omega/               # VGGT-Omega depth, run locally from ONNX.
 │   │   ├── depth_estimator.py    # ONNX Runtime session over models/vggt_omega_416.onnx.
 │   │   ├── depth_estimator_test.py # Pose-encoding decoding.
 │   │   ├── example.py            # Depth maps, overlays, and a merged cloud for a few images.
 │   │   ├── example_test.py       # Back-projection and the PLY writer.
-│   │   └── generate_depth.py     # triton/generate_depth.py with this model instead of DA3.
+│   │   └── generate_depth.py     # depth/generate_depth.py with this model instead of DA3.
 │   ├── block_partition.py        # Grid, tree, and covisibility-graph training blocks.
 │   ├── block_partition_test.py   # Splits, ownership, and frame assignment.
 │   ├── block_gaussians.py        # Coarse Gaussians per block, and the block merge.

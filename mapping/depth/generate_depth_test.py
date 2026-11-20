@@ -1,17 +1,15 @@
-"""Tests for the grouping, scale fitting, and sampling behind DA3 depth."""
+"""Tests for depth grouping inputs, sampling, filtering, and COLMAP observations."""
 
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from mapping.triton.generate_depth import (
-    camera_groups,
+from mapping.depth.generate_depth import (
     depth_debug_path,
     depth_edge_mask,
+    depth_groups,
     depth_overlay,
-    fit_depth_scale,
-    group_images,
     observed_depths,
     sample_at,
     supervised_points,
@@ -37,8 +35,8 @@ class CamFromWorld:
 
 
 class Image:
-    def __init__(self, name, camera_id=1, observations=(), cam_from_world=None):
-        self.name, self.camera_id = name, camera_id
+    def __init__(self, name, observations=(), cam_from_world=None):
+        self.name = name
         self._observations = list(observations)
         self.cam_from_world = CamFromWorld(
             cam_from_world if cam_from_world is not None else np.eye(4)[:3]
@@ -67,73 +65,34 @@ class Reconstruction:
 # --- grouping --------------------------------------------------------------
 
 
-def test_group_images_splits_into_consecutive_groups():
-    assert group_images(list(range(10)), 5) == [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9]]
+def camera_at(x, y=0.0):
+    """A camera at (x, y, 0) looking down +z, as cam_from_world."""
+    return np.column_stack([np.eye(3), [-x, -y, 0.0]])
 
 
-def test_a_trailing_short_group_grows_backwards_instead_of_being_padded():
-    groups = group_images(list(range(12)), 5)
-
-    assert [len(group) for group in groups] == [5, 5, 5]
-    assert groups[-1] == [7, 8, 9, 10, 11]
-
-
-def test_too_few_images_to_fill_one_group_yields_nothing():
-    assert group_images(list(range(4)), 5) == []
-
-
-def test_camera_groups_never_mixes_cameras_and_orders_by_name():
+def test_depth_groups_link_cameras_viewing_the_same_points_and_skip_up_and_down():
+    grid = np.stack(np.meshgrid(np.linspace(-1, 1, 8), np.linspace(-1, 1, 8)), -1).reshape(-1, 2)
+    points3D = {
+        index: Point3D((x, y, 10.0)) for index, (x, y) in enumerate(grid)
+    }
+    observations = [Point2D((0.0, 0.0), index) for index in points3D]
     reconstruction = Reconstruction(
-        *(Image(f"front/{index:06d}.jpg", camera_id=1) for index in (2, 0, 1)),
-        *(Image(f"back/{index:06d}.jpg", camera_id=2) for index in range(3)),
+        *(
+            Image(f"{face}/{index:06d}.jpg", observations=observations,
+                  cam_from_world=camera_at(0.3 * index))
+            for face in ("front", "up")
+            for index in range(4)
+        ),
+        Image("back/000000.jpg", cam_from_world=camera_at(50.0)),
+        points3D=points3D,
     )
 
-    groups = camera_groups(reconstruction, 3)
+    groups, ungrouped = depth_groups(*observed_depths(reconstruction), 3, 2)
 
-    assert groups == [
-        ["front/000000.jpg", "front/000001.jpg", "front/000002.jpg"],
-        ["back/000000.jpg", "back/000001.jpg", "back/000002.jpg"],
-    ]
-
-
-def test_camera_groups_skips_up_and_down_faces():
-    reconstruction = Reconstruction(
-        *(Image(f"up/{index:06d}.jpg", camera_id=1) for index in range(3)),
-        *(Image(f"down/{index:06d}.jpg", camera_id=2) for index in range(3)),
-        *(Image(f"front/{index:06d}.jpg", camera_id=3) for index in range(3)),
-    )
-
-    groups = camera_groups(reconstruction, 3)
-
-    assert groups == [["front/000000.jpg", "front/000001.jpg", "front/000002.jpg"]]
-
-
-# --- scale -----------------------------------------------------------------
-
-
-def test_fit_depth_scale_recovers_a_known_ratio():
-    predicted = np.linspace(1.0, 5.0, 50)
-
-    assert fit_depth_scale(predicted, predicted * 3.0) == pytest.approx(3.0)
-
-
-def test_fit_depth_scale_ignores_a_minority_of_wild_outliers():
-    predicted = np.full(60, 2.0)
-    reference = np.full(60, 6.0)
-    reference[:20] = 5000.0
-
-    assert fit_depth_scale(predicted, reference) == pytest.approx(3.0)
-
-
-def test_fit_depth_scale_refuses_too_few_points():
-    assert fit_depth_scale(np.full(5, 2.0), np.full(5, 6.0)) is None
-
-
-def test_fit_depth_scale_ignores_non_positive_and_non_finite_depths():
-    predicted = np.concatenate([np.full(30, 2.0), np.array([0.0, -1.0, np.nan])])
-    reference = np.concatenate([np.full(30, 6.0), np.array([9.0, 9.0, 9.0])])
-
-    assert fit_depth_scale(predicted, reference) == pytest.approx(3.0)
+    grouped = sorted(name for group in groups for name in group)
+    assert set(grouped) == {f"front/{index:06d}.jpg" for index in range(4)}
+    assert all(len(group) <= 3 for group in groups)
+    assert ungrouped == ["back/000000.jpg"]
 
 
 # --- sampling --------------------------------------------------------------
@@ -263,16 +222,18 @@ def test_observed_depths_takes_depth_along_the_camera_axis():
         points3D={7: Point3D((1.0, 2.0, 30.0))},
     )
 
-    points, depths = observed_depths(reconstruction)["a.jpg"]
+    points, observations = observed_depths(reconstruction)
+    observation = observations["a.jpg"]
 
-    assert points.tolist() == [[10.0, 20.0]]
-    assert depths.tolist() == [30.0]
+    assert observation.pixels.tolist() == [[10.0, 20.0]]
+    assert observation.depths.tolist() == [30.0]
+    assert points[observation.point_indices].tolist() == [[1.0, 2.0, 30.0]]
 
 
 def test_observed_depths_gives_an_image_without_observations_empty_arrays():
-    points, depths = observed_depths(Reconstruction(Image("a.jpg")))["a.jpg"]
+    observation = observed_depths(Reconstruction(Image("a.jpg")))[1]["a.jpg"]
 
-    assert points.shape == (0, 2) and depths.shape == (0,)
+    assert observation.pixels.shape == (0, 2) and observation.depths.shape == (0,)
 
 
 def test_observed_depths_accepts_callable_camera_from_world():
@@ -281,6 +242,4 @@ def test_observed_depths_accepts_callable_camera_from_world():
         points3D={7: Point3D((1.0, 2.0, 30.0))},
     )
 
-    _, depths = observed_depths(reconstruction)["a.jpg"]
-
-    assert depths.tolist() == [30.0]
+    assert observed_depths(reconstruction)[1]["a.jpg"].depths.tolist() == [30.0]

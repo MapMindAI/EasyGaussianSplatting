@@ -237,13 +237,13 @@ It runs after segmentation and before training, writing `depths/` into the job
 directory. An uploaded `depths/` always wins, the same way `masks/` does.
 
 VGGT-Omega reconstructs several views at once, so
-`mapping/vggt_omega/generate_depth.py` groups the model's images by camera and
-splits each camera into consecutive groups of five -- for the cube-map rig,
-neighbouring frames of one face. It runs the ONNX export at
+`mapping/vggt_omega/generate_depth.py` groups up to 12 images that view the
+same part of the scene, by their shared sparse points and relative poses (see
+[tools.md](tools.md#masks-and-depth-from-triton)). It runs the ONNX export at
 `models/vggt_omega_416.onnx` on the server's own GPU, so that file has to be
 present in the repo checkout the server runs from (see
 [tools.md](tools.md#vggt-omega-instead-of-da3)). The Triton DA3 stage,
-`mapping/triton/generate_depth.py`, stays available for manual runs.
+`mapping/depth/generate_depth.py`, stays available for manual runs.
 
 Server preprocessing runs in the `gsplat` environment, which includes the
 Triton gRPC client, ONNX Runtime, and pycolmap. Rebuild the image after
@@ -252,10 +252,12 @@ upgrading an existing server so depth and sky masking use those dependencies.
 Each group is reconstructed in its own arbitrary scale, which is the part worth
 understanding: the depth VGGT-Omega returns is not in the input model's units,
 and a different group gets a different scale. So each group's depth is fitted to the
-COLMAP points its own images already observe, by the median ratio between the
-two, before anything is written. A group whose images carry fewer than 20 such
-points is skipped rather than written at a guessed scale, and the stage reports
-how many it skipped. An image left without rows trains without a depth term:
+COLMAP points its own images observe, and to the COLMAP camera baselines
+against the model's predicted ones, before anything is written. A group with
+neither enough sparse points nor consistent cameras is skipped rather than
+written at a guessed scale, and the stage reports how many it skipped. An image
+in several groups keeps the best-matching prediction. An image left without
+rows trains without a depth term:
 gsplat's own sparse-point depths do not stand in for them, since the images it
 skips are the ones SfM barely covered anyway.
 

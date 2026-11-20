@@ -15,7 +15,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from mapping.triton.generate_depth import depth_overlay
+from mapping.depth.generate_depth import depth_overlay
 from mapping.vggt_omega.depth_estimator import DEFAULT_MODEL_PATH, VggtOmegaDepthEstimator
 
 # Pixels below this percentile of their image's confidence stay out of the

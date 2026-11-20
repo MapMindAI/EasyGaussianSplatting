@@ -125,12 +125,12 @@ It also writes `label_colours.png`, the exact ADE20K label-index colour legend.
 Adding it to an already-segmented directory re-runs the images whose overlay is
 missing, so the masks do not have to be thrown away to get the views.
 
-`generate_depth.py` predicts depth with Depth Anything 3. It is not part of
-`run_pipeline.sh`, so run it yourself, after segmentation so the masks can gate
-what it samples:
+`mapping/depth/generate_depth.py` predicts depth with Depth Anything 3 on
+Triton. It is not part of `run_pipeline.sh`, so run it yourself, after
+segmentation so the masks can gate what it samples:
 
 ```bash
-${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.triton.generate_depth \
+${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.depth.generate_depth \
   ${WORKSPACE_PATH} ${WORKSPACE_PATH}/depths \
   --mask-dir ${WORKSPACE_PATH}/masks \
   --debug-dir ${WORKSPACE_PATH}/debug \
@@ -138,13 +138,28 @@ ${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.triton.
   --triton-url ${GSPLAT_HOST}:8011
 ```
 
-It reads `images/` and `sparse/` from the model directory, groups each camera's
-images into consecutive groups of five (the served model's input shape), and
-fits each group to the scale of the COLMAP points its images already observe --
-DA3's own scale is arbitrary and differs per group. A group carrying too few of
-those points is skipped rather than written at a guessed scale.
+It reads `images/` and `sparse/` from the model directory and groups images
+that view the same part of the scene (`mapping/depth/covisibility_groups.py`,
+ported from ArSession): two images are linked when they share at least 20
+sparse points with 20% overlap, at least 0.05 map units of baseline, at most
+45 degrees of relative rotation, and 0.5 to 25 degrees of median parallax.
+Groups are built greedily around anchors, favouring supports near 5 degrees of
+parallax, spread-out cameras, and new coverage. DA3 takes exactly five views,
+so only full groups are formed; an image no group can hold gets no depth.
+
+Each group's depth is in its own arbitrary scale, so it is fitted to the COLMAP
+points its images observe and to their camera baselines
+(`mapping/depth/scale_alignment.py`). The model's predicted cameras give a
+first scale when at least three agree with COLMAP within 5 degrees; a
+frame-balanced weighted median of the log depth ratios, a MAD inlier band, and
+Huber reweighting then refine it, ignoring references beyond 20 map units.
+Without a camera scale, a group needs 30 inlier points over two frames, or is
+skipped rather than written at a guessed scale. An image in several groups
+keeps the prediction whose scaled depth best matches its own sparse depths.
+Groups share images, so an existing `depths/` is kept whole; pass
+`--overwrite` to regenerate it.
 The `up/` and `down/` cube faces are skipped: their sky and ground views do not
-need DA3 supervision.
+need depth supervision.
 `--samples-per-image` (4096) sets how many pixels each `.npy` keeps,
 `--min-confidence` (1.0) the DA3 confidence floor, and `--min-depth` (0.5) /
 `--max-depth` (5.0) discard scaled depths outside that range.
@@ -162,10 +177,12 @@ and the limits of the depth term.
 place of DA3, run locally through ONNX Runtime rather than on Triton, and is
 what the server's `run_depth` uses. The weights are not public: place the
 export at `models/vggt_omega_416.onnx` (with its `.onnx.data`), or pass
-`--model`. The graph takes 1 to 10 views at a fixed 416x416; images are resized
-to that, ignoring aspect ratio, and the maps resized back. It takes the flags
-above except `--triton-url`, and defaults `--num-threads` to 2. Its confidence
-is at least 1, so the default `--min-confidence` keeps every pixel.
+`--model`. Groups hold up to 12 views, though the export's `.json` lists
+10 as its maximum. Inputs are a fixed 416x416; images are resized to that,
+ignoring aspect ratio, and the maps resized back. Groups of two views or more
+are kept. It takes the flags above except
+`--triton-url`, and defaults `--num-threads` to 2. Its confidence is at least
+1, so the default `--min-confidence` keeps every pixel.
 
 ```bash
 ${DOCKER_RUN} python3 -m mapping.vggt_omega.generate_depth \
