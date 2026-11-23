@@ -20,7 +20,7 @@ predicting only the groups that still have an image without one.
 
 The output is one "<image_name>.npy" per image under --depth-dir: the filtered
 depth map at the model's own resolution, scaled into the frame of the input
-model (see mapping/depth/depth_maps.py). Readers interpolate it to the image
+model, with its confidence (see mapping/depth/depth_maps.py). Readers interpolate it to the image
 resolution they load, so the stage writes well under a megabyte per image.
 
 Run as a script, it predicts with DA3 on Triton, reached at --triton-url or
@@ -330,16 +330,16 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
             small_image = cv2.resize(image, depth.shape[::-1], interpolation=cv2.INTER_AREA)
             filtered_depth = np.where(usable & ~depth_edge_mask(small_image, depth), depth, 0)
             overlay_image = image if args.debug_dir is not None else None
-            maps_by_name.append((name, filtered_depth, error, overlay_image))
+            maps_by_name.append((name, filtered_depth, confidence, error, overlay_image))
         return maps_by_name, None
 
     def write_best(maps_by_name):
         """Save each image's map unless an earlier group fitted it better."""
-        for name, depth, error, image in maps_by_name:
+        for name, depth, confidence, error, image in maps_by_name:
             if name in best_error and error >= best_error[name]:
                 continue
             best_error[name] = error
-            save_depth_map(args.depth_dir / f"{name}.npy", depth)
+            save_depth_map(args.depth_dir / f"{name}.npy", depth, confidence)
             if image is not None:
                 overlay_path = depth_debug_path(args.debug_dir, name)
                 overlay_path.parent.mkdir(parents=True, exist_ok=True)
@@ -371,7 +371,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     predicted = len(best_error) - len(done)
     without_depth = sorted(set(observations) - set(best_error))
     for name in without_depth:
-        save_depth_map(args.depth_dir / f"{name}.npy", np.zeros((0, 0)))
+        save_depth_map(args.depth_dir / f"{name}.npy", np.zeros((0, 0)), np.zeros((0, 0)))
 
     errors = [error for error in best_error.values() if np.isfinite(error)]
     print(

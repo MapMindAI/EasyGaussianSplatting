@@ -184,8 +184,11 @@ empty one, so a skipped group is not retried. Existing files are kept, so
 rerunning an interrupted stage predicts only the groups that still have an
 image without a file; `--overwrite` regenerates them all.
 Each `.npy` is the filtered depth map at the model's own resolution, as
-float16 with 0 where there is no depth (`mapping/depth/depth_maps.py`):
-under 0.4 MB for VGGT-Omega's 416x416. Training and the point cloud
+float16 with 0 where there is no depth, plus the model's confidence as a uint8
+in steps of 0.05 (`mapping/depth/depth_maps.py`): about 0.5 MB for
+VGGT-Omega's 416x416. `load_depth_map(path, min_confidence)` filters on
+confidence again without regenerating; pixels already below `--min-confidence`
+were dropped when the map was written. Training and the point cloud
 interpolate it to the image size they load, only between valid pixels. Files
 from before this format are refused; regenerate them with `--overwrite`.
 `--min-confidence` (0.5) sets the confidence floor, and `--min-depth` (0.1) /

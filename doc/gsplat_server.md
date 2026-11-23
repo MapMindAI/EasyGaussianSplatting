@@ -271,8 +271,8 @@ gsplat's own sparse-point depths do not stand in for them, since the images it
 skips are the ones SfM barely covered anyway.
 
 What lands in `depths/` is one `<image_name>.npy` per image: the filtered depth
-map at the model's 416x416 resolution, float16, 0 where there is no depth
-(`mapping/depth/depth_maps.py`). The trainer interpolates it to the image as
+map at the model's 416x416 resolution, float16, 0 where there is no depth, with
+a uint8 confidence per pixel (`mapping/depth/depth_maps.py`). The trainer interpolates it to the image as
 loaded, whatever `data_factor` is, and converts depth into gsplat's normalized
 world.
 

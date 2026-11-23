@@ -270,7 +270,7 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
         num_threads=1, min_confidence=0.5, min_depth=0.1, max_depth=5.0,
     )
     # An interrupted run already wrote "a".
-    save_depth_map(depth_dir / "front/a.jpg.npy", np.full((4, 4), 7.0))
+    save_depth_map(depth_dir / "front/a.jpg.npy", np.full((4, 4), 7.0), np.ones((4, 4)))
 
     assert generate_depth.generate_depths(args, Estimator, 2, 2) == 1
 
