@@ -102,3 +102,5 @@ run_depth: true
 # for the sparse SfM depths rather than the denser ones generate_depth.py
 # writes, so lower it if depth starts to dominate the photometric terms.
 depth_lambda: 0.01
+# Voxel edge of the merged depth cloud, as a fraction of the scene scale.
+depth_voxel_factor: 0.01
