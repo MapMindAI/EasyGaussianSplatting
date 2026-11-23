@@ -269,7 +269,8 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor, mas
         poses[image.name] = np.asarray(camera_from_world.matrix(), dtype=np.float64)
     scale = scene_scale([centre_and_rotation(pose)[0] for pose in poses.values()])
     voxel_size = voxel_factor * scale
-    print(f"Voxel edge {voxel_size:.4g}: {voxel_factor} of the scene scale {scale:.4g}", flush=True)
+    print(f"Voxel edge {voxel_size:.4g}: {voxel_factor} of the scene scale {scale:.4g}; "
+          f"confidence >= {depth_filter.min_confidence:.4g}", flush=True)
 
     written = set(files_under(depth_dir))
     with_depth = [
