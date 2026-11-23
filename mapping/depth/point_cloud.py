@@ -40,6 +40,8 @@ _AXIS_MASK = (1 << _AXIS_BITS) - 1
 _FOLD_ROWS = 8_000_000
 # Voxels converted to points and written per slice.
 _WRITE_ROWS = 4_000_000
+# Images read ahead in parallel; reading the depth files dominates on network storage.
+_LOAD_THREADS = 8
 
 
 def _reduce_by_key(keys, values):
@@ -222,6 +224,23 @@ def write_voxel_means(path, total, voxel_size):
     return count
 
 
+def prefetched(function, items, num_threads):
+    """Yields `function(item)` for each of `items` in order, computed on
+    `num_threads` threads at most twice that many items ahead, so reading from
+    slow storage overlaps without holding every result in memory."""
+    from collections import deque
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(num_threads) as pool:
+        pending = deque()
+        for item in items:
+            pending.append(pool.submit(function, item))
+            if len(pending) >= 2 * num_threads:
+                yield pending.popleft().result()
+        while pending:
+            yield pending.popleft().result()
+
+
 def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
     """Merge every depth file under `depth_dir` for the COLMAP model in
     `model_dir` into `output_path`; returns the point count."""
@@ -249,20 +268,25 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
         if depth_dir / f"{image.name}.npy" in written
     ]
 
+    def load(image):
+        rows = np.load(depth_dir / f"{image.name}.npy")
+        if len(rows) == 0:
+            return None
+        bgr = cv2.imread(str(model_dir / "images" / image.name))
+        if bgr is None:
+            return None
+        return (
+            rows,
+            bgr,
+            np.asarray(reconstruction.cameras[image.camera_id].calibration_matrix()),
+            poses[image.name],
+        )
+
     def images():
-        for image in tqdm(with_depth, desc="Point cloud", unit="image", dynamic_ncols=True):
-            rows = np.load(depth_dir / f"{image.name}.npy")
-            if len(rows) == 0:
-                continue
-            bgr = cv2.imread(str(model_dir / "images" / image.name))
-            if bgr is None:
-                continue
-            yield (
-                rows,
-                bgr,
-                np.asarray(reconstruction.cameras[image.camera_id].calibration_matrix()),
-                poses[image.name],
-            )
+        loaded = prefetched(load, with_depth, _LOAD_THREADS)
+        for item in tqdm(loaded, total=len(with_depth), desc="Point cloud", unit="image", dynamic_ncols=True):
+            if item is not None:
+                yield item
 
     total = merge_images(images(), voxel_size)
     print(f"Writing {0 if total is None else len(total[0])} voxels to {output_path}", flush=True)

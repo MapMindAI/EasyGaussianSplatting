@@ -10,6 +10,7 @@ from mapping.depth.point_cloud import (
     image_points,
     merge_images,
     merge_voxel_sums,
+    prefetched,
     read_point_cloud,
     scene_scale,
     unproject,
@@ -125,6 +126,24 @@ def test_voxel_means_written_in_slices_match_one_write(tmp_path, monkeypatch):
     expected_points, expected_colours = voxel_means(total, 1.0)
     np.testing.assert_allclose(written_points, expected_points, atol=1e-6)
     np.testing.assert_array_equal(written_colours, expected_colours)
+
+
+def test_prefetched_keeps_order_and_reads_a_bounded_window_ahead():
+    import threading
+
+    started, release = [], threading.Event()
+
+    def load(item):
+        started.append(item)
+        if item >= 4:
+            release.wait(5)
+        return item * 10
+
+    results = prefetched(load, range(20), 2)
+    assert next(results) == 0
+    assert max(started) < 2 * 2 + 1
+    release.set()
+    assert list(results) == [item * 10 for item in range(1, 20)]
 
 
 def test_point_cloud_round_trips_through_a_binary_ply(tmp_path):
