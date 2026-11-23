@@ -189,6 +189,11 @@ def parse_depth_arguments(parser):
     return args
 
 
+def depth_filter(args):
+    """The DepthFilter parse_depth_arguments' flags describe."""
+    return DepthFilter(args.min_confidence, args.min_depth, args.max_depth)
+
+
 def generate_depths(args, make_estimator, group_size, minimum_group_size):
     """Write depth maps for `args.model_dir` with `make_estimator()`'s model,
     over groups of `minimum_group_size` to `group_size` images.
@@ -287,13 +292,14 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
             best_error[name] = error
             save_depth_map(depth_path(args.depth_dir, name), *depth_map)
             if image is not None:
-                depth = supervised_depth(depth_map, image, training_mask(name), depth_filter)
+                grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                depth = supervised_depth(depth_map, grayscale, training_mask(name), overlay_filter)
                 overlay_path = depth_debug_path(args.debug_dir, name)
                 overlay_path.parent.mkdir(parents=True, exist_ok=True)
                 full_depth = upsample(depth, image.shape[1], image.shape[0])
                 cv2.imwrite(str(overlay_path), depth_overlay(image, full_depth))
 
-    depth_filter = DepthFilter(args.min_confidence, args.min_depth, args.max_depth)
+    overlay_filter = depth_filter(args)
     training_mask = training_masks(args.mask_dir if args.debug_dir is not None else None)
     # Groups share frames, so the writes stay on this thread: two workers
     # saving the same image's file would race.

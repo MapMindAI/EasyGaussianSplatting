@@ -216,8 +216,8 @@ coloured from the image, and averaged per voxel, with torch on the GPU when
 there is one. `--voxel-factor` (0.001) sets the voxel edge as a fraction of the
 scene scale, the largest camera distance from the cameras' mean, as gsplat
 measures it; the server and training scripts pass the parameters file's
-`depth_voxel_factor` and `depth_min_confidence`. Delete the `.ply` to rebuild
-it with a new filter. It takes the flags above except
+`depth_voxel_factor` and `depth_min_confidence`. The settings it was built
+with are kept in `depth_points.json`; changing any of them rebuilds the cloud. It takes the flags above except
 `--triton-url`, and defaults `--num-threads` to 2; the threads overlap image
 reading with inference, which runs one group at a time, since a 12-view group's
 attention alone needs 4.4 GB of GPU memory. The session's memory arena returns

@@ -216,6 +216,7 @@ def write_voxel_means(path, total, voxel_size):
     """Writes a merge_images total's voxel means as a PLY, a slice at a time so
     host memory stays bounded however large the cloud."""
     count = 0 if total is None else len(total[0])
+    print(f"Writing {count} voxels to {path}", flush=True)
     starts = range(0, count, _WRITE_ROWS)
     _write_vertices(path, count, (
         _vertices(*voxel_means((total[0][start:start + _WRITE_ROWS], total[1][start:start + _WRITE_ROWS]), voxel_size))
@@ -284,7 +285,8 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor, mas
         bgr = cv2.imread(str(model_dir / "images" / image.name))
         if bgr is None:
             return None
-        depth = supervised_depth(depth_map, bgr, training_mask(image.name), depth_filter)
+        grayscale = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+        depth = supervised_depth(depth_map, grayscale, training_mask(image.name), depth_filter)
         return (
             depth_rows(depth, bgr.shape[1], bgr.shape[0]),
             bgr,
@@ -298,6 +300,4 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor, mas
             if item is not None:
                 yield item
 
-    total = merge_images(images(), voxel_size)
-    print(f"Writing {0 if total is None else len(total[0])} voxels to {output_path}", flush=True)
-    return write_voxel_means(output_path, total, voxel_size)
+    return write_voxel_means(output_path, merge_images(images(), voxel_size), voxel_size)

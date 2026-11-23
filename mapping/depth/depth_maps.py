@@ -18,9 +18,6 @@ import numpy as np
 DEPTH_SUFFIX = ".npz"
 # Stored confidence resolution; anything above 255 steps (12.75) saturates.
 CONFIDENCE_STEP = 0.05
-# Edges are found at the map's resolution, where one pixel already spans about
-# 5 source pixels of a 1920 image, so they are not grown further.
-EDGE_DILATION = 0
 DEPTH_EDGE_THRESHOLD = 0.15
 
 
@@ -95,55 +92,39 @@ def training_masks(mask_dir):
     return mask
 
 
-def supervision_mask(depth, confidence, mask, min_confidence, min_depth, max_depth):
-    """Pixels whose depth is suitable for supervision."""
-    usable = np.isfinite(depth) & (depth > 0)
-    if min_depth is not None:
-        usable &= depth >= min_depth
-    if max_depth is not None:
-        usable &= depth <= max_depth
-    if confidence is not None:
-        usable &= confidence >= min_confidence
-    if mask is not None:
-        usable &= mask
-    return usable
-
-
-def depth_edge_mask(image, depth):
-    """Pixels near colour or depth discontinuities, where predicted depth is unreliable."""
-    grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+def depth_edge_mask(grayscale, depth):
+    """Pixels on colour or depth discontinuities, where predicted depth is
+    unreliable. At the map's resolution one pixel already spans about 5 source
+    pixels of a 1920 image, so the edges are not grown further."""
     colour_edges = cv2.Canny(grayscale, 100, 200) > 0
     valid = np.isfinite(depth) & (depth > 0)
     log_depth = np.zeros(depth.shape, dtype=np.float32)
     log_depth[valid] = np.log(depth[valid])
     gradient_x = cv2.Sobel(log_depth, cv2.CV_32F, 1, 0, ksize=3)
     gradient_y = cv2.Sobel(log_depth, cv2.CV_32F, 0, 1, ksize=3)
-    depth_edges = valid & (np.hypot(gradient_x, gradient_y) > DEPTH_EDGE_THRESHOLD)
-    edges = colour_edges | depth_edges
-    if EDGE_DILATION == 0:
-        return edges
-    kernel = cv2.getStructuringElement(
-        cv2.MORPH_ELLIPSE, (2 * EDGE_DILATION + 1, 2 * EDGE_DILATION + 1)
-    )
-    return cv2.dilate(edges.astype(np.uint8), kernel).astype(bool)
+    return colour_edges | (valid & (np.hypot(gradient_x, gradient_y) > DEPTH_EDGE_THRESHOLD))
 
 
-def supervised_depth(depth_map, image, mask, depth_filter):
+def supervised_depth(depth_map, grayscale, mask, depth_filter):
     """`depth_map`'s depth at its own resolution, 0 wherever `depth_filter`,
     the training `mask` (True to keep, at any size, or None), or a colour or
-    depth edge of the BGR `image` rejects it."""
+    depth edge of the `grayscale` image (at any size) rejects it."""
     depth = depth_map.depth
     height, width = depth.shape
+    usable = (
+        np.isfinite(depth)
+        & (depth > 0)
+        & (depth >= depth_filter.min_depth * depth_map.scale)
+        & (depth <= depth_filter.max_depth * depth_map.scale)
+        & (depth_map.confidence >= depth_filter.min_confidence)
+    )
     if mask is not None:
-        mask = cv2.resize(
+        usable &= cv2.resize(
             mask.astype(np.uint8), (width, height), interpolation=cv2.INTER_NEAREST
         ) > 0
-    usable = supervision_mask(
-        depth, depth_map.confidence, mask, depth_filter.min_confidence,
-        depth_filter.min_depth * depth_map.scale, depth_filter.max_depth * depth_map.scale,
-    )
-    small_image = cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
-    return np.where(usable & ~depth_edge_mask(small_image, depth), depth, 0).astype(np.float32)
+    small = cv2.resize(grayscale, (width, height), interpolation=cv2.INTER_AREA)
+    usable &= ~depth_edge_mask(small.astype(np.uint8), depth)
+    return np.where(usable, depth, 0).astype(np.float32)
 
 
 def upsample(depth, width, height):
@@ -164,6 +145,8 @@ def depth_rows(depth, width, height):
     interpolated to `width` x `height`, with x and y normalized to [0, 1]."""
     depth = upsample(depth, width, height)
     lines, columns = np.nonzero(depth > 0)
-    return np.column_stack(
-        [columns / (width - 1), lines / (height - 1), depth[lines, columns]]
-    ).astype(np.float32)
+    rows = np.empty((len(lines), 3), dtype=np.float32)
+    np.multiply(columns, np.float32(1 / (width - 1)), out=rows[:, 0], casting="unsafe")
+    np.multiply(lines, np.float32(1 / (height - 1)), out=rows[:, 1], casting="unsafe")
+    rows[:, 2] = depth[lines, columns]
+    return rows

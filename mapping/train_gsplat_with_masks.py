@@ -19,6 +19,7 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path[:] = [path for path in sys.path if os.path.abspath(path or ".") != SCRIPT_DIR]
 
+import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
 import tqdm  # noqa: E402
@@ -148,14 +149,13 @@ def attach_depths(dataset_class, depth_filter):
         height, width = data["image"].shape[:2]
         rows = np.zeros((0, 3), dtype=np.float32)
         file_name = f"{image_name}{DEPTH_SUFFIX}"
-        depth_map = None
         if file_name in listed_files(self, "depths"):
             depth_map = load_depth_map(pathlib.Path(self.parser.data_dir, "depths", file_name))
-        if depth_map is not None:
-            image_bgr = np.ascontiguousarray(data["image"].numpy().astype(np.uint8)[..., ::-1])
-            mask = data["mask"].numpy() if "mask" in data else None
-            depth = supervised_depth(depth_map, image_bgr, mask, depth_filter)
-            rows = depth_rows(depth, width, height)
+            if depth_map is not None:
+                grayscale = cv2.cvtColor(data["image"].numpy(), cv2.COLOR_RGB2GRAY)
+                mask = data["mask"].numpy() if "mask" in data else None
+                depth = supervised_depth(depth_map, grayscale, mask, depth_filter)
+                rows = depth_rows(depth, width, height)
         points, depths = depth_supervision_in_normalized_frame(
             self.parser.transform, rows, width, height
         )

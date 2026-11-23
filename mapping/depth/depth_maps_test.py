@@ -12,7 +12,6 @@ from mapping.depth.depth_maps import (
     save_depth_map,
     save_empty_depth_map,
     supervised_depth,
-    supervision_mask,
     training_masks,
     upsample,
 )
@@ -51,15 +50,15 @@ def test_supervised_depth_filters_confidence_scaled_range_and_mask():
     confidence[1] = 0.4
     mask = np.ones((8, 8), dtype=bool)
     mask[6:] = False  # Covers the map's last row once resized.
-    image = np.full((8, 8, 3), 128, dtype=np.uint8)
+    grayscale = np.full((8, 8), 128, dtype=np.uint8)
 
-    kept = supervised_depth(DepthMap(depth, confidence, 2.0), image, mask, DepthFilter(0.5, 0.1, 5.0))
+    kept = supervised_depth(DepthMap(depth, confidence, 2.0), grayscale, mask, DepthFilter(0.5, 0.1, 5.0))
 
     assert kept[0, 0] == 0
     assert (kept[1] == 0).all() and (kept[3] == 0).all()
     # (0, 1) sits on the depth edge around the far pixel.
     assert (kept[2] == 2.0).all() and (kept[0, 2:] == 2.0).all()
-    lenient = supervised_depth(DepthMap(depth, confidence, 2.0), image, None, DepthFilter(0.3, 0.1, 5.0))
+    lenient = supervised_depth(DepthMap(depth, confidence, 2.0), grayscale, None, DepthFilter(0.3, 0.1, 5.0))
     assert (lenient[2:] == 2.0).all() and (lenient[1, 2:] == 2.0).all()
 
 
@@ -74,38 +73,17 @@ def test_training_masks_read_listed_masks_only(tmp_path):
     assert training_masks(None)("front/a.jpg") is None
 
 
-def test_supervision_mask_drops_unconfident_masked_and_empty_depth():
-    depth = np.ones((4, 4), dtype=np.float32)
-    depth[0] = 0.0
-    confidence = np.full((4, 4), 5.0, dtype=np.float32)
-    confidence[1] = 0.5
-    mask = np.ones((4, 4), dtype=bool)
-    mask[2] = False
-
-    usable = supervision_mask(depth, confidence, mask, 2.0, None, None)
-
-    assert np.flatnonzero(usable.any(axis=1)).tolist() == [3]
-
-
-def test_supervision_mask_keeps_depths_inside_the_requested_range():
-    depth = np.array([[0.5, 1.0], [3.0, 7.0]], dtype=np.float32)
-
-    assert supervision_mask(depth, None, None, 0.0, 1.0, 3.0).tolist() == [[False, True], [True, False]]
-
-
 def test_depth_edge_mask_rejects_colour_and_depth_boundaries():
-    image = np.zeros((20, 20, 3), dtype=np.uint8)
-    image[:, 10:] = 255
+    grayscale = np.zeros((20, 20), dtype=np.uint8)
+    grayscale[:, 10:] = 255
     depth = np.ones((20, 20), dtype=np.float32)
     depth[10:] = 2.0
 
-    edges = depth_edge_mask(image, depth)
+    edges = depth_edge_mask(grayscale, depth)
 
     assert edges[:, 9:11].any(axis=1).all()
     assert edges[9:11, :].any(axis=0).all()
     assert not edges[0, 0]
-
-
 
 
 def test_upsample_interpolates_between_valid_pixels_only():
