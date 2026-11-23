@@ -38,6 +38,8 @@ _AXIS_OFFSET = 1 << (_AXIS_BITS - 1)
 _AXIS_MASK = (1 << _AXIS_BITS) - 1
 # New voxels buffered before folding them into the running total.
 _FOLD_ROWS = 8_000_000
+# Voxels converted to points and written per slice.
+_WRITE_ROWS = 4_000_000
 
 
 def _reduce_by_key(keys, values):
@@ -107,23 +109,29 @@ def _insert_new(total, new):
 
 
 def voxel_means(part, voxel_size):
-    """Each voxel's mean point and colour, as NumPy arrays."""
+    """Each voxel's mean point and uint8 colour, as NumPy arrays."""
     keys, sums = part[0].cpu().numpy(), part[1].cpu().numpy()
     indices = np.column_stack([
         (keys >> 2 * _AXIS_BITS) & _AXIS_MASK, (keys >> _AXIS_BITS) & _AXIS_MASK, keys & _AXIS_MASK,
     ]) - _AXIS_OFFSET
     counts = sums[:, :1].astype(np.float64)
-    return (indices + sums[:, 1:4] / counts) * voxel_size, sums[:, 4:] / counts
+    colours = np.clip(np.rint(sums[:, 4:] / counts), 0, 255).astype(np.uint8)
+    return (indices + sums[:, 1:4] / counts) * voxel_size, colours
 
 
-def write_point_cloud(path, points, colours_rgb):
+def _vertices(points, colours_rgb):
     vertices = np.empty(len(points), dtype=_VERTEX)
     vertices["x"], vertices["y"], vertices["z"] = np.asarray(points).T
     vertices["red"], vertices["green"], vertices["blue"] = np.asarray(colours_rgb).T
+    return vertices
+
+
+def _write_vertices(path, count, chunks):
+    """A binary PLY of `count` vertices, written from an iterable of _VERTEX arrays."""
     header = "\n".join([
         "ply",
         "format binary_little_endian 1.0",
-        f"element vertex {len(vertices)}",
+        f"element vertex {count}",
         *(f"property float {axis}" for axis in "xyz"),
         *(f"property uchar {channel}" for channel in ("red", "green", "blue")),
         "end_header",
@@ -132,19 +140,23 @@ def write_point_cloud(path, points, colours_rgb):
     temporary_path = path.with_name(f"{path.name}.partial")
     with open(temporary_path, "wb") as file:
         file.write((header + "\n").encode("ascii"))
-        file.write(vertices.tobytes())
+        for vertices in chunks:
+            vertices.tofile(file)
     os.replace(temporary_path, path)
+
+
+def write_point_cloud(path, points, colours_rgb):
+    _write_vertices(path, len(points), [_vertices(points, colours_rgb)])
 
 
 def read_point_cloud(path):
     """(points, uint8 RGB colours) from a write_point_cloud file."""
     with open(path, "rb") as file:
-        header = file.read().split(b"end_header\n", 1)
-    count = int(next(
-        line.split()[-1] for line in header[0].decode("ascii").splitlines()
-        if line.startswith("element vertex")
-    ))
-    vertices = np.frombuffer(header[1], dtype=_VERTEX, count=count)
+        count = None
+        for line in iter(file.readline, b"end_header\n"):
+            if line.startswith(b"element vertex"):
+                count = int(line.split()[-1])
+        vertices = np.fromfile(file, dtype=_VERTEX, count=count)
     points = np.column_stack([vertices["x"], vertices["y"], vertices["z"]])
     return points, np.column_stack([vertices["red"], vertices["green"], vertices["blue"]])
 
@@ -169,9 +181,9 @@ def image_points(rows, image, intrinsics, camera_from_world, device):
     return (camera_points - translation) @ rotation, image[lines, columns].flip(-1).double()
 
 
-def depth_point_cloud(images, voxel_size):
-    """Merged (points, uint8 RGB colours) over `images`, an iterable of
-    (rows, image_bgr, intrinsics, camera_from_world), on the GPU when there is one.
+def merge_images(images, voxel_size):
+    """The voxel_sums total over `images`, an iterable of (rows, image_bgr,
+    intrinsics, camera_from_world), on the GPU when there is one; None if empty.
 
     Like a voxel hash grid, each image adds into the voxels already seen in
     place; only voxels new to the total are buffered, and inserted once they
@@ -193,12 +205,21 @@ def depth_point_cloud(images, voxel_size):
         if new_rows > max(_FOLD_ROWS, len(total[0]) // 4):
             total = _insert_new(total, merge_voxel_sums(new_parts))
             new_parts, new_rows = [], 0
-    if total is None:
-        return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.uint8)
-    if new_parts:
+    if total is not None and new_parts:
         total = _insert_new(total, merge_voxel_sums(new_parts))
-    points, colours = voxel_means(total, voxel_size)
-    return points, np.clip(np.rint(colours), 0, 255).astype(np.uint8)
+    return total
+
+
+def write_voxel_means(path, total, voxel_size):
+    """Writes a merge_images total's voxel means as a PLY, a slice at a time so
+    host memory stays bounded however large the cloud."""
+    count = 0 if total is None else len(total[0])
+    starts = range(0, count, _WRITE_ROWS)
+    _write_vertices(path, count, (
+        _vertices(*voxel_means((total[0][start:start + _WRITE_ROWS], total[1][start:start + _WRITE_ROWS]), voxel_size))
+        for start in starts
+    ))
+    return count
 
 
 def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
@@ -243,6 +264,6 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
                 poses[image.name],
             )
 
-    points, colours = depth_point_cloud(images(), voxel_size)
-    write_point_cloud(output_path, points, colours)
-    return len(points)
+    total = merge_images(images(), voxel_size)
+    print(f"Writing {0 if total is None else len(total[0])} voxels to {output_path}", flush=True)
+    return write_voxel_means(output_path, total, voxel_size)

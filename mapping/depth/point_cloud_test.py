@@ -7,8 +7,8 @@ import pytest
 
 from mapping.depth import point_cloud
 from mapping.depth.point_cloud import (
-    depth_point_cloud,
     image_points,
+    merge_images,
     merge_voxel_sums,
     read_point_cloud,
     scene_scale,
@@ -16,6 +16,7 @@ from mapping.depth.point_cloud import (
     voxel_means,
     voxel_sums,
     write_point_cloud,
+    write_voxel_means,
 )
 from mapping.vggt_omega.depth_estimator import quaternion_to_matrix
 
@@ -76,7 +77,7 @@ def test_voxels_on_either_side_of_the_origin_stay_apart_and_far_points_are_dropp
 
 
 @requires_torch
-def test_depth_point_cloud_folds_to_the_same_cloud_as_one_merge(monkeypatch):
+def test_merge_images_folds_to_the_same_cloud_as_one_merge(monkeypatch):
     monkeypatch.setattr(point_cloud, "_FOLD_ROWS", 60)
     generator = np.random.default_rng(0)
     image = generator.integers(0, 255, (20, 30, 3), dtype=np.uint8)
@@ -87,16 +88,14 @@ def test_depth_point_cloud_folds_to_the_same_cloud_as_one_merge(monkeypatch):
         for _ in range(12)
     ]
 
-    points, colours = depth_point_cloud(images, 0.2)
+    points, colours = voxel_means(merge_images(images, 0.2), 0.2)
 
     expected_points, expected_colours = voxel_means(merge_voxel_sums([
         voxel_sums(*image_points(*item, "cpu"), 0.2) for item in images
     ]), 0.2)
     order, expected_order = np.lexsort(points.T), np.lexsort(expected_points.T)
     np.testing.assert_allclose(points[order], expected_points[expected_order], atol=1e-6)
-    np.testing.assert_array_equal(
-        colours[order], np.clip(np.rint(expected_colours[expected_order]), 0, 255).astype(np.uint8)
-    )
+    np.testing.assert_array_equal(colours[order], expected_colours[expected_order])
 
 
 @requires_torch
@@ -106,12 +105,26 @@ def test_depth_rows_land_where_the_camera_saw_them_coloured_from_the_image():
     image[23, 31] = (10, 20, 30)  # BGR
     rows = np.array([[31 / 64, 23 / 48, 4.0]], dtype=np.float32)
 
-    points, colours = depth_point_cloud([(rows, image, INTRINSICS, camera_from_world)], 0.01)
+    points, colours = voxel_means(merge_images([(rows, image, INTRINSICS, camera_from_world)], 0.01), 0.01)
 
     # Pixel (31, 23) is centred at (31.5, 23.5), half a pixel short of the
     # principal point on both axes.
     np.testing.assert_allclose(points, [[-0.5 * 4 / 100, -0.5 * 4 / 120, 4.0]], atol=1e-6)
     assert colours.tolist() == [[30, 20, 10]]
+
+
+@requires_torch
+def test_voxel_means_written_in_slices_match_one_write(tmp_path, monkeypatch):
+    monkeypatch.setattr(point_cloud, "_WRITE_ROWS", 2)
+    points = tensor([[0.1, 0.1, 0.1], [1.5, 0.2, 0.3], [2.5, 0.5, 0.5], [-3.5, 1, 2], [9, 9, 9]])
+    total = voxel_sums(points, tensor(np.arange(15).reshape(5, 3)), 1.0)
+
+    assert write_voxel_means(tmp_path / "sliced.ply", total, 1.0) == 5
+
+    written_points, written_colours = read_point_cloud(tmp_path / "sliced.ply")
+    expected_points, expected_colours = voxel_means(total, 1.0)
+    np.testing.assert_allclose(written_points, expected_points, atol=1e-6)
+    np.testing.assert_array_equal(written_colours, expected_colours)
 
 
 def test_point_cloud_round_trips_through_a_binary_ply(tmp_path):
