@@ -124,19 +124,19 @@ def downsample_images(parser_class):
     parser_class.__init__ = __init__
 
 
-def attach_depths(dataset_class):
+def attach_depths(dataset_class, depth_filter):
     """Supply the depth supervision simple_trainer's --depth_loss consumes.
 
     Its own source is the sparse COLMAP points, which it looks up in
     parser.point_indices -- a dict with no entry at all for a cube face SfM
     barely covered. That path is switched off and answered here with what
     generate_depth.py wrote, which is denser and covers the textureless surfaces
-    SfM never triangulated. The file holds a depth map at the depth model's
-    resolution in the COLMAP frame (mapping/depth/depth_maps.py); it is
-    interpolated to the image as loaded, and depth put into the parser's
-    normalized world. The scale
-    comes off the parser rather than a module global so it survives a dataloader
-    worker that re-imports instead of forking.
+    SfM never triangulated. The file holds the depth model's full output at its
+    own resolution in the COLMAP frame (mapping/depth/depth_maps.py); it is
+    filtered by `depth_filter`, the image's training mask, and edges,
+    interpolated to the image as loaded, and put into the parser's normalized
+    world. The scale comes off the parser rather than a module global so it
+    survives a dataloader worker that re-imports instead of forking.
     """
     original_getitem = dataset_class.__getitem__
 
@@ -146,10 +146,16 @@ def attach_depths(dataset_class):
         image_name = self.parser.image_names[self.indices[item]]
         assert self.patch_size is None, "depths are not cropped along with patches"
         height, width = data["image"].shape[:2]
-        depth = None
-        if f"{image_name}.npy" in listed_files(self, "depths"):
-            depth = load_depth_map(os.path.join(self.parser.data_dir, "depths", f"{image_name}.npy"))
-        rows = np.zeros((0, 3), dtype=np.float32) if depth is None else depth_rows(depth, width, height)
+        rows = np.zeros((0, 3), dtype=np.float32)
+        file_name = f"{image_name}{DEPTH_SUFFIX}"
+        depth_map = None
+        if file_name in listed_files(self, "depths"):
+            depth_map = load_depth_map(pathlib.Path(self.parser.data_dir, "depths", file_name))
+        if depth_map is not None:
+            image_bgr = np.ascontiguousarray(data["image"].numpy().astype(np.uint8)[..., ::-1])
+            mask = data["mask"].numpy() if "mask" in data else None
+            depth = supervised_depth(depth_map, image_bgr, mask, depth_filter)
+            rows = depth_rows(depth, width, height)
         points, depths = depth_supervision_in_normalized_frame(
             self.parser.transform, rows, width, height
         )
@@ -322,7 +328,13 @@ from datasets.colmap import Dataset, Parser  # noqa: E402
 from datasets.normalize import transform_points  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
-from mapping.depth.depth_maps import depth_rows, load_depth_map  # noqa: E402
+from mapping.depth.depth_maps import (  # noqa: E402
+    DEPTH_SUFFIX,
+    DepthFilter,
+    depth_rows,
+    load_depth_map,
+    supervised_depth,
+)
 from mapping.depth.point_cloud import POINT_CLOUD_NAME, read_point_cloud  # noqa: E402
 from mapping.file_listing import files_under  # noqa: E402
 from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402
@@ -465,7 +477,7 @@ if parameters is not None and parameters.HasField("background_color"):
 downsample_images(Parser)
 attach_masks(Dataset)
 if parameters is not None and depth_loss_enabled(parameters):
-    attach_depths(Dataset)
+    attach_depths(Dataset, DepthFilter(min_confidence=parameters.depth_min_confidence))
     guard_depth_loss(gsplat.losses)
 if parameters is not None and parameters.run_depth:
     # MCMC never grows past cap_max, so leave it room to relocate and add.

@@ -241,15 +241,22 @@ def prefetched(function, items, num_threads):
             yield pending.popleft().result()
 
 
-def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
+def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor, mask_dir, depth_filter):
     """Merge every depth file under `depth_dir` for the COLMAP model in
-    `model_dir` into `output_path`; returns the point count."""
+    `model_dir` into `output_path`, keeping what `depth_filter` and the masks
+    in `mask_dir` (which may be None) keep; returns the point count."""
     import cv2
     import pycolmap
     from tqdm import tqdm
 
     from mapping.depth.covisibility_groups import centre_and_rotation
-    from mapping.depth.depth_maps import depth_rows, load_depth_map
+    from mapping.depth.depth_maps import (
+        depth_path,
+        depth_rows,
+        load_depth_map,
+        supervised_depth,
+        training_masks,
+    )
     from mapping.file_listing import files_under
 
     reconstruction = pycolmap.Reconstruction(model_dir / "sparse" / "0")
@@ -266,16 +273,18 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
     written = set(files_under(depth_dir))
     with_depth = [
         image for image in reconstruction.images.values()
-        if depth_dir / f"{image.name}.npy" in written
+        if depth_path(depth_dir, image.name) in written
     ]
+    training_mask = training_masks(mask_dir)
 
     def load(image):
-        depth = load_depth_map(depth_dir / f"{image.name}.npy")
-        if depth is None:
+        depth_map = load_depth_map(depth_path(depth_dir, image.name))
+        if depth_map is None:
             return None
         bgr = cv2.imread(str(model_dir / "images" / image.name))
         if bgr is None:
             return None
+        depth = supervised_depth(depth_map, bgr, training_mask(image.name), depth_filter)
         return (
             depth_rows(depth, bgr.shape[1], bgr.shape[0]),
             bgr,

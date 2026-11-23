@@ -38,8 +38,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── depth/                    # Depth supervision; grouping and scale ported from ArSession.
 │   │   ├── covisibility_groups.py # Groups of frames viewing the same scene.
 │   │   ├── covisibility_groups_test.py # Links and greedy group selection.
-│   │   ├── depth_maps.py         # Depth files: model-resolution depth and confidence, interpolated on load.
-│   │   ├── depth_maps_test.py    # Round trips, confidence filtering, and valid-only interpolation.
+│   │   ├── depth_maps.py         # Depth files: full model output, filtered and interpolated on load.
+│   │   ├── depth_maps_test.py    # Round trips, filtering, masks, edges, and valid-only interpolation.
 │   │   ├── generate_depth.py     # Shared depth stage, and its Triton DA3 entrypoint.
 │   │   ├── generate_depth_test.py # Grouping inputs, sampling, and observations.
 │   │   ├── point_cloud.py        # Written depths merged into gsplat's initial cloud.

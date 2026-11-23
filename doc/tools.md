@@ -178,25 +178,23 @@ Without a camera scale, a group needs 30 inlier points over two frames, or is
 skipped rather than written at a guessed scale. An image in several groups
 keeps the prediction whose scaled depth best matches its own sparse depths.
 The `up/` and `down/` cube faces are skipped: their sky and ground views do not
-need depth supervision. Every image ends up with a `.npy`: one no group
+need depth supervision. Every image ends up with a `.npz`: one no group
 predicted (an up/down face, an image in no group, or a skipped group) gets an
 empty one, so a skipped group is not retried. Existing files are kept, so
 rerunning an interrupted stage predicts only the groups that still have an
 image without a file; `--overwrite` regenerates them all.
-Each `.npy` is the filtered depth map at the model's own resolution, as
-float16 with 0 where there is no depth, plus the model's confidence as a uint8
-in steps of 0.05 (`mapping/depth/depth_maps.py`): about 0.5 MB for
-VGGT-Omega's 416x416. `load_depth_map(path, min_confidence)` filters on
-confidence again without regenerating; pixels already below `--min-confidence`
-were dropped when the map was written. Training and the point cloud
-interpolate it to the image size they load, only between valid pixels. Files
-from before this format are refused; regenerate them with `--overwrite`.
-`--min-confidence` (0.5) sets the confidence floor, and `--min-depth` (0.1) /
-`--max-depth` (unbounded) discard depths outside that range, in the depth
-model's units before scaling.
-Colour and depth discontinuities are also excluded, found at the map's resolution, so depth supervision
-does not pull geometry across foliage and other detail edges. Debug overlays
-show only the depth that remains after filtering.
+Each `.npz` is the model's full output at its own resolution, unfiltered
+(`mapping/depth/depth_maps.py`): depth as float16 in the COLMAP frame,
+confidence as a uint8 in steps of 0.05, and the group's scale; about 0.5 MB
+for VGGT-Omega's 416x416. The point cloud merge and training filter it when
+they load it, then interpolate it to the image size, only between kept
+pixels, so the filter can change without regenerating. They drop pixels below
+`--min-confidence` (0.5; `depth_min_confidence` in the parameters), outside
+`--min-depth` (0.1) to `--max-depth` (5.0), in the depth model's units before
+scaling, under the training masks, and on colour and depth discontinuities,
+found at the map's resolution, so depth supervision does not pull geometry
+across foliage and other detail edges. Here those flags only shape the debug
+overlays, which show the depth that remains after filtering.
 `--debug-dir <directory>` writes a colourized depth overlay over every source
 image, preserving nested image paths and adding `_depth.png` to the filename.
 [gsplat_server.md](gsplat_server.md#depth-supervision) covers the file format
@@ -211,14 +209,15 @@ export at `models/vggt_omega_416.onnx` (with its `.onnx.data`), or pass
 `--model`. Groups hold up to 12 views, though the export's `.json` lists
 10 as its maximum. Inputs are a fixed 416x416; images are resized to that,
 ignoring aspect ratio, and the maps kept at that size. Groups of two views or more
-are kept. Whenever an image was predicted, it merges every `.npy` into
+are kept. Whenever an image was predicted, it merges every `.npz` into
 `<model_dir>/depth_points.ply` (`mapping/depth/point_cloud.py`): each map,
-interpolated to its image, lifted through the COLMAP intrinsics and poses,
+filtered as above with the masks in `--mask-dir` and interpolated to its image, lifted through the COLMAP intrinsics and poses,
 coloured from the image, and averaged per voxel, with torch on the GPU when
 there is one. `--voxel-factor` (0.001) sets the voxel edge as a fraction of the
 scene scale, the largest camera distance from the cameras' mean, as gsplat
 measures it; the server and training scripts pass the parameters file's
-`depth_voxel_factor`. It takes the flags above except
+`depth_voxel_factor` and `depth_min_confidence`. Delete the `.ply` to rebuild
+it with a new filter. It takes the flags above except
 `--triton-url`, and defaults `--num-threads` to 2; the threads overlap image
 reading with inference, which runs one group at a time, since a 12-view group's
 attention alone needs 4.4 GB of GPU memory. The session's memory arena returns

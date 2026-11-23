@@ -1,21 +1,19 @@
-"""Tests for depth grouping inputs, sampling, filtering, and COLMAP observations."""
+"""Tests for depth grouping inputs, sampling, and COLMAP observations."""
 
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-from mapping.depth.depth_maps import load_depth_map, save_depth_map
+from mapping.depth.depth_maps import depth_path, load_depth_map, save_depth_map
 from mapping.depth.generate_depth import (
     Observations,
     depth_debug_path,
-    depth_edge_mask,
     depth_groups,
     depth_overlay,
     observed_depths,
     pending_groups,
     sample_at,
-    supervision_mask,
 )
 
 
@@ -113,38 +111,6 @@ def test_sample_at_clamps_points_outside_the_image():
     values = np.arange(12, dtype=np.float32).reshape(3, 4)
 
     assert sample_at(values, np.array([[-5.0, -5.0], [99.0, 99.0]]), (3, 4)).tolist() == [0.0, 11.0]
-
-
-def test_supervision_mask_drops_unconfident_masked_and_empty_depth():
-    depth = np.ones((4, 4), dtype=np.float32)
-    depth[0] = 0.0
-    confidence = np.full((4, 4), 5.0, dtype=np.float32)
-    confidence[1] = 0.5
-    mask = np.ones((4, 4), dtype=bool)
-    mask[2] = False
-
-    usable = supervision_mask(depth, confidence, mask, 2.0, None, None)
-
-    assert np.flatnonzero(usable.any(axis=1)).tolist() == [3]
-
-
-def test_supervision_mask_keeps_depths_inside_the_requested_range():
-    depth = np.array([[0.5, 1.0], [3.0, 7.0]], dtype=np.float32)
-
-    assert supervision_mask(depth, None, None, 0.0, 1.0, 3.0).tolist() == [[False, True], [True, False]]
-
-
-def test_depth_edge_mask_rejects_colour_and_depth_boundaries():
-    image = np.zeros((20, 20, 3), dtype=np.uint8)
-    image[:, 10:] = 255
-    depth = np.ones((20, 20), dtype=np.float32)
-    depth[10:] = 2.0
-
-    edges = depth_edge_mask(image, depth)
-
-    assert edges[:, 9:11].any(axis=1).all()
-    assert edges[9:11, :].any(axis=0).all()
-    assert not edges[0, 0]
 
 
 def test_depth_overlay_colours_depth_without_changing_image_shape():
@@ -270,15 +236,17 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
         num_threads=1, min_confidence=0.5, min_depth=0.1, max_depth=5.0,
     )
     # An interrupted run already wrote "a".
-    save_depth_map(depth_dir / "front/a.jpg.npy", np.full((4, 4), 7.0), np.ones((4, 4)))
+    save_depth_map(depth_path(depth_dir, "front/a.jpg"), np.full((4, 4), 7.0), np.ones((4, 4)), 2.0)
 
     assert generate_depth.generate_depths(args, Estimator, 2, 2) == 1
 
     assert runs == [2]
-    np.testing.assert_array_equal(load_depth_map(depth_dir / "front/a.jpg.npy"), np.full((4, 4), 7.0))
-    assert (load_depth_map(depth_dir / "front/b.jpg.npy") > 0).any()
-    assert load_depth_map(depth_dir / "front/c.jpg.npy") is None
-    assert load_depth_map(depth_dir / "up/d.jpg.npy") is None
+    assert load_depth_map(depth_path(depth_dir, "front/a.jpg")).scale == 2.0
+    written = load_depth_map(depth_path(depth_dir, "front/b.jpg"))
+    np.testing.assert_array_equal(written.depth, np.ones((4, 4)))
+    np.testing.assert_array_equal(written.confidence, np.ones((4, 4)))
+    assert load_depth_map(depth_path(depth_dir, "front/c.jpg")) is None
+    assert load_depth_map(depth_path(depth_dir, "up/d.jpg")) is None
 
     assert generate_depth.generate_depths(args, Estimator, 2, 2) == 0
     assert runs == [2]

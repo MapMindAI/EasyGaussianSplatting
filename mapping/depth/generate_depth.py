@@ -18,10 +18,11 @@ up/down face, a frame in no covisible group, or one whose group failed -- gets
 an empty one. Existing files are kept, so an interrupted run resumes by
 predicting only the groups that still have an image without one.
 
-The output is one "<image_name>.npy" per image under --depth-dir: the filtered
-depth map at the model's own resolution, scaled into the frame of the input
-model, with its confidence (see mapping/depth/depth_maps.py). Readers interpolate it to the image
-resolution they load, so the stage writes well under a megabyte per image.
+The output is one "<image_name>.npz" per image under --depth-dir: the model's
+full depth and confidence at its own resolution, scaled into the frame of the
+input model (see mapping/depth/depth_maps.py). Nothing is filtered here; the
+point cloud merge and training filter on confidence, masks, depth range, and
+edges when they load it.
 
 Run as a script, it predicts with DA3 on Triton, reached at --triton-url or
 $TRITON_URL; mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
@@ -37,7 +38,16 @@ import cv2
 import numpy as np
 
 from mapping.depth.covisibility_groups import Frame, centre_and_rotation, select_groups
-from mapping.depth.depth_maps import save_depth_map, upsample
+from mapping.depth.depth_maps import (
+    DepthFilter,
+    DepthMap,
+    depth_path,
+    save_depth_map,
+    save_empty_depth_map,
+    supervised_depth,
+    training_masks,
+    upsample,
+)
 from mapping.depth.scale_alignment import align_sparse_depth, median_relative_error, pose_depth_scale
 from mapping.file_listing import files_under
 from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
@@ -46,10 +56,6 @@ from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
 # to match the deployed model (see third_party/EasyTensorRT).
 GROUP_SIZE = 5
 SKIPPED_DEPTH_FACES = {"up", "down"}
-# Edges are found on the model-resolution map, where one pixel already spans
-# about 5 source pixels of a 1920 image, so they are not grown further.
-EDGE_DILATION = 0
-DEPTH_EDGE_THRESHOLD = 0.15
 # Why a group produced nothing.
 UNREADABLE, UNSCALED = "unreadable", "unscaled"
 
@@ -62,39 +68,6 @@ def sample_at(values, points, image_shape):
     columns = np.floor(points[:, 0] * width / image_shape[1]).astype(np.int64)
     lines = np.floor(points[:, 1] * height / image_shape[0]).astype(np.int64)
     return values[np.clip(lines, 0, height - 1), np.clip(columns, 0, width - 1)]
-
-
-def supervision_mask(depth, confidence, mask, min_confidence, min_depth, max_depth):
-    """Pixels whose depth is suitable for supervision."""
-    usable = np.isfinite(depth) & (depth > 0)
-    if min_depth is not None:
-        usable &= depth >= min_depth
-    if max_depth is not None:
-        usable &= depth <= max_depth
-    if confidence is not None:
-        usable &= confidence >= min_confidence
-    if mask is not None:
-        usable &= mask
-    return usable
-
-
-def depth_edge_mask(image, depth):
-    """Pixels near colour or depth discontinuities, where predicted depth is unreliable."""
-    grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    colour_edges = cv2.Canny(grayscale, 100, 200) > 0
-    valid = np.isfinite(depth) & (depth > 0)
-    log_depth = np.zeros(depth.shape, dtype=np.float32)
-    log_depth[valid] = np.log(depth[valid])
-    gradient_x = cv2.Sobel(log_depth, cv2.CV_32F, 1, 0, ksize=3)
-    gradient_y = cv2.Sobel(log_depth, cv2.CV_32F, 0, 1, ksize=3)
-    depth_edges = valid & (np.hypot(gradient_x, gradient_y) > DEPTH_EDGE_THRESHOLD)
-    edges = colour_edges | depth_edges
-    if EDGE_DILATION == 0:
-        return edges
-    kernel = cv2.getStructuringElement(
-        cv2.MORPH_ELLIPSE, (2 * EDGE_DILATION + 1, 2 * EDGE_DILATION + 1)
-    )
-    return cv2.dilate(edges.astype(np.uint8), kernel).astype(bool)
 
 
 def depth_overlay(image, depth, alpha=0.5):
@@ -183,16 +156,19 @@ def parse_depth_arguments(parser):
     """`parser`'s arguments, plus those every depth stage shares."""
     parser.add_argument("model_dir", type=Path, help="holds images/ and sparse/")
     parser.add_argument("depth_dir", type=Path)
+    # The filter only shapes the debug overlays here; readers apply their own.
+    defaults = DepthFilter()
     parser.add_argument(
-        "--min-confidence", type=float, default=0.5, help="depth confidence floor"
+        "--min-confidence", type=float, default=defaults.min_confidence,
+        help="depth confidence floor",
     )
     parser.add_argument(
-        "--min-depth", type=float, default=0.1,
-        help="minimum depth to keep, in the depth model's units before scaling"
+        "--min-depth", type=float, default=defaults.min_depth,
+        help="minimum depth to keep, in the depth model's units before scaling",
     )
     parser.add_argument(
-        "--max-depth", type=float, default=5.0,
-        help="maximum depth to keep, in the depth model's units before scaling"
+        "--max-depth", type=float, default=defaults.max_depth,
+        help="maximum depth to keep, in the depth model's units before scaling",
     )
     parser.add_argument(
         "--mask-dir", type=Path, default=None, help="skip pixels these masks block"
@@ -201,7 +177,7 @@ def parse_depth_arguments(parser):
         "--debug-dir",
         type=Path,
         default=None,
-        help="write colourized depth overlays over the source images here",
+        help="write colourized overlays of the filtered depth over the source images here",
     )
     parser.add_argument(
         "--num-threads", type=int, default=4, help="worker threads running inference"
@@ -230,7 +206,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     reconstruction = pycolmap.Reconstruction(args.model_dir / "sparse" / "0")
     names = [image.name for image in reconstruction.images.values()]
     written = set() if args.overwrite else set(files_under(args.depth_dir))
-    done = {name for name in names if args.depth_dir / f"{name}.npy" in written}
+    done = {name for name in names if depth_path(args.depth_dir, name) in written}
     if len(done) == len(names):
         print(f"Depths already exist in {args.depth_dir} for all {len(done)} images; "
               "pass --overwrite to regenerate")
@@ -262,25 +238,6 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
         stage_started = time.monotonic()
         estimator = make_estimator()
         print(f"Loaded the depth model ({time.monotonic() - stage_started:.1f} s)", flush=True)
-
-    mask_dir = args.mask_dir
-    if mask_dir is not None and not mask_dir.is_dir():
-        print(f"No masks at {mask_dir}; sampling every image unmasked", flush=True)
-        mask_dir = None
-    masks = set() if mask_dir is None else set(files_under(mask_dir))
-
-    def training_mask(name, shape):
-        """The segmentation mask for `name` at `shape`, or None if there is none."""
-        path = None if mask_dir is None else mask_dir / f"{name}.png"
-        # Checked first: OpenCV warns on every missing file it is asked to read.
-        if path not in masks:
-            return None
-        mask = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
-        if mask is None:
-            return None
-        if mask.shape[:2] != shape:
-            mask = cv2.resize(mask, (shape[1], shape[0]), interpolation=cv2.INTER_NEAREST)
-        return mask > 127
 
     def estimate(group):
         """One group's depth maps and sparse error per image, or (None, why)."""
@@ -317,35 +274,27 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
             group, images, result["depth_list"], result["depth_conf_list"], predicted
         ):
             error = median_relative_error(scale, sparse_predicted, observations[name].depths)
-            depth = depth * scale
-            usable = supervision_mask(
-                depth,
-                confidence,
-                training_mask(name, depth.shape[:2]),
-                args.min_confidence,
-                # The depth range is in the model's own units, before scaling.
-                args.min_depth * scale,
-                args.max_depth * scale,
-            )
-            small_image = cv2.resize(image, depth.shape[::-1], interpolation=cv2.INTER_AREA)
-            filtered_depth = np.where(usable & ~depth_edge_mask(small_image, depth), depth, 0)
+            depth_map = DepthMap(depth * scale, confidence, scale)
             overlay_image = image if args.debug_dir is not None else None
-            maps_by_name.append((name, filtered_depth, confidence, error, overlay_image))
+            maps_by_name.append((name, depth_map, error, overlay_image))
         return maps_by_name, None
 
     def write_best(maps_by_name):
         """Save each image's map unless an earlier group fitted it better."""
-        for name, depth, confidence, error, image in maps_by_name:
+        for name, depth_map, error, image in maps_by_name:
             if name in best_error and error >= best_error[name]:
                 continue
             best_error[name] = error
-            save_depth_map(args.depth_dir / f"{name}.npy", depth, confidence)
+            save_depth_map(depth_path(args.depth_dir, name), *depth_map)
             if image is not None:
+                depth = supervised_depth(depth_map, image, training_mask(name), depth_filter)
                 overlay_path = depth_debug_path(args.debug_dir, name)
                 overlay_path.parent.mkdir(parents=True, exist_ok=True)
                 full_depth = upsample(depth, image.shape[1], image.shape[0])
                 cv2.imwrite(str(overlay_path), depth_overlay(image, full_depth))
 
+    depth_filter = DepthFilter(args.min_confidence, args.min_depth, args.max_depth)
+    training_mask = training_masks(args.mask_dir if args.debug_dir is not None else None)
     # Groups share frames, so the writes stay on this thread: two workers
     # saving the same image's file would race.
     stage_started = time.monotonic()
@@ -371,7 +320,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     predicted = len(best_error) - len(done)
     without_depth = sorted(set(observations) - set(best_error))
     for name in without_depth:
-        save_depth_map(args.depth_dir / f"{name}.npy", np.zeros((0, 0)), np.zeros((0, 0)))
+        save_empty_depth_map(depth_path(args.depth_dir, name))
 
     errors = [error for error in best_error.values() if np.isfinite(error)]
     print(
