@@ -249,6 +249,7 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
     from tqdm import tqdm
 
     from mapping.depth.covisibility_groups import centre_and_rotation
+    from mapping.depth.depth_rows import load_rows
     from mapping.file_listing import files_under
 
     reconstruction = pycolmap.Reconstruction(model_dir / "sparse" / "0")
@@ -269,7 +270,7 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
     ]
 
     def load(image):
-        rows = np.load(depth_dir / f"{image.name}.npy")
+        rows = load_rows(depth_dir / f"{image.name}.npy")
         if len(rows) == 0:
             return None
         bgr = cv2.imread(str(model_dir / "images" / image.name))

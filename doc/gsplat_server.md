@@ -270,12 +270,12 @@ rows trains without a depth term:
 gsplat's own sparse-point depths do not stand in for them, since the images it
 skips are the ones SfM barely covered anyway.
 
-What lands in `depths/` is one `<image_name>.npy` per image holding `(M, 3)`
-float32 rows of `(x, y, depth)`: the sampled pixels worth supervising rather
-than a dense map, which is the difference between megabytes and gigabytes. `x`
-and `y` are normalized to `[0, 1]`, so `data_factor` cannot desynchronize them
-from the images the trainer loads; the trainer scales them back and converts
-depth into gsplat's normalized world.
+What lands in `depths/` is one `<image_name>.npy` per image holding rows of
+`(x, y, depth)`, 6 bytes each (`mapping/depth/depth_rows.py`): the sampled
+pixels worth supervising rather than a dense map, which is the difference
+between megabytes and gigabytes. `x` and `y` are normalized to `[0, 1]`, so
+`data_factor` cannot desynchronize them from the images the trainer loads; the
+trainer scales them back and converts depth into gsplat's normalized world.
 
 Three limits to know. gsplat's depth term is an L1 on *inverse* depth, so
 near-field error dominates and far geometry is barely constrained -- and a

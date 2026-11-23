@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from mapping.depth.depth_rows import load_rows, save_rows
 from mapping.depth.generate_depth import (
     Observations,
     depth_debug_path,
@@ -14,7 +15,6 @@ from mapping.depth.generate_depth import (
     observed_depths,
     pending_groups,
     sample_at,
-    save_rows,
     supervised_points,
 )
 
@@ -255,16 +255,6 @@ def test_pending_groups_keep_any_group_with_an_image_still_missing():
     assert pending_groups(groups, set()) == groups
 
 
-def test_save_rows_leaves_only_the_finished_file(tmp_path):
-    path = tmp_path / "front" / "frame.jpg.npy"
-    rows = np.arange(6, dtype=np.float32).reshape(2, 3)
-
-    save_rows(path, rows)
-
-    np.testing.assert_array_equal(np.load(path), rows)
-    assert [entry.name for entry in path.parent.iterdir()] == ["frame.jpg.npy"]
-
-
 def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(tmp_path, monkeypatch):
     import sys
     from types import SimpleNamespace
@@ -315,15 +305,15 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
         num_threads=1, samples_per_image=-1, min_confidence=0.5, min_depth=0.1, max_depth=5.0,
     )
     # An interrupted run already wrote "a".
-    save_rows(depth_dir / "front/a.jpg.npy", np.full((1, 3), 7, np.float32))
+    save_rows(depth_dir / "front/a.jpg.npy", [[0.5, 0.25, 7]])
 
     assert generate_depth.generate_depths(args, Estimator, 2, 2) == 1
 
     assert runs == [2]
-    np.testing.assert_array_equal(np.load(depth_dir / "front/a.jpg.npy"), np.full((1, 3), 7))
-    assert len(np.load(depth_dir / "front/b.jpg.npy")) > 0
-    assert np.load(depth_dir / "front/c.jpg.npy").shape == (0, 3)
-    assert np.load(depth_dir / "up/d.jpg.npy").shape == (0, 3)
+    np.testing.assert_allclose(load_rows(depth_dir / "front/a.jpg.npy"), [[0.5, 0.25, 7]], atol=1e-4)
+    assert len(load_rows(depth_dir / "front/b.jpg.npy")) > 0
+    assert load_rows(depth_dir / "front/c.jpg.npy").shape == (0, 3)
+    assert load_rows(depth_dir / "up/d.jpg.npy").shape == (0, 3)
 
     assert generate_depth.generate_depths(args, Estimator, 2, 2) == 0
     assert runs == [2]

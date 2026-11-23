@@ -19,17 +19,16 @@ an empty one. Existing files are kept, so an interrupted run resumes by
 predicting only the groups that still have an image without one.
 
 The output is one "<image_name>.npy" per image under --depth-dir, holding the
-(M, 3) float32 columns (x, y, depth) that the trainer supervises on: depth in
-the frame of the input model, and x and y normalized to [0, 1] so the file
-survives whatever resolution the trainer loads the images at. Sampling only the
-supervised pixels keeps the stage's output megabytes rather than gigabytes.
+(x, y, depth) rows that the trainer supervises on, in mapping/depth/depth_rows.py's
+format: depth in the frame of the input model, and x and y normalized to [0, 1].
+Sampling only the supervised pixels keeps the stage's output megabytes rather
+than gigabytes.
 
 Run as a script, it predicts with DA3 on Triton, reached at --triton-url or
 $TRITON_URL; mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
 """
 
 import argparse
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -39,6 +38,7 @@ import cv2
 import numpy as np
 
 from mapping.depth.covisibility_groups import Frame, centre_and_rotation, select_groups
+from mapping.depth.depth_rows import save_rows
 from mapping.depth.scale_alignment import align_sparse_depth, median_relative_error, pose_depth_scale
 from mapping.file_listing import files_under
 from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
@@ -197,15 +197,6 @@ def depth_groups(points, observations, group_size, minimum_group_size):
 def pending_groups(groups, done):
     """The groups with at least one image not in `done`."""
     return [group for group in groups if not set(group) <= done]
-
-
-def save_rows(path, rows):
-    """np.save through a temporary file, so an interrupted run leaves no partial file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = path.with_name(f"{path.name}.partial")
-    with open(temporary_path, "wb") as file:
-        np.save(file, rows)
-    os.replace(temporary_path, path)
 
 
 def parse_depth_arguments(parser):

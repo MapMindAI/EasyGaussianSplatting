@@ -131,7 +131,7 @@ def attach_depths(dataset_class):
     parser.point_indices -- a dict with no entry at all for a cube face SfM
     barely covered. That path is switched off and answered here with what
     generate_depth.py wrote, which is denser and covers the textureless surfaces
-    SfM never triangulated. The file stores x and y normalized and depth in the
+    SfM never triangulated. The file (mapping/depth/depth_rows.py) stores x and y normalized and depth in the
     COLMAP frame, so both are put into the frame the renderer works in here:
     pixels of the image as loaded, and the parser's normalized world. The scale
     comes off the parser rather than a module global so it survives a dataloader
@@ -145,7 +145,7 @@ def attach_depths(dataset_class):
         image_name = self.parser.image_names[self.indices[item]]
         depth_path = os.path.join(self.parser.data_dir, "depths", f"{image_name}.npy")
         rows = (
-            np.load(depth_path)
+            load_rows(depth_path)
             if f"{image_name}.npy" in listed_files(self, "depths")
             else np.zeros((0, 3), dtype=np.float32)
         )
@@ -324,6 +324,7 @@ from datasets.colmap import Dataset, Parser  # noqa: E402
 from datasets.normalize import transform_points  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
+from mapping.depth.depth_rows import load_rows  # noqa: E402
 from mapping.depth.point_cloud import POINT_CLOUD_NAME, read_point_cloud  # noqa: E402
 from mapping.file_listing import files_under  # noqa: E402
 from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402

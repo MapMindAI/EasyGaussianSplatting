@@ -184,6 +184,9 @@ predicted (an up/down face, an image in no group, or a skipped group) gets an
 empty one, so a skipped group is not retried. Existing files are kept, so
 rerunning an interrupted stage predicts only the groups that still have an
 image without a file; `--overwrite` regenerates them all.
+Each row takes 6 bytes: x and y as uint16 fixed point, depth as float16
+(`mapping/depth/depth_rows.py`). Convert files written in the earlier 12-byte
+float32 format in place with `python3 -m mapping.depth.depth_rows <depth_dir>`.
 `--samples-per-image` (4096) sets how many pixels each `.npy` keeps,
 `--min-confidence` (0.5) the confidence floor, and `--min-depth` (0.1) /
 `--max-depth` (unbounded) discard depths outside that range, in the depth
