@@ -97,10 +97,21 @@ def test_upsample_interpolates_between_valid_pixels_only():
     assert (upsampled[:, 4:] == 0).all()
 
 
-def test_depth_rows_normalize_the_upsampled_pixels():
-    rows = depth_rows(np.full((2, 2), 4.0, dtype=np.float32), 5, 3)
+def test_depth_rows_put_each_kept_map_pixel_at_its_centre_in_the_image():
+    depth = np.array([[4.0, 5.0], [6.0, 0.0]], dtype=np.float32)
 
-    assert len(rows) == 15
-    assert rows[:, 0].min() == 0 and rows[:, 0].max() == 1
-    assert rows[:, 1].min() == 0 and rows[:, 1].max() == 1
-    assert (rows[:, 2] == 4).all()
+    # A 2 x 2 map of a 9 x 5 image: each cell covers 4.5 x 2.5 pixels, centred
+    # on pixel x 1.75 and 6.25, y 0.75 and 3.25.
+    rows = depth_rows(depth, 9, 5)
+
+    np.testing.assert_allclose(rows, [
+        [1.75 / 8, 0.75 / 4, 4.0],
+        [6.25 / 8, 0.75 / 4, 5.0],
+        [1.75 / 8, 3.25 / 4, 6.0],
+    ])
+
+
+def test_depth_rows_stay_inside_an_image_smaller_than_the_map():
+    rows = depth_rows(np.ones((4, 4), dtype=np.float32), 2, 2)
+
+    assert rows[:, :2].min() == 0 and rows[:, :2].max() == 1

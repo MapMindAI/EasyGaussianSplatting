@@ -187,8 +187,9 @@ Each `.npz` is the model's full output at its own resolution, unfiltered
 (`mapping/depth/depth_maps.py`): depth as float16 in the COLMAP frame,
 confidence as a uint8 in steps of 0.05, and the group's scale; about 0.5 MB
 for VGGT-Omega's 416x416. The point cloud merge and training filter it when
-they load it, then interpolate it to the image size, only between kept
-pixels, so the filter can change without regenerating. They drop pixels below
+they load it, so the filter can change without regenerating, then take one
+point per kept map pixel, at its centre in the image as loaded: interpolating
+to full resolution would add about 20 times the points and no information. They drop pixels below
 `--min-confidence` (0.5; `depth_min_confidence` in the parameters), outside
 `--min-depth` (0.1) to `--max-depth` (5.0), in the depth model's units before
 scaling, under the training masks, and on colour and depth discontinuities,
@@ -211,8 +212,8 @@ export at `models/vggt_omega_416.onnx` (with its `.onnx.data`), or pass
 ignoring aspect ratio, and the maps kept at that size. Groups of two views or more
 are kept. Whenever an image was predicted, it merges every `.npz` into
 `<model_dir>/depth_points.ply` (`mapping/depth/point_cloud.py`): each map,
-filtered as above with the masks in `--mask-dir` and interpolated to its image, lifted through the COLMAP intrinsics and poses,
-coloured from the image, and averaged per voxel, with torch on the GPU when
+filtered as above with the masks in `--mask-dir`, lifted pixel by pixel through
+the COLMAP intrinsics and poses, coloured from the image, and averaged per voxel, with torch on the GPU when
 there is one. `--voxel-factor` (0.001) sets the voxel edge as a fraction of the
 scene scale, the largest camera distance from the cameras' mean, as gsplat
 measures it; the server and training scripts pass the parameters file's

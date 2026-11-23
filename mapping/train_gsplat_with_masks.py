@@ -134,9 +134,9 @@ def attach_depths(dataset_class, depth_filter):
     generate_depth.py wrote, which is denser and covers the textureless surfaces
     SfM never triangulated. The file holds the depth model's full output at its
     own resolution in the COLMAP frame (mapping/depth/depth_maps.py); it is
-    filtered by `depth_filter`, the image's training mask, and edges,
-    interpolated to the image as loaded, and put into the parser's normalized
-    world. The scale comes off the parser rather than a module global so it
+    filtered by `depth_filter`, the image's training mask, and edges, each
+    kept map pixel placed at its centre in the image as loaded, and put into
+    the parser's normalized world. The scale comes off the parser rather than a module global so it
     survives a dataloader worker that re-imports instead of forking.
     """
     original_getitem = dataset_class.__getitem__

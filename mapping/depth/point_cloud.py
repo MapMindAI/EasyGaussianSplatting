@@ -174,11 +174,11 @@ def image_points(rows, image, intrinsics, camera_from_world, device):
     rows = tensor(rows)
     image = torch.as_tensor(image, device=device)
     height, width = image.shape[:2]
-    columns = torch.round(rows[:, 0] * (width - 1)).long()
-    lines = torch.round(rows[:, 1] * (height - 1)).long()
+    pixels = rows[:, :2] * tensor([width - 1, height - 1])
+    columns, lines = torch.round(pixels).long().unbind(dim=1)
     # COLMAP puts pixel centres at half-integer coordinates.
-    pixels = torch.stack([columns, lines, torch.zeros_like(lines)], dim=1) + tensor([0.5, 0.5, 1])
-    camera_points = pixels @ tensor(np.linalg.inv(intrinsics)).T * rows[:, 2:]
+    rays = torch.cat([pixels + 0.5, torch.ones_like(pixels[:, :1])], dim=1)
+    camera_points = rays @ tensor(np.linalg.inv(intrinsics)).T * rows[:, 2:]
     rotation, translation = tensor(camera_from_world[:, :3]), tensor(camera_from_world[:, 3])
     return (camera_points - translation) @ rotation, image[lines, columns].flip(-1).double()
 

@@ -5,8 +5,8 @@ its own resolution (416 x 416 for VGGT-Omega): `depth` as float16, already
 scaled into the frame of the input model, `confidence` as a uint8 count of
 CONFIDENCE_STEP, and the group's `scale` from model units to that frame. An
 image without depth gets empty maps. Nothing is filtered on write: readers
-choose a DepthFilter, apply it with supervised_depth, and interpolate the
-result to whatever resolution they load the image at with depth_rows.
+choose a DepthFilter, apply it with supervised_depth, and take one point per
+kept map pixel, at its centre in the image as they load it, with depth_rows.
 """
 
 import os
@@ -128,7 +128,7 @@ def supervised_depth(depth_map, grayscale, mask, depth_filter):
 
 
 def upsample(depth, width, height):
-    """`depth` bilinearly interpolated to `height` x `width`, only between
+    """`depth` bilinearly interpolated to `height` x `width` for display, only between
     positive pixels: a pixel any 0 contributes to stays 0 rather than blending
     a surface into the background."""
     depth = np.asarray(depth, dtype=np.float32)
@@ -141,12 +141,17 @@ def upsample(depth, width, height):
 
 
 def depth_rows(depth, width, height):
-    """(N, 3) float32 (x, y, depth) rows of the positive pixels of `depth`
-    interpolated to `width` x `height`, with x and y normalized to [0, 1]."""
-    depth = upsample(depth, width, height)
+    """(N, 3) float32 (x, y, depth) rows, one per positive pixel of `depth`,
+    placed at that pixel's centre in a `width` x `height` image of the same
+    view. x and y are pixel coordinates over (size - 1), clipped to [0, 1].
+
+    The map holds every pixel the model predicted; interpolating it to the
+    image's resolution would only add points carrying no new information."""
+    map_height, map_width = depth.shape
     lines, columns = np.nonzero(depth > 0)
     rows = np.empty((len(lines), 3), dtype=np.float32)
-    np.multiply(columns, np.float32(1 / (width - 1)), out=rows[:, 0], casting="unsafe")
-    np.multiply(lines, np.float32(1 / (height - 1)), out=rows[:, 1], casting="unsafe")
+    rows[:, 0] = ((columns + 0.5) * (width / map_width) - 0.5) / (width - 1)
+    rows[:, 1] = ((lines + 0.5) * (height / map_height) - 0.5) / (height - 1)
+    np.clip(rows[:, :2], 0, 1, out=rows[:, :2])
     rows[:, 2] = depth[lines, columns]
     return rows

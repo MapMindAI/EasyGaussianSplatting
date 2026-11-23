@@ -275,9 +275,9 @@ skips are the ones SfM barely covered anyway.
 What lands in `depths/` is one `<image_name>.npz` per image: the model's full,
 unfiltered 416x416 depth and confidence, with the group's scale
 (`mapping/depth/depth_maps.py`). The trainer filters it by
-`depth_min_confidence`, the image's mask, and edges, interpolates it to the
-image as loaded, whatever `data_factor` is, and converts depth into gsplat's
-normalized world.
+`depth_min_confidence`, the image's mask, and edges, supervises each kept map
+pixel at its centre in the image as loaded, whatever `data_factor` is, and
+converts depth into gsplat's normalized world.
 
 Three limits to know. gsplat's depth term is an L1 on *inverse* depth, so
 near-field error dominates and far geometry is barely constrained -- and a
