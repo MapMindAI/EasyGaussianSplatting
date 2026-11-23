@@ -3,9 +3,9 @@
 
     python3 -m mapping.vggt_omega.example output/ a.jpg b.jpg c.jpg
 
-Writes "<stem>_depth.npy" (the raw (H, W) float32 depth, in the model's
-arbitrary scale), "<stem>_confidence.npy" (its (H, W) float32 confidence, at
-least 0.2), and "<stem>_depth.png" (a colourized overlay) per image, and
+Writes "<stem>_depth.npy" (the raw float32 depth at the model's resolution, in
+its arbitrary scale), "<stem>_confidence.npy" (its float32 confidence, at least
+0.2), and "<stem>_depth.png" (a colourized overlay at that size) per image, and
 "points.ply": every image's confident pixels lifted through its predicted
 camera into the model's shared world frame, coloured from the image.
 """
@@ -64,6 +64,8 @@ def main():
         result["camera_from_world_list"],
         result["intrinsics_list"],
     ):
+        # The maps are at the model's resolution; colour them from the image at that size.
+        image = cv2.resize(image, depth.shape[::-1], interpolation=cv2.INTER_AREA)
         np.save(args.output_dir / f"{path.stem}_depth.npy", depth)
         np.save(args.output_dir / f"{path.stem}_confidence.npy", confidence)
         cv2.imwrite(str(args.output_dir / f"{path.stem}_depth.png"), depth_overlay(image, depth))

@@ -70,13 +70,14 @@ class VggtOmegaDepthEstimator:
         self._run_lock = threading.Lock()
 
     def run(self, images_bgr):
-        """Per input image: `depth_list` and `depth_conf_list` (H, W) maps,
-        `camera_from_world_list` (3, 4), and `intrinsics_list` (3, 3).
+        """Per input image: `depth_list` and `depth_conf_list` (H, W) maps at
+        the model's own resolution, `camera_from_world_list` (3, 4), and
+        `intrinsics_list` (3, 3) for those maps.
 
-        Confidence is the model's, times CONFIDENCE_SCALE. Each image is resized to the model's input, ignoring aspect ratio, and
-        its maps and intrinsics are scaled back to the image's own resolution.
-        Depths and translations share one arbitrary scale across the call, in
-        a world frame of the model's choosing.
+        Confidence is the model's, times CONFIDENCE_SCALE. Each image is
+        resized to the model's input, ignoring aspect ratio. Depths and
+        translations share one arbitrary scale across the call, in a world
+        frame of the model's choosing.
         """
         frames = np.stack([
             cv2.cvtColor(
@@ -92,19 +93,12 @@ class VggtOmegaDepthEstimator:
                 self._run_options,
             )
         cameras = [
-            decode_pose(pose_encoding, *image.shape[:2])
-            for pose_encoding, image in zip(pose_encodings[0], images_bgr)
+            decode_pose(pose_encoding, self._height, self._width) for pose_encoding in pose_encodings[0]
         ]
-
-        def at_source_size(maps):
-            return [
-                cv2.resize(value, (image.shape[1], image.shape[0]), interpolation=cv2.INTER_LINEAR)
-                for value, image in zip(maps.reshape(len(images_bgr), self._height, self._width), images_bgr)
-            ]
-
+        shape = (len(images_bgr), self._height, self._width)
         return {
-            "depth_list": at_source_size(depth),
-            "depth_conf_list": at_source_size(confidence * CONFIDENCE_SCALE),
+            "depth_list": list(depth.reshape(shape)),
+            "depth_conf_list": list((confidence * CONFIDENCE_SCALE).reshape(shape)),
             "camera_from_world_list": [camera_from_world for camera_from_world, _ in cameras],
             "intrinsics_list": [intrinsics for _, intrinsics in cameras],
         }

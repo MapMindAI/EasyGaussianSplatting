@@ -2,7 +2,7 @@
 """Predict per-image depth for a COLMAP model with VGGT-Omega, run locally.
 
 The same stage as mapping/depth/generate_depth.py -- covisibility grouping,
-scale fitting to COLMAP, filtering, and the (x, y, depth) output -- with the
+scale fitting to COLMAP, filtering, and the depth map output -- with the
 ONNX model at --model in place of the Triton DA3 one. It then merges every
 written depth into <model_dir>/depth_points.ply, the cloud gsplat seeds its
 Gaussians from (see mapping/depth/point_cloud.py), rebuilding it whenever an

@@ -146,7 +146,6 @@ def depth_command(model_directory, voxel_factor):
         "python3", str(DEPTH_ENTRYPOINT),
         str(model_directory), str(model_directory / "depths"),
         "--mask-dir", str(model_directory / "masks"),
-        "--samples-per-image", "-1",
         "--voxel-factor", f"{voxel_factor:.7g}",
     ]
 

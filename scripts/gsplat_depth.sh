@@ -20,7 +20,6 @@ if [ -n "${VOXEL_FACTOR}" ]; then
   python3 -m mapping.vggt_omega.generate_depth \
     "${WORKSPACE_PATH}" "${WORKSPACE_PATH}/depths" \
     --mask-dir "${WORKSPACE_PATH}/masks" \
-    --samples-per-image -1 \
     --voxel-factor "${VOXEL_FACTOR}"
 else
   echo "Depth disabled; skipping depth generation"

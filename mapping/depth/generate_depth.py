@@ -18,11 +18,10 @@ up/down face, a frame in no covisible group, or one whose group failed -- gets
 an empty one. Existing files are kept, so an interrupted run resumes by
 predicting only the groups that still have an image without one.
 
-The output is one "<image_name>.npy" per image under --depth-dir, holding the
-(x, y, depth) rows that the trainer supervises on, in mapping/depth/depth_rows.py's
-format: depth in the frame of the input model, and x and y normalized to [0, 1].
-Sampling only the supervised pixels keeps the stage's output megabytes rather
-than gigabytes.
+The output is one "<image_name>.npy" per image under --depth-dir: the filtered
+depth map at the model's own resolution, scaled into the frame of the input
+model (see mapping/depth/depth_maps.py). Readers interpolate it to the image
+resolution they load, so the stage writes well under a megabyte per image.
 
 Run as a script, it predicts with DA3 on Triton, reached at --triton-url or
 $TRITON_URL; mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
@@ -38,7 +37,7 @@ import cv2
 import numpy as np
 
 from mapping.depth.covisibility_groups import Frame, centre_and_rotation, select_groups
-from mapping.depth.depth_rows import save_rows
+from mapping.depth.depth_maps import save_depth_map, upsample
 from mapping.depth.scale_alignment import align_sparse_depth, median_relative_error, pose_depth_scale
 from mapping.file_listing import files_under
 from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
@@ -47,18 +46,22 @@ from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
 # to match the deployed model (see third_party/EasyTensorRT).
 GROUP_SIZE = 5
 SKIPPED_DEPTH_FACES = {"up", "down"}
-EDGE_DILATION = 2
+# Edges are found on the model-resolution map, where one pixel already spans
+# about 5 source pixels of a 1920 image, so they are not grown further.
+EDGE_DILATION = 0
 DEPTH_EDGE_THRESHOLD = 0.15
 # Why a group produced nothing.
 UNREADABLE, UNSCALED = "unreadable", "unscaled"
 
 
-def sample_at(image_values, points):
-    """`image_values` read at each integer-rounded (x, y) in `points`."""
-    height, width = image_values.shape[:2]
-    columns = np.clip(np.rint(points[:, 0]).astype(np.int64), 0, width - 1)
-    rows = np.clip(np.rint(points[:, 1]).astype(np.int64), 0, height - 1)
-    return image_values[rows, columns]
+def sample_at(values, points, image_shape):
+    """`values`, a map of an image of `image_shape` resized to its own shape,
+    read at the cell holding each COLMAP (x, y) in `points`, whose pixel
+    centres sit at half-integer coordinates."""
+    height, width = values.shape[:2]
+    columns = np.floor(points[:, 0] * width / image_shape[1]).astype(np.int64)
+    lines = np.floor(points[:, 1] * height / image_shape[0]).astype(np.int64)
+    return values[np.clip(lines, 0, height - 1), np.clip(columns, 0, width - 1)]
 
 
 def supervision_mask(depth, confidence, mask, min_confidence, min_depth, max_depth):
@@ -76,7 +79,7 @@ def supervision_mask(depth, confidence, mask, min_confidence, min_depth, max_dep
 
 
 def depth_edge_mask(image, depth):
-    """Pixels near colour or depth discontinuities, where DA3 is unreliable."""
+    """Pixels near colour or depth discontinuities, where predicted depth is unreliable."""
     grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     colour_edges = cv2.Canny(grayscale, 100, 200) > 0
     valid = np.isfinite(depth) & (depth > 0)
@@ -86,35 +89,12 @@ def depth_edge_mask(image, depth):
     gradient_y = cv2.Sobel(log_depth, cv2.CV_32F, 0, 1, ksize=3)
     depth_edges = valid & (np.hypot(gradient_x, gradient_y) > DEPTH_EDGE_THRESHOLD)
     edges = colour_edges | depth_edges
+    if EDGE_DILATION == 0:
+        return edges
     kernel = cv2.getStructuringElement(
         cv2.MORPH_ELLIPSE, (2 * EDGE_DILATION + 1, 2 * EDGE_DILATION + 1)
     )
     return cv2.dilate(edges.astype(np.uint8), kernel).astype(bool)
-
-
-def supervised_points(
-    depth, confidence, mask, count, min_confidence, min_depth, max_depth, generator
-):
-    """Up to `count` (x, y, depth) rows worth supervising, as float32.
-
-    Keeps confident, positive-depth pixels that the training mask also keeps,
-    then subsamples: neighbouring pixels of a smooth depth map say almost the
-    same thing, so a few thousand per image carry the geometry at a fraction of
-    the size. x and y come back normalized to [0, 1].
-    """
-    usable = supervision_mask(
-        depth, confidence, mask, min_confidence, min_depth, max_depth
-    )
-    rows, columns = np.nonzero(usable)
-    if rows.size == 0:
-        return np.zeros((0, 3), dtype=np.float32)
-    if count > 0 and rows.size > count:
-        chosen = generator.choice(rows.size, size=count, replace=False)
-        rows, columns = rows[chosen], columns[chosen]
-    height, width = depth.shape[:2]
-    return np.stack(
-        [columns / (width - 1), rows / (height - 1), depth[rows, columns]], axis=1
-    ).astype(np.float32)
 
 
 def depth_overlay(image, depth, alpha=0.5):
@@ -204,9 +184,6 @@ def parse_depth_arguments(parser):
     parser.add_argument("model_dir", type=Path, help="holds images/ and sparse/")
     parser.add_argument("depth_dir", type=Path)
     parser.add_argument(
-        "--samples-per-image", type=int, default=4096, help="supervised pixels kept"
-    )
-    parser.add_argument(
         "--min-confidence", type=float, default=0.5, help="depth confidence floor"
     )
     parser.add_argument(
@@ -237,7 +214,7 @@ def parse_depth_arguments(parser):
 
 
 def generate_depths(args, make_estimator, group_size, minimum_group_size):
-    """Write depth rows for `args.model_dir` with `make_estimator()`'s model,
+    """Write depth maps for `args.model_dir` with `make_estimator()`'s model,
     over groups of `minimum_group_size` to `group_size` images.
 
     The estimator's run(images_bgr) returns per-image `depth_list` and
@@ -306,7 +283,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
         return mask > 127
 
     def estimate(group):
-        """One group's rows and sparse error per image, or (None, why)."""
+        """One group's depth maps and sparse error per image, or (None, why)."""
         images = []
         for name in group:
             image = cv2.imread(str(images_dir / name))
@@ -317,8 +294,8 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
 
         result = estimator.run(images)
         predicted = [
-            sample_at(depth, observations[name].pixels)
-            for name, depth in zip(group, result["depth_list"])
+            sample_at(depth, observations[name].pixels, image.shape)
+            for name, image, depth in zip(group, images, result["depth_list"])
         ]
         pose_scale = pose_depth_scale(
             result["camera_from_world_list"],
@@ -335,10 +312,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
             return None, UNSCALED
         group_scaled_by_cameras.append(pose_scale is not None)
 
-        # Seeded per group so a rerun samples the same pixels; the groups run
-        # on worker threads, which would otherwise interleave the draws.
-        generator = np.random.default_rng(0)
-        rows_by_name = []
+        maps_by_name = []
         for name, image, depth, confidence, sparse_predicted in zip(
             group, images, result["depth_list"], result["depth_conf_list"], predicted
         ):
@@ -353,26 +327,24 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
                 args.min_depth * scale,
                 args.max_depth * scale,
             )
-            filtered_depth = np.where(usable & ~depth_edge_mask(image, depth), depth, 0)
-            rows = supervised_points(
-                filtered_depth, None, None, args.samples_per_image, 0, None, None, generator
-            )
-            # Only the debug overlay needs the full-resolution maps back.
-            overlay = (image, filtered_depth) if args.debug_dir is not None else None
-            rows_by_name.append((name, rows, error, overlay))
-        return rows_by_name, None
+            small_image = cv2.resize(image, depth.shape[::-1], interpolation=cv2.INTER_AREA)
+            filtered_depth = np.where(usable & ~depth_edge_mask(small_image, depth), depth, 0)
+            overlay_image = image if args.debug_dir is not None else None
+            maps_by_name.append((name, filtered_depth, error, overlay_image))
+        return maps_by_name, None
 
-    def write_best(rows_by_name):
-        """Save each image's rows unless an earlier group fitted it better."""
-        for name, rows, error, overlay in rows_by_name:
+    def write_best(maps_by_name):
+        """Save each image's map unless an earlier group fitted it better."""
+        for name, depth, error, image in maps_by_name:
             if name in best_error and error >= best_error[name]:
                 continue
             best_error[name] = error
-            save_rows(args.depth_dir / f"{name}.npy", rows)
-            if overlay is not None:
+            save_depth_map(args.depth_dir / f"{name}.npy", depth)
+            if image is not None:
                 overlay_path = depth_debug_path(args.debug_dir, name)
                 overlay_path.parent.mkdir(parents=True, exist_ok=True)
-                cv2.imwrite(str(overlay_path), depth_overlay(*overlay))
+                full_depth = upsample(depth, image.shape[1], image.shape[0])
+                cv2.imwrite(str(overlay_path), depth_overlay(image, full_depth))
 
     # Groups share frames, so the writes stay on this thread: two workers
     # saving the same image's file would race.
@@ -386,11 +358,11 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
             pool.map(estimate, groups), total=len(groups), desc="Depth", unit="group",
             dynamic_ncols=True,
         )
-        for rows_by_name, failure in progress:
+        for maps_by_name, failure in progress:
             if failure is not None:
                 skipped[failure] += 1
             else:
-                write_best(rows_by_name)
+                write_best(maps_by_name)
             progress.set_postfix(
                 images=len(best_error), unscaled=skipped[UNSCALED],
                 unreadable=skipped[UNREADABLE], refresh=False,
@@ -399,7 +371,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     predicted = len(best_error) - len(done)
     without_depth = sorted(set(observations) - set(best_error))
     for name in without_depth:
-        save_rows(args.depth_dir / f"{name}.npy", np.zeros((0, 3), dtype=np.float32))
+        save_depth_map(args.depth_dir / f"{name}.npy", np.zeros((0, 0)))
 
     errors = [error for error in best_error.values() if np.isfinite(error)]
     print(

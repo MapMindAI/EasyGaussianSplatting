@@ -266,16 +266,15 @@ against the model's predicted ones, before anything is written. A group with
 neither enough sparse points nor consistent cameras is skipped rather than
 written at a guessed scale, and the stage reports how many it skipped. An image
 in several groups keeps the best-matching prediction. An image left without
-rows trains without a depth term:
+depth trains without a depth term:
 gsplat's own sparse-point depths do not stand in for them, since the images it
 skips are the ones SfM barely covered anyway.
 
-What lands in `depths/` is one `<image_name>.npy` per image holding rows of
-`(x, y, depth)`, 6 bytes each (`mapping/depth/depth_rows.py`): the sampled
-pixels worth supervising rather than a dense map, which is the difference
-between megabytes and gigabytes. `x` and `y` are normalized to `[0, 1]`, so
-`data_factor` cannot desynchronize them from the images the trainer loads; the
-trainer scales them back and converts depth into gsplat's normalized world.
+What lands in `depths/` is one `<image_name>.npy` per image: the filtered depth
+map at the model's 416x416 resolution, float16, 0 where there is no depth
+(`mapping/depth/depth_maps.py`). The trainer interpolates it to the image as
+loaded, whatever `data_factor` is, and converts depth into gsplat's normalized
+world.
 
 Three limits to know. gsplat's depth term is an L1 on *inverse* depth, so
 near-field error dominates and far geometry is barely constrained -- and a

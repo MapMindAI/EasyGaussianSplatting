@@ -269,9 +269,8 @@ def test_depth_reads_the_model_and_writes_beside_it(tmp_path, parameters):
 
     assert str(server.DEPTH_ENTRYPOINT) in command
     assert str(tmp_path / "depths") in command
-    assert command[-6:] == [
-        "--mask-dir", str(tmp_path / "masks"), "--samples-per-image", "-1",
-        "--voxel-factor", "0.002",
+    assert command[-4:] == [
+        "--mask-dir", str(tmp_path / "masks"), "--voxel-factor", "0.002",
     ]
 
 
