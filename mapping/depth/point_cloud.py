@@ -35,12 +35,13 @@ def scene_scale(camera_centers):
 # a million voxel edges (a thousand scene scales) from the origin is dropped.
 _AXIS_BITS = 21
 _AXIS_OFFSET = 1 << (_AXIS_BITS - 1)
-# Voxels of unmerged sums held before folding them into the running total.
+_AXIS_MASK = (1 << _AXIS_BITS) - 1
+# New voxels buffered before folding them into the running total.
 _FOLD_ROWS = 8_000_000
 
 
 def _reduce_by_key(keys, values):
-    """(unique keys, the (N, C) `values` rows summed per key)."""
+    """(sorted unique keys, the (N, C) `values` rows summed per key)."""
     import torch
 
     unique_keys, inverse = torch.unique(keys, return_inverse=True)
@@ -49,13 +50,19 @@ def _reduce_by_key(keys, values):
 
 
 def voxel_sums(points, colours, voxel_size):
-    """(packed voxel keys, (V, 7) sums of count, point, and colour) per occupied
-    voxel, from (N, 3) float64 tensors."""
+    """(sorted packed voxel keys, (V, 7) float32 sums of count, position within
+    the voxel in voxel edges, and colour) per occupied voxel, from (N, 3) tensors.
+
+    Positions are summed relative to their voxel so float32 keeps them exact
+    however far the voxel is from the origin.
+    """
     import torch
 
-    indices = torch.floor(points / voxel_size).long() + _AXIS_OFFSET
-    inside = ((indices >= 0) & (indices < 1 << _AXIS_BITS)).all(dim=1)
-    values = torch.cat([torch.ones_like(points[:, :1]), points, colours], dim=1)
+    scaled = points / voxel_size
+    corners = torch.floor(scaled)
+    indices = corners.long() + _AXIS_OFFSET
+    inside = ((indices >= 0) & (indices <= _AXIS_MASK)).all(dim=1)
+    values = torch.cat([torch.ones_like(scaled[:, :1]), scaled - corners, colours], dim=1).float()
     if not inside.all():
         indices, values = indices[inside], values[inside]
     keys = (indices[:, 0] << 2 * _AXIS_BITS) | (indices[:, 1] << _AXIS_BITS) | indices[:, 2]
@@ -69,10 +76,44 @@ def merge_voxel_sums(parts):
     return _reduce_by_key(torch.cat([keys for keys, _ in parts]), torch.cat([sums for _, sums in parts]))
 
 
-def voxel_means(part):
+def _add_existing(total, part):
+    """Adds `part`'s sums into the voxels `total` already has, in place, and
+    returns the rest of `part`."""
+    import torch
+
+    keys, sums = total
+    part_keys, part_sums = part
+    position = torch.searchsorted(keys, part_keys).clamp_(max=len(keys) - 1)
+    found = keys[position] == part_keys
+    sums.index_add_(0, position[found], part_sums[found])
+    return part_keys[~found], part_sums[~found]
+
+
+def _insert_new(total, new):
+    """`total` with the voxels of `new`, which it does not have, inserted in key order."""
+    import torch
+
+    keys, sums = total
+    new_keys, new_sums = new
+    destination = torch.searchsorted(keys, new_keys)
+    destination += torch.arange(len(new_keys), device=keys.device)
+    existing = torch.ones(len(keys) + len(new_keys), dtype=torch.bool, device=keys.device)
+    existing[destination] = False
+    merged_keys = torch.empty(len(existing), dtype=keys.dtype, device=keys.device)
+    merged_keys[destination], merged_keys[existing] = new_keys, keys
+    merged_sums = torch.empty((len(existing), sums.shape[1]), dtype=sums.dtype, device=sums.device)
+    merged_sums[destination], merged_sums[existing] = new_sums, sums
+    return merged_keys, merged_sums
+
+
+def voxel_means(part, voxel_size):
     """Each voxel's mean point and colour, as NumPy arrays."""
-    sums = part[1].cpu().numpy()
-    return sums[:, 1:4] / sums[:, :1], sums[:, 4:] / sums[:, :1]
+    keys, sums = part[0].cpu().numpy(), part[1].cpu().numpy()
+    indices = np.column_stack([
+        (keys >> 2 * _AXIS_BITS) & _AXIS_MASK, (keys >> _AXIS_BITS) & _AXIS_MASK, keys & _AXIS_MASK,
+    ]) - _AXIS_OFFSET
+    counts = sums[:, :1].astype(np.float64)
+    return (indices + sums[:, 1:4] / counts) * voxel_size, sums[:, 4:] / counts
 
 
 def write_point_cloud(path, points, colours_rgb):
@@ -130,23 +171,33 @@ def image_points(rows, image, intrinsics, camera_from_world, device):
 
 def depth_point_cloud(images, voxel_size):
     """Merged (points, uint8 RGB colours) over `images`, an iterable of
-    (rows, image_bgr, intrinsics, camera_from_world), on the GPU when there is one."""
+    (rows, image_bgr, intrinsics, camera_from_world), on the GPU when there is one.
+
+    Like a voxel hash grid, each image adds into the voxels already seen in
+    place; only voxels new to the total are buffered, and inserted once they
+    reach a quarter of it, so memory stays near two copies of the total.
+    """
     import torch
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # Folding once the parts outweigh the total re-sorts it only as often as it doubles.
-    parts, held_rows, folded_rows = [], 0, 0
+    total, new_parts, new_rows = None, [], 0
     for rows, image, intrinsics, camera_from_world in images:
         if not len(rows):
             continue
-        parts.append(voxel_sums(*image_points(rows, image, intrinsics, camera_from_world, device), voxel_size))
-        held_rows += len(parts[-1][0])
-        if held_rows > max(_FOLD_ROWS, folded_rows):
-            parts = [merge_voxel_sums(parts)]
-            held_rows, folded_rows = 0, len(parts[0][0])
-    if not parts:
+        part = voxel_sums(*image_points(rows, image, intrinsics, camera_from_world, device), voxel_size)
+        if total is None:
+            total = part
+            continue
+        new_parts.append(_add_existing(total, part))
+        new_rows += len(new_parts[-1][0])
+        if new_rows > max(_FOLD_ROWS, len(total[0]) // 4):
+            total = _insert_new(total, merge_voxel_sums(new_parts))
+            new_parts, new_rows = [], 0
+    if total is None:
         return np.zeros((0, 3)), np.zeros((0, 3), dtype=np.uint8)
-    points, colours = voxel_means(merge_voxel_sums(parts))
+    if new_parts:
+        total = _insert_new(total, merge_voxel_sums(new_parts))
+    points, colours = voxel_means(total, voxel_size)
     return points, np.clip(np.rint(colours), 0, 255).astype(np.uint8)
 
 
@@ -158,6 +209,7 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
     from tqdm import tqdm
 
     from mapping.depth.covisibility_groups import centre_and_rotation
+    from mapping.file_listing import files_under
 
     reconstruction = pycolmap.Reconstruction(model_dir / "sparse" / "0")
     poses = {}
@@ -170,9 +222,10 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor):
     voxel_size = voxel_factor * scale
     print(f"Voxel edge {voxel_size:.4g}: {voxel_factor} of the scene scale {scale:.4g}", flush=True)
 
+    written = set(files_under(depth_dir))
     with_depth = [
         image for image in reconstruction.images.values()
-        if (depth_dir / f"{image.name}.npy").exists()
+        if depth_dir / f"{image.name}.npy" in written
     ]
 
     def images():

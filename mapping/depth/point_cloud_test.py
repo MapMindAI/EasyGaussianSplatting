@@ -57,7 +57,7 @@ def test_voxels_average_points_and_colours_across_parts():
     first = voxel_sums(tensor([[0.1, 0.1, 0.1], [0.3, 0.1, 0.1]]), tensor([[0, 0, 0], [100, 0, 0]]), 1.0)
     second = voxel_sums(tensor([[0.2, 0.4, 0.1], [5.5, 0.5, 0.5]]), tensor([[50, 0, 0], [9, 9, 9]]), 1.0)
 
-    points, colours = voxel_means(merge_voxel_sums([first, second]))
+    points, colours = voxel_means(merge_voxel_sums([first, second]), 1.0)
 
     order = np.argsort(points[:, 0])
     np.testing.assert_allclose(points[order], [[0.2, 0.2, 0.1], [5.5, 0.5, 0.5]])
@@ -68,10 +68,11 @@ def test_voxels_average_points_and_colours_across_parts():
 def test_voxels_on_either_side_of_the_origin_stay_apart_and_far_points_are_dropped():
     points = tensor([[-0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [-0.4, 0.6, 0.5], [3e6, 0, 0]])
 
-    keys, sums = voxel_sums(points, tensor(np.zeros((4, 3))), 1.0)
+    part = voxel_sums(points, tensor(np.zeros((4, 3))), 1.0)
 
-    assert sorted(sums[:, 0].tolist()) == [1, 2]
-    np.testing.assert_allclose(sorted(sums[:, 1].tolist()), [-0.9, 0.5])
+    means, _ = voxel_means(part, 1.0)
+    assert sorted(part[1][:, 0].tolist()) == [1, 2]
+    np.testing.assert_allclose(sorted(means[:, 0].tolist()), [-0.45, 0.5], atol=1e-6)
 
 
 @requires_torch
@@ -90,9 +91,9 @@ def test_depth_point_cloud_folds_to_the_same_cloud_as_one_merge(monkeypatch):
 
     expected_points, expected_colours = voxel_means(merge_voxel_sums([
         voxel_sums(*image_points(*item, "cpu"), 0.2) for item in images
-    ]))
+    ]), 0.2)
     order, expected_order = np.lexsort(points.T), np.lexsort(expected_points.T)
-    np.testing.assert_allclose(points[order], expected_points[expected_order])
+    np.testing.assert_allclose(points[order], expected_points[expected_order], atol=1e-6)
     np.testing.assert_array_equal(
         colours[order], np.clip(np.rint(expected_colours[expected_order]), 0, 255).astype(np.uint8)
     )
