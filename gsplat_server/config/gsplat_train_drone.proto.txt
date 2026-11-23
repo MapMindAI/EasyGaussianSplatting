@@ -103,4 +103,6 @@ run_depth: true
 # writes, so lower it if depth starts to dominate the photometric terms.
 depth_lambda: 0.01
 # Voxel edge of the merged depth cloud, as a fraction of the scene scale.
-depth_voxel_factor: 0.01
+depth_voxel_factor: 0.001
+# Depth confidence floor for both the merged cloud and the depth term.
+depth_min_confidence: 0.7
