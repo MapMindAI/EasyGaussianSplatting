@@ -20,9 +20,9 @@ predicting only the groups that still have an image without one.
 
 The output is one "<image_name>.npz" per image under --depth-dir: the model's
 full depth and confidence at its own resolution, scaled into the frame of the
-input model (see mapping/depth/depth_maps.py). Nothing is filtered here; the
-point cloud merge and training filter on confidence, masks, depth range, and
-edges when they load it.
+input model (see mapping/depth/depth_maps.py). Only depth discontinuities are
+removed here; the point cloud merge and training filter on confidence, masks,
+depth range, and colour edges when they load it.
 
 Run as a script, it predicts with DA3 on Triton, reached at --triton-url or
 $TRITON_URL; mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
@@ -47,6 +47,7 @@ from mapping.depth.depth_maps import (
     supervised_depth,
     training_masks,
     upsample,
+    without_depth_discontinuities,
 )
 from mapping.depth.scale_alignment import align_sparse_depth, median_relative_error, pose_depth_scale
 from mapping.file_listing import files_under
@@ -279,7 +280,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
             group, images, result["depth_list"], result["depth_conf_list"], predicted
         ):
             error = median_relative_error(scale, sparse_predicted, observations[name].depths)
-            depth_map = DepthMap(depth * scale, confidence, scale)
+            depth_map = DepthMap(without_depth_discontinuities(depth * scale), confidence, scale)
             overlay_image = image if args.debug_dir is not None else None
             maps_by_name.append((name, depth_map, error, overlay_image))
         return maps_by_name, None

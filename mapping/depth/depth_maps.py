@@ -4,9 +4,11 @@ Each "<image_name>.npz" holds the depth model's full output for the image at
 its own resolution (416 x 416 for VGGT-Omega): `depth` as float16, already
 scaled into the frame of the input model, `confidence` as a uint8 count of
 CONFIDENCE_STEP, and the group's `scale` from model units to that frame. An
-image without depth gets empty maps. Nothing is filtered on write: readers
-choose a DepthFilter, apply it with supervised_depth, and take one point per
-kept map pixel, at its centre in the image as they load it, with depth_rows.
+image without depth gets empty maps. The only filtering on write zeroes depth
+discontinuities, the floaters a model predicts between a surface and what lies
+behind it. Readers choose a DepthFilter, apply it with supervised_depth, and
+take one point per kept map pixel, at its centre in the image as they load
+it, with depth_rows.
 """
 
 import os
@@ -92,23 +94,25 @@ def training_masks(mask_dir):
     return mask
 
 
-def depth_edge_mask(grayscale, depth):
-    """Pixels on colour or depth discontinuities, where predicted depth is
-    unreliable. At the map's resolution one pixel already spans about 5 source
+def without_depth_discontinuities(depth):
+    """`depth` with 0 wherever its log-depth gradient jumps past
+    DEPTH_EDGE_THRESHOLD: pixels straddling a surface and its background, which
+    a model fills with depths in between. Scale-free, so it can run on depth in
+    any units. At the map's resolution one pixel already spans about 5 source
     pixels of a 1920 image, so the edges are not grown further."""
-    colour_edges = cv2.Canny(grayscale, 100, 200) > 0
+    depth = np.asarray(depth, dtype=np.float32)
     valid = np.isfinite(depth) & (depth > 0)
     log_depth = np.zeros(depth.shape, dtype=np.float32)
     log_depth[valid] = np.log(depth[valid])
     gradient_x = cv2.Sobel(log_depth, cv2.CV_32F, 1, 0, ksize=3)
     gradient_y = cv2.Sobel(log_depth, cv2.CV_32F, 0, 1, ksize=3)
-    return colour_edges | (valid & (np.hypot(gradient_x, gradient_y) > DEPTH_EDGE_THRESHOLD))
+    return np.where(valid & (np.hypot(gradient_x, gradient_y) <= DEPTH_EDGE_THRESHOLD), depth, 0)
 
 
 def supervised_depth(depth_map, grayscale, mask, depth_filter):
     """`depth_map`'s depth at its own resolution, 0 wherever `depth_filter`,
-    the training `mask` (True to keep, at any size, or None), or a colour or
-    depth edge of the `grayscale` image (at any size) rejects it."""
+    the training `mask` (True to keep, at any size, or None), or a colour edge
+    of the `grayscale` image (at any size) rejects it."""
     depth = depth_map.depth
     height, width = depth.shape
     usable = (
@@ -123,7 +127,7 @@ def supervised_depth(depth_map, grayscale, mask, depth_filter):
             mask.astype(np.uint8), (width, height), interpolation=cv2.INTER_NEAREST
         ) > 0
     small = cv2.resize(grayscale, (width, height), interpolation=cv2.INTER_AREA)
-    usable &= ~depth_edge_mask(small.astype(np.uint8), depth)
+    usable &= cv2.Canny(small.astype(np.uint8), 100, 200) == 0
     return np.where(usable, depth, 0).astype(np.float32)
 
 

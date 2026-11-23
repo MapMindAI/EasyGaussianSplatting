@@ -5,7 +5,6 @@ import pytest
 from mapping.depth.depth_maps import (
     DepthFilter,
     DepthMap,
-    depth_edge_mask,
     depth_path,
     depth_rows,
     load_depth_map,
@@ -14,6 +13,7 @@ from mapping.depth.depth_maps import (
     supervised_depth,
     training_masks,
     upsample,
+    without_depth_discontinuities,
 )
 
 
@@ -56,10 +56,20 @@ def test_supervised_depth_filters_confidence_scaled_range_and_mask():
 
     assert kept[0, 0] == 0
     assert (kept[1] == 0).all() and (kept[3] == 0).all()
-    # (0, 1) sits on the depth edge around the far pixel.
-    assert (kept[2] == 2.0).all() and (kept[0, 2:] == 2.0).all()
+    assert (kept[2] == 2.0).all() and (kept[0, 1:] == 2.0).all()
     lenient = supervised_depth(DepthMap(depth, confidence, 2.0), grayscale, None, DepthFilter(0.3, 0.1, 5.0))
-    assert (lenient[2:] == 2.0).all() and (lenient[1, 2:] == 2.0).all()
+    assert (lenient[1:] == 2.0).all()
+
+
+def test_supervised_depth_drops_colour_edges():
+    grayscale = np.zeros((20, 20), dtype=np.uint8)
+    grayscale[:, 10:] = 255
+    depth_map = DepthMap(np.ones((20, 20), np.float32), np.ones((20, 20), np.float32), 1.0)
+
+    kept = supervised_depth(depth_map, grayscale, None, DepthFilter())
+
+    assert (kept[:, 9:11] == 0).any(axis=1).all()
+    assert kept[0, 0] == 1.0
 
 
 def test_training_masks_read_listed_masks_only(tmp_path):
@@ -73,17 +83,14 @@ def test_training_masks_read_listed_masks_only(tmp_path):
     assert training_masks(None)("front/a.jpg") is None
 
 
-def test_depth_edge_mask_rejects_colour_and_depth_boundaries():
-    grayscale = np.zeros((20, 20), dtype=np.uint8)
-    grayscale[:, 10:] = 255
+def test_depth_discontinuities_are_zeroed_whatever_the_scale():
     depth = np.ones((20, 20), dtype=np.float32)
     depth[10:] = 2.0
 
-    edges = depth_edge_mask(grayscale, depth)
-
-    assert edges[:, 9:11].any(axis=1).all()
-    assert edges[9:11, :].any(axis=0).all()
-    assert not edges[0, 0]
+    for scale in (0.01, 1.0, 100.0):
+        kept = without_depth_discontinuities(depth * scale)
+        assert (kept[9:11] == 0).any(axis=0).all()
+        assert (kept[:8] == scale).all() and (kept[12:] == 2 * scale).all()
 
 
 def test_upsample_interpolates_between_valid_pixels_only():

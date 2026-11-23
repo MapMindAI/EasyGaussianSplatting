@@ -183,16 +183,18 @@ predicted (an up/down face, an image in no group, or a skipped group) gets an
 empty one, so a skipped group is not retried. Existing files are kept, so
 rerunning an interrupted stage predicts only the groups that still have an
 image without a file; `--overwrite` regenerates them all.
-Each `.npz` is the model's full output at its own resolution, unfiltered
+Each `.npz` is the model's output at its own resolution
 (`mapping/depth/depth_maps.py`): depth as float16 in the COLMAP frame,
 confidence as a uint8 in steps of 0.05, and the group's scale; about 0.5 MB
-for VGGT-Omega's 416x416. The point cloud merge and training filter it when
-they load it, so the filter can change without regenerating, then take one
-point per kept map pixel, at its centre in the image as loaded: interpolating
-to full resolution would add about 20 times the points and no information. They drop pixels below
-`--min-confidence` (0.5; `depth_min_confidence` in the parameters), outside
-`--min-depth` (0.1) to `--max-depth` (5.0), in the depth model's units before
-scaling, under the training masks, and on colour and depth discontinuities,
+for VGGT-Omega's 416x416. The only filtering here zeroes depth
+discontinuities: the floaters a model predicts between a surface and its
+background. The point cloud merge and training filter the rest when they load
+it, so that filter can change without regenerating, then take one point per
+kept map pixel, at its centre in the image as loaded: interpolating to full
+resolution would add about 20 times the points and no information. They drop
+pixels below `--min-confidence` (0.5; `depth_min_confidence` in the
+parameters), outside `--min-depth` (0.1) to `--max-depth` (5.0), in the depth
+model's units before scaling, under the training masks, and on colour edges,
 found at the map's resolution, so depth supervision does not pull geometry
 across foliage and other detail edges. Here those flags only shape the debug
 overlays, which show the depth that remains after filtering.
