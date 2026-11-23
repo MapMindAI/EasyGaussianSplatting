@@ -18,6 +18,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from mapping.file_listing import files_under
+
 IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png")
 # Images per progress log line.
 _LOG_EVERY = 200
@@ -80,9 +82,7 @@ def main(arguments=None):
         return
 
     image_paths = sorted(
-        path
-        for path in args.image_dir.rglob("*")
-        if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
+        path for path in files_under(args.image_dir) if path.suffix.lower() in IMAGE_SUFFIXES
     )
     if not image_paths:
         raise SystemExit(f"No images found in {args.image_dir}")
@@ -96,11 +96,15 @@ def main(arguments=None):
     args.mask_dir.mkdir(parents=True, exist_ok=True)
     if args.debug_dir is not None:
         args.debug_dir.mkdir(parents=True, exist_ok=True)
+    existing = set()
+    if not args.overwrite:
+        existing = set(files_under(args.mask_dir))
+        if args.debug_dir is not None:
+            existing |= set(files_under(args.debug_dir))
     pending_image_paths = [
         image_path
         for image_path in image_paths
-        if args.overwrite
-        or not all(path.exists() for path in output_paths(image_path) if path)
+        if not all(path in existing for path in output_paths(image_path) if path)
     ]
     if not pending_image_paths:
         print(f"Masks already exist in {args.mask_dir}; skipping segmentation")

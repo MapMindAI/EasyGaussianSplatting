@@ -40,6 +40,7 @@ import numpy as np
 
 from mapping.depth.covisibility_groups import Frame, centre_and_rotation, select_groups
 from mapping.depth.scale_alignment import align_sparse_depth, median_relative_error, pose_depth_scale
+from mapping.file_listing import files_under
 from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
 
 # Views per DA3 request. The served model's input shape is fixed, so this has
@@ -260,9 +261,8 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     images_dir = args.model_dir / "images"
     reconstruction = pycolmap.Reconstruction(args.model_dir / "sparse" / "0")
     names = [image.name for image in reconstruction.images.values()]
-    done = set() if args.overwrite else {
-        name for name in names if (args.depth_dir / f"{name}.npy").is_file()
-    }
+    written = set() if args.overwrite else set(files_under(args.depth_dir))
+    done = {name for name in names if args.depth_dir / f"{name}.npy" in written}
     if len(done) == len(names):
         print(f"Depths already exist in {args.depth_dir} for all {len(done)} images; "
               "pass --overwrite to regenerate")
