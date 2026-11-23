@@ -11,9 +11,9 @@ environment:
     - CUDA_HOME=/opt/miniconda3/envs/gsplat
   force_pull_image: true
   image:
-    cpu: ghcr.io/mapmindai/gaussiansplatting:sha-073fb0a
-    cuda: ghcr.io/mapmindai/gaussiansplatting:sha-073fb0a
-    rocm: ghcr.io/mapmindai/gaussiansplatting:sha-073fb0a
+    cpu: ghcr.io/mapmindai/gaussiansplatting:sha-654fad8
+    cuda: ghcr.io/mapmindai/gaussiansplatting:sha-654fad8
+    rocm: ghcr.io/mapmindai/gaussiansplatting:sha-654fad8
 ```
 
 ```
