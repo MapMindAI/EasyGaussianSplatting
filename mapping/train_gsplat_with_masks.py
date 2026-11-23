@@ -28,15 +28,28 @@ GSPLAT_ROOT = pathlib.Path(os.environ.get("GSPLAT_DIR", pathlib.Path(__file__).r
 EXAMPLES_DIR = str(GSPLAT_ROOT / "examples")
 
 
+def listed_files(dataset, folder):
+    """Paths, relative to it, of the files under `folder` in the dataset's data_dir.
+
+    Listed once per dataset rather than checked per item: each check is a
+    round trip on a network mount, and training loads every item many times.
+    """
+    cache = dataset.__dict__.setdefault("_listed_files", {})
+    if folder not in cache:
+        root = pathlib.Path(dataset.parser.data_dir) / folder
+        cache[folder] = {path.relative_to(root).as_posix() for path in files_under(root)}
+    return cache[folder]
+
+
 def attach_masks(dataset_class):
     original_getitem = dataset_class.__getitem__
 
     def __getitem__(self, item):
         data = original_getitem(self, item)
         image_name = self.parser.image_names[self.indices[item]]
-        mask_path = os.path.join(self.parser.data_dir, "masks", f"{image_name}.png")
-        if not os.path.exists(mask_path):
+        if f"{image_name}.png" not in listed_files(self, "masks"):
             return data
+        mask_path = os.path.join(self.parser.data_dir, "masks", f"{image_name}.png")
 
         assert self.patch_size is None, "masks are not cropped along with patches"
         height, width = data["image"].shape[:2]
@@ -133,7 +146,7 @@ def attach_depths(dataset_class):
         depth_path = os.path.join(self.parser.data_dir, "depths", f"{image_name}.npy")
         rows = (
             np.load(depth_path)
-            if os.path.exists(depth_path)
+            if f"{image_name}.npy" in listed_files(self, "depths")
             else np.zeros((0, 3), dtype=np.float32)
         )
 
@@ -312,6 +325,7 @@ from datasets.normalize import transform_points  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
 from mapping.depth.point_cloud import POINT_CLOUD_NAME, read_point_cloud  # noqa: E402
+from mapping.file_listing import files_under  # noqa: E402
 from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402

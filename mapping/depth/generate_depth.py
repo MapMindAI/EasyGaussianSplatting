@@ -299,12 +299,13 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     if mask_dir is not None and not mask_dir.is_dir():
         print(f"No masks at {mask_dir}; sampling every image unmasked", flush=True)
         mask_dir = None
+    masks = set() if mask_dir is None else set(files_under(mask_dir))
 
     def training_mask(name, shape):
         """The segmentation mask for `name` at `shape`, or None if there is none."""
         path = None if mask_dir is None else mask_dir / f"{name}.png"
         # Checked first: OpenCV warns on every missing file it is asked to read.
-        if path is None or not path.is_file():
+        if path not in masks:
             return None
         mask = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
         if mask is None:
