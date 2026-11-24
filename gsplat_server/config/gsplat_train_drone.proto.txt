@@ -55,7 +55,7 @@ reset_every: 3000
 # In my experiments (mapping/benchmark) STRATEGY_MCMC out-performed STRATEGY_DEFAULT
 strategy: STRATEGY_MCMC
 # MCMC only: Gaussian count to converge to. Ignored by STRATEGY_DEFAULT.
-cap_max: 10000000
+cap_max: 20000000
 # MCMC only: relocate Gaussians at or below this opacity during refinement.
 min_opacity: 0.1
 
@@ -70,9 +70,9 @@ packed: false
 
 # Gaussian learning rates. These match simple_trainer's defaults.
 # Positions are scaled by the scene size internally, so keep means_lr small.
-means_lr: 0.00008
+means_lr: 0.00005
 scales_lr: 0.001
-opacities_lr: 0.025
+opacities_lr: 0.01
 quats_lr: 0.001
 # Degree-zero spherical harmonics control base colour; higher degrees control
 # view-dependent detail and train more slowly.
@@ -105,4 +105,4 @@ depth_lambda: 0.01
 # Voxel edge of the merged depth cloud, as a fraction of the scene scale.
 depth_voxel_factor: 0.001
 # Depth confidence floor for both the merged cloud and the depth term.
-depth_min_confidence: 0.7
+depth_min_confidence: 0.9
