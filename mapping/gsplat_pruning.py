@@ -1,6 +1,7 @@
 """Scheduled significance pruning during single-GPU MCMC training."""
 
 import json
+import time
 from pathlib import Path
 
 import numpy as np
@@ -169,6 +170,9 @@ def attach_pruning(trainer, parameters):
                           info=info, lr=lr, scene=scene)
             if step + 1 not in pruning_steps:
                 return
+            print(f"Significance pruning at iteration {step + 1}: scoring {len(params['means'])} Gaussians "
+                  f"on {scoring_views} views", flush=True)
+            start = time.monotonic()
             scores = score_gaussians(self, parameters)
             mask = torch.from_numpy(removal_mask(scores, parameters.mcmc_prune_keep_fraction)).to(self.device)
             # MCMC's state contains a shared binomial table, not per-Gaussian rows.
@@ -177,7 +181,8 @@ def attach_pruning(trainer, parameters):
             configuration.strategy.cap_max = min(configuration.strategy.cap_max, after)
             line = json.dumps({"iteration": step + 1, "before": len(scores), "after": after,
                                "cap_max": configuration.strategy.cap_max, "scoring_views": scoring_views,
-                               "resolution": parameters.mcmc_prune_resolution})
+                               "resolution": parameters.mcmc_prune_resolution,
+                               "seconds": round(time.monotonic() - start, 2)})
             with (Path(configuration.result_dir) / "pruning.jsonl").open("a") as stream:
                 stream.write(line + "\n")
             print(f"Significance pruning: {line}", flush=True)

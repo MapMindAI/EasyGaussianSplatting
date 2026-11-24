@@ -122,7 +122,8 @@ Scoring renders evenly sampled training cameras, with their masks, at most
 `accepted_pixel_hits × sigmoid(opacity) × volume**0.1`. Zero sampled hits do
 not establish invisibility from other views.
 
-Deletion preserves Adam and scene state; `pruning.jsonl` records each event.
+Deletion preserves Adam and scene state. Each event logs a line when scoring
+starts, then its counts, `cap_max`, and duration to the log and `pruning.jsonl`.
 Saves on a pruning iteration precede its optimizer/pruning updates; later saves
 contain the reduced population. Supports one GPU, full COLMAP images, and standard
 pinhole rasterization; frozen block context, `with_ut`, and `with_eval3d` are
