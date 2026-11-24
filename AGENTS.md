@@ -27,7 +27,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   └── config/                   # Shipped JobParameters defaults.
 ├── mapping/
 │   ├── benchmark/                # Parameter sweeps and their Markdown report.
-│   │   ├── depth_lambda_sweep.sh # gsplat_train.sh once per depth_lambda_begin over shared depths.
+│   │   ├── depth_lambda_sweep.sh # gsplat_train.sh once per constant or decreasing depth weight.
 │   │   ├── summarize_gsplat_sweep_test.py # Report sections and PLY geometry.
 │   ├── triton/                   # Everything served by Triton.
 │   │   ├── clients.py      # SuperPoint/LightGlue/SALAD/DA3 clients.

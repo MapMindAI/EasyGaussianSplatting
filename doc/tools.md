@@ -313,14 +313,15 @@ mapping/benchmark/gsplat_sweep.sh data/panorama path/to/configurations
 ```
 
 `mapping/benchmark/depth_lambda_sweep.sh` runs `scripts/gsplat_train.sh` once
-per `depth_lambda_begin` (default `0 0.001 0.003 0.01 0.03 0.1`; 0 keeps only the
-depth-cloud initialization) and once without depth, over one parameters file,
-into `<workspace>/depth_lambda_sweep/`. Depths are generated once; evaluated
-and failed runs are skipped, as in `gsplat_sweep.sh`. With `depth_lambda_final`
-set in the parameters file, each value is the initial weight of the decrease:
+per depth weight and once without depth, over one parameters file, into
+`<workspace>/depth_lambda_sweep/`. A weight is a constant `depth_lambda_begin`
+(0 keeps only the depth-cloud initialization), or `begin:final`, decreasing
+linearly to `depth_lambda_final` at `refine_stop_iter`. The default is
+`0 0.001 0.003 0.01 0.03 0.1 0.05:0.01 0.1:0.01 0.2:0.01`. Depths are generated
+once; evaluated and failed runs are skipped, as in `gsplat_sweep.sh`:
 
 ```
-mapping/benchmark/depth_lambda_sweep.sh data/panorama [parameters.proto.txt] [depth_lambda_begin...]
+mapping/benchmark/depth_lambda_sweep.sh data/panorama [parameters.proto.txt] [weight | begin:final ...]
 ```
 
 The [historical sweep configurations](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Parameter-Sweep)
