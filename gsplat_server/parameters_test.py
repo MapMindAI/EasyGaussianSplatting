@@ -33,6 +33,8 @@ def test_defaults_carry_the_shipped_values():
     assert parameters.opacity_reg_weight == pytest.approx(0.01)
     assert parameters.scale_reg_weight == pytest.approx(0.01)
     assert parameters.stop_regularization_after_refinement is False
+    assert parameters.mask_gaussians is False
+    assert parameters.mask_lambda == pytest.approx(5e-4)
 
 
 def test_omitted_fields_keep_the_default_rather_than_proto3_zero(tmp_path):

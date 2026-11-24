@@ -7,7 +7,8 @@
 # Runs are sequential: the configurations are compared partly on training time
 # and peak memory, which sharing a GPU would make meaningless. A configuration
 # whose run already recorded evaluation metrics is skipped, so an interrupted
-# sweep resumes where it stopped.
+# sweep resumes where it stopped. Runs go to <cubemap_reconstruction_dir>/sweep,
+# or to $SWEEP_NAME in its place.
 set -euo pipefail
 
 if [ $# -lt 2 ]; then
@@ -19,7 +20,8 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts" && pwd)"
 source "${SCRIPTS_DIR}/docker_common.sh"
 
 REL_CUBEMAP_DIR="$(repo_relative_path "$1")"
-SWEEP_DIR="${REPO_ROOT}/${REL_CUBEMAP_DIR}/sweep"
+SWEEP_NAME="${SWEEP_NAME:-sweep}"
+SWEEP_DIR="${REPO_ROOT}/${REL_CUBEMAP_DIR}/${SWEEP_NAME}"
 
 CONFIGURATIONS_DIR="${REPO_ROOT}/$(repo_relative_path "$2")"
 shopt -s nullglob
@@ -50,7 +52,7 @@ for configuration in "${configurations[@]}"; do
   # A configuration that exhausts the GPU must not abort the rest of the sweep.
   status=0
   docker run "${DOCKER_RUN_FLAGS[@]}" \
-    -e RESULT_DIR="/workspace/${REL_CUBEMAP_DIR}/sweep/${name}" \
+    -e RESULT_DIR="/workspace/${REL_CUBEMAP_DIR}/${SWEEP_NAME}/${name}" \
     -e DATA_DIR="/workspace/${REL_CUBEMAP_DIR}" \
     -e PARAMETERS="/workspace/$(repo_relative_path "${configuration}")" \
     "${DOCKER_IMAGE}" \

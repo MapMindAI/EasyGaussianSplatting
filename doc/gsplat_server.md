@@ -189,6 +189,18 @@ operate: `prune_opa` also sets the opacity reset floor (gsplat resets to
 [doc/gsplat_parameter_sweep.md](gsplat_parameter_sweep.md) for measured
 comparisons.
 
+With `STRATEGY_DEFAULT`, `mask_gaussians: true` adds MaskGaussian
+([arXiv 2412.20522](https://arxiv.org/abs/2412.20522),
+`mapping/mask_gaussian.py`): each Gaussian learns keep and drop logits, every
+training render samples a hard mask from them, and the Gaussians dropped in 10
+samples in a row are pruned, at each refinement step and every 1000 steps
+after, through the masked rasterization in our gsplat fork. `mask_lambda` (0.0005) weighs the squared mean mask in the loss; raise it to
+prune more. Evaluation and the exported PLY keep a Gaussian whose keep logit
+is the larger. `STRATEGY_MCMC` ignores it, since it holds `cap_max` anyway.
+`mapping/benchmark/mask_gaussian_benchmark.sh <cubemap_dir>` runs the mask
+tests in the image and compares MCMC, DEFAULT, and DEFAULT with masks at two
+`mask_lambda` values on one reconstruction.
+
 The directory must hold `images/` and `sparse/`; a `masks/` directory is
 uploaded too if present, and training then skips the masked pixels (see
 `mapping/triton/segment_people.py`). Nothing else is uploaded, so an earlier
