@@ -52,15 +52,27 @@ def centre_and_rotation(camera_from_world):
     return -rotation @ np.asarray(camera_from_world)[:, 3], rotation
 
 
+def shared_point_counts(point_indices_per_frame, point_count):
+    """(frames, frames) sparse counts of the points each pair of frames shares;
+    each frame's indices must be unique."""
+    frame_indices = np.repeat(
+        np.arange(len(point_indices_per_frame)), [len(points) for points in point_indices_per_frame]
+    )
+    incidence = sparse.csr_matrix(
+        (
+            np.ones(len(frame_indices)),
+            (frame_indices, np.concatenate(point_indices_per_frame).astype(np.int64)),
+        ),
+        shape=(len(point_indices_per_frame), point_count),
+    )
+    return incidence @ incidence.T
+
+
 def covisibility_graph(frames, points):
     """Each frame's qualified links, as lists of Edge."""
-    frame_indices = np.repeat(np.arange(len(frames)), [len(frame.points) for frame in frames])
-    point_indices = np.concatenate([frame.points for frame in frames]).astype(np.int64)
-    incidence = sparse.csr_matrix(
-        (np.ones(len(point_indices)), (point_indices, frame_indices)),
-        shape=(len(points), len(frames)),
-    )
-    shared = sparse.triu(incidence.T @ incidence, k=1).tocoo()
+    shared = sparse.triu(
+        shared_point_counts([frame.points for frame in frames], len(points)), k=1
+    ).tocoo()
 
     graph = [[] for _ in frames]
     candidates = shared.data >= REQUIRED_SHARED_POINTS

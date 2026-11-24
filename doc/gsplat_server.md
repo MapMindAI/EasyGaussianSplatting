@@ -273,8 +273,9 @@ gsplat's own sparse-point depths do not stand in for them, since the images it
 skips are the ones SfM barely covered anyway.
 
 What lands in `depths/` is one `<image_name>.npz` per image: the model's full,
-unfiltered 416x416 depth and confidence, with the group's scale
-(`mapping/depth/depth_maps.py`). The trainer filters it by
+unfiltered 416x416 depth and confidence, with the group's scale, fused with
+its covisible neighbours' (`mapping/depth/depth_maps.py`,
+[cross_view_fusion.md](cross_view_fusion.md)). The trainer filters it by
 `depth_min_confidence`, the image's mask, and colour edges (depth
 discontinuities are already removed), supervises each kept map
 pixel at its centre in the image as loaded, whatever `data_factor` is, and

@@ -16,7 +16,9 @@ sparse depths.
 Every image in the model ends up with a file: one no group predicted -- an
 up/down face, a frame in no covisible group, or one whose group failed -- gets
 an empty one. Existing files are kept, so an interrupted run resumes by
-predicting only the groups that still have an image without one.
+predicting only the groups that still have an image without one. Once all are
+written, each is fused with its covisible neighbours' in place (see
+mapping/depth/cross_view_fusion.py).
 
 The output is one "<image_name>.npz" per image under --depth-dir: the model's
 full depth and confidence at its own resolution, scaled into the frame of the
@@ -38,6 +40,7 @@ import cv2
 import numpy as np
 
 from mapping.depth.covisibility_groups import Frame, centre_and_rotation, select_groups
+from mapping.depth.cross_view_fusion import SUMMARY_NAME, fuse_depths
 from mapping.depth.depth_maps import (
     DepthFilter,
     DepthMap,
@@ -197,11 +200,11 @@ def depth_filter(args):
 
 def generate_depths(args, make_estimator, group_size, minimum_group_size):
     """Write depth maps for `args.model_dir` with `make_estimator()`'s model,
-    over groups of `minimum_group_size` to `group_size` images.
+    over groups of `minimum_group_size` to `group_size` images, then fuse them
+    with their neighbours'. Returns whether they were fused this run.
 
     The estimator's run(images_bgr) returns per-image `depth_list` and
-    `depth_conf_list` maps and its predicted `camera_from_world_list`. Returns
-    how many images it predicted, not counting the empty files.
+    `depth_conf_list` maps and its predicted `camera_from_world_list`.
     """
     # Deferred so the helpers above stay testable without pycolmap or tqdm installed.
     import pycolmap
@@ -216,7 +219,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     if len(done) == len(names):
         print(f"Depths already exist in {args.depth_dir} for all {len(done)} images; "
               "pass --overwrite to regenerate")
-        return 0
+        return fuse_depths(args.model_dir, args.depth_dir, depth_filter(args), args.mask_dir)
     points, observations = observed_depths(reconstruction)
     print(
         f"Loaded {args.model_dir / 'sparse' / '0'}: {len(observations)} images, "
@@ -241,6 +244,8 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     groups = pending
 
     if groups:
+        # New depths are not fused yet.
+        (args.depth_dir / SUMMARY_NAME).unlink(missing_ok=True)
         stage_started = time.monotonic()
         estimator = make_estimator()
         print(f"Loaded the depth model ({time.monotonic() - stage_started:.1f} s)", flush=True)
@@ -342,7 +347,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     )
     if args.debug_dir is not None:
         print(f"Depth overlays written to {args.debug_dir}")
-    return predicted
+    return fuse_depths(args.model_dir, args.depth_dir, depth_filter(args), args.mask_dir)
 
 
 def main():
