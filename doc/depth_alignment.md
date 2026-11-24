@@ -93,6 +93,9 @@ error grows with depth. A pixel that no neighbour sees, or that every neighbour
 sees behind its own surface, is kept as it is, because occlusion is no evidence
 against it.
 
+Frames are checked on up to 8 threads; views load on the calling thread
+through a cache of 128.
+
 ### Departures from HY-World, measured
 
 | Choice | Alternative tried | Why |

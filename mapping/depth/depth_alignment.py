@@ -10,6 +10,7 @@ per-frame summary, SUMMARY_NAME, beside them marking them fused.
 """
 
 import json
+import os
 import time
 from typing import NamedTuple
 
@@ -19,6 +20,9 @@ SUMMARY_NAME = "fusion.json"
 FUSING_DIR_NAME = ".fusing"
 # Views held while fusing, about 1.5 MB each at 416 x 416 with their confidence.
 VIEW_CACHE_SIZE = 128
+# Each check holds a few float64 copies of its pixels, so the pool is capped
+# rather than one thread per core on a large server.
+FUSION_THREADS = min(8, os.cpu_count() or 1)
 
 MIN_TRACK_LENGTH = 3
 # Sparse references beyond this depth, in map units, are too noisy to fit to.
@@ -282,10 +286,10 @@ def fuse_depths(model_dir, depth_dir, depth_filter, mask_dir=None):
     or outside the masks in `mask_dir` (which may be None) are kept but neither
     checked nor used as evidence.
 
-    Views are loaded as they are needed and at most VIEW_CACHE_SIZE are held.
-    The fused maps go to FUSING_DIR_NAME first, so every neighbour is read
-    unfused, and replace the originals once all are written."""
-    import os
+    Views are loaded on this thread as they are needed and at most
+    VIEW_CACHE_SIZE are held; FUSION_THREADS workers check and save them. The
+    fused maps go to FUSING_DIR_NAME first, so every neighbour is read unfused,
+    and replace the originals once all are written."""
     import shutil
     from collections import OrderedDict
 
@@ -301,6 +305,7 @@ def fuse_depths(model_dir, depth_dir, depth_filter, mask_dir=None):
         training_masks,
     )
     from mapping.depth.generate_depth import observed_depths
+    from mapping.depth.point_cloud import prefetched
     from mapping.file_listing import files_under
 
     summary_path = depth_dir / SUMMARY_NAME
@@ -352,16 +357,26 @@ def fuse_depths(model_dir, depth_dir, depth_filter, mask_dir=None):
 
     fusing_dir = depth_dir / FUSING_DIR_NAME
     shutil.rmtree(fusing_dir, ignore_errors=True)  # Left by an interrupted run.
-    summary = {}
-    for index, name in enumerate(tqdm(names, desc="Cross-view check", unit="image", dynamic_ncols=True)):
-        view, confidence, scale = frame(index)
-        depth = fused_depth(view, [frame(neighbour)[0] for neighbour in neighbours[index]])
+
+    def check(item):
+        name, (view, confidence, scale), neighbour_views = item
+        depth = fused_depth(view, neighbour_views)
         save_depth_map(depth_path(fusing_dir, name), depth, confidence, scale)
         checked = int(view.usable.sum())
-        summary[name] = {
-            "neighbours": len(neighbours[index]),
+        return name, {
+            "neighbours": len(neighbour_views),
             "kept_fraction": float((view.usable & (depth > 0)).sum() / checked) if checked else None,
         }
+
+    # Generated on this thread, so only it touches the cache.
+    items = (
+        (name, frame(index), [frame(neighbour)[0] for neighbour in neighbours[index]])
+        for index, name in enumerate(names)
+    )
+    summary = dict(tqdm(
+        prefetched(check, items, FUSION_THREADS), total=len(names), desc="Cross-view check",
+        unit="image", dynamic_ncols=True,
+    ))
     for name in names:
         os.replace(depth_path(fusing_dir, name), depth_path(depth_dir, name))
     shutil.rmtree(fusing_dir)
