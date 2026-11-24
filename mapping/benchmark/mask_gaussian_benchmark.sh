@@ -5,7 +5,8 @@
 # base parameters, and write summarize_gsplat_sweep.py's report.
 #
 # Set DOCKER_IMAGE to the image the Docker workflow built for this branch,
-# e.g. ghcr.io/mapmindai/gaussiansplatting:pr-<number>.
+# e.g. ghcr.io/mapmindai/gaussiansplatting:pr-<number>. The output is logged to
+# <cubemap_reconstruction_dir>/mask_gaussian_benchmark.log.
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
@@ -21,7 +22,12 @@ BASE_PARAMETERS="${2:-${REPO_ROOT}/gsplat_server/config/gsplat_train_defaults.pr
 export SWEEP_NAME=mask_gaussian_sweep
 SWEEP_DIR="${REPO_ROOT}/${REL_CUBEMAP_DIR}/${SWEEP_NAME}"
 CONFIGURATIONS_DIR="${SWEEP_DIR}/configurations"
-echo "Image: ${DOCKER_IMAGE}"
+# Everything this script prints also goes to this log; each run's training log
+# is <run>/train.log beside it.
+LOG="${REPO_ROOT}/${REL_CUBEMAP_DIR}/mask_gaussian_benchmark.log"
+mkdir -p "${SWEEP_DIR}"
+exec > >(tee -a "${LOG}") 2>&1
+echo "=== $(date -u '+%Y-%m-%d %H:%M:%S') UTC, image ${DOCKER_IMAGE}, base ${BASE_PARAMETERS}"
 
 echo "=== Tests"
 docker run "${DOCKER_RUN_FLAGS[@]}" "${DOCKER_IMAGE}" bash -c 'set -euo pipefail
