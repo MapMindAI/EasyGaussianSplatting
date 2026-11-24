@@ -141,13 +141,13 @@ def segmentation_command(model_directory, mask_people, mask_sky):
     ]
 
 
-def depth_command(model_directory, voxel_factor):
+def depth_command(model_directory, parameters):
     return [
         "python3", str(DEPTH_ENTRYPOINT),
         str(model_directory), str(model_directory / "depths"),
         "--mask-dir", str(model_directory / "masks"),
-        "--samples-per-image", "-1",
-        "--voxel-factor", f"{voxel_factor:.7g}",
+        "--voxel-factor", f"{parameters.depth_voxel_factor:.7g}",
+        "--min-confidence", f"{parameters.depth_min_confidence:.7g}",
     ]
 
 
@@ -169,7 +169,7 @@ def job_steps(job, directory):
             model_directory, parameters.mask_people, parameters.mask_sky
         )))
     if parameters.run_depth:
-        steps.append(("depth", depth_command(model_directory, parameters.depth_voxel_factor)))
+        steps.append(("depth", depth_command(model_directory, parameters)))
     steps.append(("gsplat training", training_command(directory)))
     return steps
 

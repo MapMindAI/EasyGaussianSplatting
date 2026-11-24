@@ -38,6 +38,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── depth/                    # Depth supervision; grouping and scale ported from ArSession.
 │   │   ├── covisibility_groups.py # Groups of frames viewing the same scene.
 │   │   ├── covisibility_groups_test.py # Links and greedy group selection.
+│   │   ├── depth_maps.py         # Depth files: full model output, filtered on load into one point per map pixel.
+│   │   ├── depth_maps_test.py    # Round trips, discontinuities, filtering, masks, and pixel-centre points.
 │   │   ├── generate_depth.py     # Shared depth stage, and its Triton DA3 entrypoint.
 │   │   ├── generate_depth_test.py # Grouping inputs, sampling, and observations.
 │   │   ├── point_cloud.py        # Written depths merged into gsplat's initial cloud.
@@ -60,6 +62,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── block_gaussians_test.py   # Ownership, expanded regions, and checkpoints.
 │   ├── mapping_pipeline.py       # The four mapping stages end to end.
 │   ├── onnx_session.py           # ONNX Runtime sessions on CUDA, else the CPU.
+│   ├── file_listing.py           # Files under a directory without a request per file.
+│   ├── file_listing_test.py      # Nested files, symlinked folders, and a missing directory.
 │   ├── gps.py                    # Capture GPS as face EXIF, UTM priors, and map alignment.
 │   ├── gps_test.py               # Track parsing, the fit, and the alignment.
 │   ├── gsplat_world_frame.py     # Undo gsplat's world normalization on export.

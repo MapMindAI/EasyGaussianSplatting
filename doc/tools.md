@@ -156,7 +156,6 @@ ${DOCKER_RUN} conda run --no-capture-output -n gsplat python3 -m mapping.depth.g
   ${WORKSPACE_PATH} ${WORKSPACE_PATH}/depths \
   --mask-dir ${WORKSPACE_PATH}/masks \
   --debug-dir ${WORKSPACE_PATH}/debug \
-  --samples-per-image -1 \
   --triton-url ${GSPLAT_HOST}:8011
 ```
 
@@ -179,18 +178,26 @@ Without a camera scale, a group needs 30 inlier points over two frames, or is
 skipped rather than written at a guessed scale. An image in several groups
 keeps the prediction whose scaled depth best matches its own sparse depths.
 The `up/` and `down/` cube faces are skipped: their sky and ground views do not
-need depth supervision. Every image ends up with a `.npy`: one no group
+need depth supervision. Every image ends up with a `.npz`: one no group
 predicted (an up/down face, an image in no group, or a skipped group) gets an
 empty one, so a skipped group is not retried. Existing files are kept, so
 rerunning an interrupted stage predicts only the groups that still have an
 image without a file; `--overwrite` regenerates them all.
-`--samples-per-image` (4096) sets how many pixels each `.npy` keeps,
-`--min-confidence` (0.5) the confidence floor, and `--min-depth` (0.1) /
-`--max-depth` (unbounded) discard depths outside that range, in the depth
-model's units before scaling.
-Colour and DA3-depth discontinuities are also excluded, so depth supervision
-does not pull geometry across foliage and other detail edges. Debug overlays
-show only the depth that remains after filtering.
+Each `.npz` is the model's output at its own resolution
+(`mapping/depth/depth_maps.py`): depth as float16 in the COLMAP frame,
+confidence as a uint8 in steps of 0.05, and the group's scale; about 0.5 MB
+for VGGT-Omega's 416x416. The only filtering here zeroes depth
+discontinuities: the floaters a model predicts between a surface and its
+background. The point cloud merge and training filter the rest when they load
+it, so that filter can change without regenerating, then take one point per
+kept map pixel, at its centre in the image as loaded: interpolating to full
+resolution would add about 20 times the points and no information. They drop
+pixels below `--min-confidence` (0.5; `depth_min_confidence` in the
+parameters), outside `--min-depth` (0.1) to `--max-depth` (5.0), in the depth
+model's units before scaling, under the training masks, and on colour edges,
+found at the map's resolution, so depth supervision does not pull geometry
+across foliage and other detail edges. Here those flags only shape the debug
+overlays, which show the depth that remains after filtering.
 `--debug-dir <directory>` writes a colourized depth overlay over every source
 image, preserving nested image paths and adding `_depth.png` to the filename.
 [gsplat_server.md](gsplat_server.md#depth-supervision) covers the file format
@@ -204,14 +211,16 @@ what the server's `run_depth` uses. The weights are not public: place the
 export at `models/vggt_omega_416.onnx` (with its `.onnx.data`), or pass
 `--model`. Groups hold up to 12 views, though the export's `.json` lists
 10 as its maximum. Inputs are a fixed 416x416; images are resized to that,
-ignoring aspect ratio, and the maps resized back. Groups of two views or more
-are kept. Whenever an image was predicted, it merges every `.npy` into
-`<model_dir>/depth_points.ply` (`mapping/depth/point_cloud.py`): rows lifted
-through the COLMAP intrinsics and poses, coloured from the images, and averaged
-per voxel. `--voxel-factor` (0.001) sets the voxel edge as a fraction of the
+ignoring aspect ratio, and the maps kept at that size. Groups of two views or more
+are kept. Whenever an image was predicted, it merges every `.npz` into
+`<model_dir>/depth_points.ply` (`mapping/depth/point_cloud.py`): each map,
+filtered as above with the masks in `--mask-dir`, lifted pixel by pixel through
+the COLMAP intrinsics and poses, coloured from the image, and averaged per voxel, with torch on the GPU when
+there is one. `--voxel-factor` (0.001) sets the voxel edge as a fraction of the
 scene scale, the largest camera distance from the cameras' mean, as gsplat
 measures it; the server and training scripts pass the parameters file's
-`depth_voxel_factor`. It takes the flags above except
+`depth_voxel_factor` and `depth_min_confidence`. The settings it was built
+with are kept in `depth_points.json`; changing any of them rebuilds the cloud. It takes the flags above except
 `--triton-url`, and defaults `--num-threads` to 2; the threads overlap image
 reading with inference, which runs one group at a time, since a 12-view group's
 attention alone needs 4.4 GB of GPU memory. The session's memory arena returns
@@ -223,8 +232,7 @@ pixels below VGGT's 2.5: mostly sky and far background.
 ```bash
 ${DOCKER_RUN} python3 -m mapping.vggt_omega.generate_depth \
   ${WORKSPACE_PATH} ${WORKSPACE_PATH}/depths \
-  --mask-dir ${WORKSPACE_PATH}/masks \
-  --samples-per-image -1
+  --mask-dir ${WORKSPACE_PATH}/masks
 ```
 
 To try the model on a few images, `example.py` writes each one's raw depth

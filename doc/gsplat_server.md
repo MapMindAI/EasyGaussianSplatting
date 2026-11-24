@@ -233,12 +233,14 @@ seeds the Gaussians from the sparse SfM points plus the merged depth cloud
 `depth_lambda`; `depth_lambda: 0` keeps the initialization without the term. Under MCMC, the depth
 points are randomly thinned to keep the total within 0.8 × `cap_max`.
 `depth_voxel_factor` sets the cloud's voxel edge as a fraction of the scene
-scale:
+scale, and `depth_min_confidence` the confidence floor both the cloud and the
+depth term keep:
 
 ```
 run_depth: true
 depth_lambda: 0.01
 depth_voxel_factor: 0.001
+depth_min_confidence: 0.5
 ```
 
 It runs after segmentation and before training, writing `depths/` into the job
@@ -266,16 +268,17 @@ against the model's predicted ones, before anything is written. A group with
 neither enough sparse points nor consistent cameras is skipped rather than
 written at a guessed scale, and the stage reports how many it skipped. An image
 in several groups keeps the best-matching prediction. An image left without
-rows trains without a depth term:
+depth trains without a depth term:
 gsplat's own sparse-point depths do not stand in for them, since the images it
 skips are the ones SfM barely covered anyway.
 
-What lands in `depths/` is one `<image_name>.npy` per image holding `(M, 3)`
-float32 rows of `(x, y, depth)`: the sampled pixels worth supervising rather
-than a dense map, which is the difference between megabytes and gigabytes. `x`
-and `y` are normalized to `[0, 1]`, so `data_factor` cannot desynchronize them
-from the images the trainer loads; the trainer scales them back and converts
-depth into gsplat's normalized world.
+What lands in `depths/` is one `<image_name>.npz` per image: the model's full,
+unfiltered 416x416 depth and confidence, with the group's scale
+(`mapping/depth/depth_maps.py`). The trainer filters it by
+`depth_min_confidence`, the image's mask, and colour edges (depth
+discontinuities are already removed), supervises each kept map
+pixel at its centre in the image as loaded, whatever `data_factor` is, and
+converts depth into gsplat's normalized world.
 
 Three limits to know. gsplat's depth term is an L1 on *inverse* depth, so
 near-field error dominates and far geometry is barely constrained -- and a

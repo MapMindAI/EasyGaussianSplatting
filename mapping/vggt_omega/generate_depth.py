@@ -2,18 +2,21 @@
 """Predict per-image depth for a COLMAP model with VGGT-Omega, run locally.
 
 The same stage as mapping/depth/generate_depth.py -- covisibility grouping,
-scale fitting to COLMAP, filtering, and the (x, y, depth) output -- with the
+scale fitting to COLMAP, and the depth and confidence output -- with the
 ONNX model at --model in place of the Triton DA3 one. It then merges every
-written depth into <model_dir>/depth_points.ply, the cloud gsplat seeds its
-Gaussians from (see mapping/depth/point_cloud.py), rebuilding it whenever an
-image was predicted.
+written depth, filtered by --min-confidence, the depth range, the masks in
+--mask-dir, and colour edges, into <model_dir>/depth_points.ply, the cloud gsplat
+seeds its Gaussians from (see mapping/depth/point_cloud.py), rebuilding it
+whenever an image was predicted or the settings recorded beside it in
+depth_points.json changed.
 """
 
 import argparse
+import json
 import time
 from pathlib import Path
 
-from mapping.depth.generate_depth import generate_depths, parse_depth_arguments
+from mapping.depth.generate_depth import depth_filter, generate_depths, parse_depth_arguments
 from mapping.depth.point_cloud import POINT_CLOUD_NAME, write_depth_point_cloud
 from mapping.vggt_omega.depth_estimator import DEFAULT_MODEL_PATH, VggtOmegaDepthEstimator
 
@@ -42,11 +45,27 @@ def main():
     )
 
     cloud_path = args.model_dir / POINT_CLOUD_NAME
-    if cloud_path.exists() and not predicted:
-        print(f"{cloud_path} already exists and no depth was predicted; keeping it")
+    # What the cloud was built from, so a changed filter or voxel rebuilds it.
+    settings_path = cloud_path.with_suffix(".json")
+    settings = {
+        "voxel_factor": args.voxel_factor,
+        "depth_filter": depth_filter(args)._asdict(),
+        "mask_dir": None if args.mask_dir is None else str(args.mask_dir),
+    }
+    if (
+        not predicted
+        and cloud_path.exists()
+        and settings_path.exists()
+        and json.loads(settings_path.read_text()) == settings
+    ):
+        print(f"{cloud_path} is up to date; keeping it")
         return
     started = time.monotonic()
-    count = write_depth_point_cloud(args.model_dir, args.depth_dir, cloud_path, args.voxel_factor)
+    count = write_depth_point_cloud(
+        args.model_dir, args.depth_dir, cloud_path, args.voxel_factor, args.mask_dir,
+        depth_filter(args),
+    )
+    settings_path.write_text(json.dumps(settings, indent=2))
     print(
         f"Merged depth point cloud ({count} points) written to {cloud_path} "
         f"({time.monotonic() - started:.1f} s)"

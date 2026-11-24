@@ -1,21 +1,19 @@
-"""Tests for depth grouping inputs, sampling, filtering, and COLMAP observations."""
+"""Tests for depth grouping inputs, sampling, and COLMAP observations."""
 
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from mapping.depth.depth_maps import depth_path, load_depth_map, save_depth_map
 from mapping.depth.generate_depth import (
     Observations,
     depth_debug_path,
-    depth_edge_mask,
     depth_groups,
     depth_overlay,
     observed_depths,
     pending_groups,
     sample_at,
-    save_rows,
-    supervised_points,
 )
 
 
@@ -101,85 +99,18 @@ def test_depth_groups_link_cameras_viewing_the_same_points_and_skip_up_and_down(
 # --- sampling --------------------------------------------------------------
 
 
-def test_sample_at_reads_the_rounded_pixel():
+def test_sample_at_reads_the_map_cell_under_each_colmap_pixel():
     values = np.arange(12, dtype=np.float32).reshape(3, 4)
 
-    assert sample_at(values, np.array([[0.0, 0.0], [3.4, 2.2]])).tolist() == [0.0, 11.0]
+    # A 30 x 40 image over a 3 x 4 map: each cell covers 10 x 10 pixels.
+    points = np.array([[0.5, 0.5], [9.9, 9.9], [10.0, 25.0], [39.5, 29.5]])
+    assert sample_at(values, points, (30, 40)).tolist() == [0.0, 0.0, 9.0, 11.0]
 
 
 def test_sample_at_clamps_points_outside_the_image():
     values = np.arange(12, dtype=np.float32).reshape(3, 4)
 
-    assert sample_at(values, np.array([[-5.0, -5.0], [99.0, 99.0]])).tolist() == [0.0, 11.0]
-
-
-def test_supervised_points_normalizes_coordinates():
-    depth = np.ones((10, 20), dtype=np.float32)
-
-    rows = supervised_points(
-        depth, None, None, 1000, 0.0, None, None, np.random.default_rng(0)
-    )
-
-    assert len(rows) == 200
-    assert rows[:, 0].min() == 0.0 and rows[:, 0].max() == pytest.approx(1.0)
-    assert rows[:, 1].min() == 0.0 and rows[:, 1].max() == pytest.approx(1.0)
-
-
-def test_supervised_points_drops_unconfident_masked_and_empty_depth():
-    depth = np.ones((4, 4), dtype=np.float32)
-    depth[0] = 0.0
-    confidence = np.full((4, 4), 5.0, dtype=np.float32)
-    confidence[1] = 0.5
-    mask = np.ones((4, 4), dtype=bool)
-    mask[2] = False
-
-    rows = supervised_points(
-        depth, confidence, mask, 1000, 2.0, None, None, np.random.default_rng(0)
-    )
-
-    assert len(rows) == 4
-    assert {round(float(y) * 3) for y in rows[:, 1]} == {3}
-
-
-def test_supervised_points_subsamples_to_the_requested_count():
-    depth = np.ones((50, 50), dtype=np.float32)
-
-    rows = supervised_points(
-        depth, None, None, 17, 0.0, None, None, np.random.default_rng(0)
-    )
-
-    assert len(rows) == 17
-
-
-def test_supervised_points_returns_nothing_when_every_pixel_is_rejected():
-    rows = supervised_points(
-        np.zeros((4, 4), dtype=np.float32), None, None, 10, 0.0, None, None,
-        np.random.default_rng(0)
-    )
-
-    assert rows.shape == (0, 3)
-
-
-def test_supervised_points_keeps_depths_inside_the_requested_range():
-    depth = np.array([[0.5, 1.0], [3.0, 7.0]], dtype=np.float32)
-
-    rows = supervised_points(
-        depth, None, None, 10, 0.0, 1.0, 3.0, np.random.default_rng(0)
-    )
-
-    assert rows[:, 2].tolist() == [1.0, 3.0]
-
-
-def test_depth_edge_mask_rejects_colour_and_depth_boundaries():
-    image = np.zeros((20, 20, 3), dtype=np.uint8)
-    image[:, 10:] = 255
-    depth = np.ones((20, 20), dtype=np.float32)
-    depth[10:] = 2.0
-
-    edges = depth_edge_mask(image, depth)
-
-    assert edges[:, 10].all()
-    assert not edges[0, 0]
+    assert sample_at(values, np.array([[-5.0, -5.0], [99.0, 99.0]]), (3, 4)).tolist() == [0.0, 11.0]
 
 
 def test_depth_overlay_colours_depth_without_changing_image_shape():
@@ -255,16 +186,6 @@ def test_pending_groups_keep_any_group_with_an_image_still_missing():
     assert pending_groups(groups, set()) == groups
 
 
-def test_save_rows_leaves_only_the_finished_file(tmp_path):
-    path = tmp_path / "front" / "frame.jpg.npy"
-    rows = np.arange(6, dtype=np.float32).reshape(2, 3)
-
-    save_rows(path, rows)
-
-    np.testing.assert_array_equal(np.load(path), rows)
-    assert [entry.name for entry in path.parent.iterdir()] == ["frame.jpg.npy"]
-
-
 def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(tmp_path, monkeypatch):
     import sys
     from types import SimpleNamespace
@@ -312,18 +233,20 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
     depth_dir = tmp_path / "depths"
     args = SimpleNamespace(
         model_dir=tmp_path, depth_dir=depth_dir, overwrite=False, mask_dir=None, debug_dir=None,
-        num_threads=1, samples_per_image=-1, min_confidence=0.5, min_depth=0.1, max_depth=5.0,
+        num_threads=1, min_confidence=0.5, min_depth=0.1, max_depth=5.0,
     )
     # An interrupted run already wrote "a".
-    save_rows(depth_dir / "front/a.jpg.npy", np.full((1, 3), 7, np.float32))
+    save_depth_map(depth_path(depth_dir, "front/a.jpg"), np.full((4, 4), 7.0), np.ones((4, 4)), 2.0)
 
     assert generate_depth.generate_depths(args, Estimator, 2, 2) == 1
 
     assert runs == [2]
-    np.testing.assert_array_equal(np.load(depth_dir / "front/a.jpg.npy"), np.full((1, 3), 7))
-    assert len(np.load(depth_dir / "front/b.jpg.npy")) > 0
-    assert np.load(depth_dir / "front/c.jpg.npy").shape == (0, 3)
-    assert np.load(depth_dir / "up/d.jpg.npy").shape == (0, 3)
+    assert load_depth_map(depth_path(depth_dir, "front/a.jpg")).scale == 2.0
+    written = load_depth_map(depth_path(depth_dir, "front/b.jpg"))
+    np.testing.assert_array_equal(written.depth, np.ones((4, 4)))
+    np.testing.assert_array_equal(written.confidence, np.ones((4, 4)))
+    assert load_depth_map(depth_path(depth_dir, "front/c.jpg")) is None
+    assert load_depth_map(depth_path(depth_dir, "up/d.jpg")) is None
 
     assert generate_depth.generate_depths(args, Estimator, 2, 2) == 0
     assert runs == [2]

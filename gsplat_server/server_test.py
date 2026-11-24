@@ -264,14 +264,18 @@ def test_depth_runs_between_segmentation_and_training(tmp_path, parameters):
     assert [name for name, _ in steps] == ["segmentation", "depth", "gsplat training"]
 
 
-def test_depth_reads_the_model_and_writes_beside_it(tmp_path, parameters):
-    command = server.depth_command(tmp_path, 0.002)
+def test_depth_reads_the_model_and_writes_beside_it(tmp_path):
+    parameters = load_default_parameters()
+    parameters.depth_voxel_factor = 0.002
+    parameters.depth_min_confidence = 0.8
+
+    command = server.depth_command(tmp_path, parameters)
 
     assert str(server.DEPTH_ENTRYPOINT) in command
     assert str(tmp_path / "depths") in command
     assert command[-6:] == [
-        "--mask-dir", str(tmp_path / "masks"), "--samples-per-image", "-1",
-        "--voxel-factor", "0.002",
+        "--mask-dir", str(tmp_path / "masks"),
+        "--voxel-factor", "0.002", "--min-confidence", "0.8",
     ]
 
 

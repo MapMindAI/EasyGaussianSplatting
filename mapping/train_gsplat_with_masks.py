@@ -19,6 +19,7 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path[:] = [path for path in sys.path if os.path.abspath(path or ".") != SCRIPT_DIR]
 
+import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
 import tqdm  # noqa: E402
@@ -28,15 +29,28 @@ GSPLAT_ROOT = pathlib.Path(os.environ.get("GSPLAT_DIR", pathlib.Path(__file__).r
 EXAMPLES_DIR = str(GSPLAT_ROOT / "examples")
 
 
+def listed_files(dataset, folder):
+    """Paths, relative to it, of the files under `folder` in the dataset's data_dir.
+
+    Listed once per dataset rather than checked per item: each check is a
+    round trip on a network mount, and training loads every item many times.
+    """
+    cache = dataset.__dict__.setdefault("_listed_files", {})
+    if folder not in cache:
+        root = pathlib.Path(dataset.parser.data_dir) / folder
+        cache[folder] = {path.relative_to(root).as_posix() for path in files_under(root)}
+    return cache[folder]
+
+
 def attach_masks(dataset_class):
     original_getitem = dataset_class.__getitem__
 
     def __getitem__(self, item):
         data = original_getitem(self, item)
         image_name = self.parser.image_names[self.indices[item]]
-        mask_path = os.path.join(self.parser.data_dir, "masks", f"{image_name}.png")
-        if not os.path.exists(mask_path):
+        if f"{image_name}.png" not in listed_files(self, "masks"):
             return data
+        mask_path = os.path.join(self.parser.data_dir, "masks", f"{image_name}.png")
 
         assert self.patch_size is None, "masks are not cropped along with patches"
         height, width = data["image"].shape[:2]
@@ -111,18 +125,19 @@ def downsample_images(parser_class):
     parser_class.__init__ = __init__
 
 
-def attach_depths(dataset_class):
+def attach_depths(dataset_class, depth_filter):
     """Supply the depth supervision simple_trainer's --depth_loss consumes.
 
     Its own source is the sparse COLMAP points, which it looks up in
     parser.point_indices -- a dict with no entry at all for a cube face SfM
     barely covered. That path is switched off and answered here with what
     generate_depth.py wrote, which is denser and covers the textureless surfaces
-    SfM never triangulated. The file stores x and y normalized and depth in the
-    COLMAP frame, so both are put into the frame the renderer works in here:
-    pixels of the image as loaded, and the parser's normalized world. The scale
-    comes off the parser rather than a module global so it survives a dataloader
-    worker that re-imports instead of forking.
+    SfM never triangulated. The file holds the depth model's full output at its
+    own resolution in the COLMAP frame (mapping/depth/depth_maps.py); it is
+    filtered by `depth_filter`, the image's training mask, and colour edges, each
+    kept map pixel placed at its centre in the image as loaded, and put into
+    the parser's normalized world. The scale comes off the parser rather than a module global so it
+    survives a dataloader worker that re-imports instead of forking.
     """
     original_getitem = dataset_class.__getitem__
 
@@ -130,15 +145,17 @@ def attach_depths(dataset_class):
         self.load_depths = False
         data = original_getitem(self, item)
         image_name = self.parser.image_names[self.indices[item]]
-        depth_path = os.path.join(self.parser.data_dir, "depths", f"{image_name}.npy")
-        rows = (
-            np.load(depth_path)
-            if os.path.exists(depth_path)
-            else np.zeros((0, 3), dtype=np.float32)
-        )
-
         assert self.patch_size is None, "depths are not cropped along with patches"
         height, width = data["image"].shape[:2]
+        rows = np.zeros((0, 3), dtype=np.float32)
+        file_name = f"{image_name}{DEPTH_SUFFIX}"
+        if file_name in listed_files(self, "depths"):
+            depth_map = load_depth_map(pathlib.Path(self.parser.data_dir, "depths", file_name))
+            if depth_map is not None:
+                grayscale = cv2.cvtColor(data["image"].numpy(), cv2.COLOR_RGB2GRAY)
+                mask = data["mask"].numpy() if "mask" in data else None
+                depth = supervised_depth(depth_map, grayscale, mask, depth_filter)
+                rows = depth_rows(depth, width, height)
         points, depths = depth_supervision_in_normalized_frame(
             self.parser.transform, rows, width, height
         )
@@ -311,7 +328,15 @@ from datasets.colmap import Dataset, Parser  # noqa: E402
 from datasets.normalize import transform_points  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
+from mapping.depth.depth_maps import (  # noqa: E402
+    DEPTH_SUFFIX,
+    DepthFilter,
+    depth_rows,
+    load_depth_map,
+    supervised_depth,
+)
 from mapping.depth.point_cloud import POINT_CLOUD_NAME, read_point_cloud  # noqa: E402
+from mapping.file_listing import files_under  # noqa: E402
 from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
@@ -452,7 +477,7 @@ if parameters is not None and parameters.HasField("background_color"):
 downsample_images(Parser)
 attach_masks(Dataset)
 if parameters is not None and depth_loss_enabled(parameters):
-    attach_depths(Dataset)
+    attach_depths(Dataset, DepthFilter(min_confidence=parameters.depth_min_confidence))
     guard_depth_loss(gsplat.losses)
 if parameters is not None and parameters.run_depth:
     # MCMC never grows past cap_max, so leave it room to relocate and add.
