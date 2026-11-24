@@ -255,6 +255,7 @@ same part of the scene, by their shared sparse points and relative poses (see
 present in the repo checkout the server runs from (see
 [tools.md](tools.md#vggt-omega-instead-of-da3)). The Triton DA3 stage,
 `mapping/depth/generate_depth.py`, stays available for manual runs.
+[depth_pipeline.md](depth_pipeline.md) covers every step from prediction to the loss.
 
 Server preprocessing runs in the `gsplat` environment, which includes ONNX
 Runtime and pycolmap. Rebuild the image after
