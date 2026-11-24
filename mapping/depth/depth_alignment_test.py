@@ -10,6 +10,7 @@ from mapping.depth.depth_alignment import (
     fit_depth,
     fit_group,
     fused_depth,
+    fusion_order,
     median_relative_error,
     percentile_agreement,
 )
@@ -46,6 +47,15 @@ def test_fit_rejects_a_shift_that_sends_far_depths_behind_the_camera():
     assert fit.status != FITTED
 
 
+def test_fit_rejects_a_shift_that_stretches_far_depths_out_of_bound():
+    reference = np.linspace(2.0, 8.0, 60)
+    predicted = 1 / (1 / reference + 0.04)  # A shift of -0.04: 20 would align to 100.
+
+    fit = fit_depth(predicted, reference, largest_depth=20.0)
+
+    assert fit.status == SCALE_ONLY
+
+
 def test_too_few_samples_give_no_fit():
     assert fit_depth([1.0] * 5, [1.0] * 5, 10.0) is None
 
@@ -73,6 +83,15 @@ def test_aligned_depth_keeps_holes_and_drops_depths_sent_behind_the_camera():
     np.testing.assert_allclose(aligned_depth(depth, Fit(1.0, -0.05, FITTED)), [0.0, 1 / 0.95, 0.0])
 
 
+def test_aligned_depth_drops_depths_beyond_the_checked_range():
+    # 1 / 19.99 - 0.05 is just above 0, which would send that depth to about 8000.
+    depth = np.array([10.0, 19.99])
+
+    aligned = aligned_depth(depth, Fit(1.0, -0.05, FITTED, largest_depth=10.0))
+
+    np.testing.assert_allclose(aligned, [20.0, 0.0], rtol=1e-5)
+
+
 def test_percentile_agreement_drops_samples_out_of_order():
     reference = np.arange(1.0, 11.0)
     predicted = reference.copy()
@@ -89,6 +108,14 @@ def test_neighbours_are_the_frames_sharing_the_most_points():
     )
 
     assert neighbours == [[1, 2], [0, 2], [0, 1], []]
+
+
+def test_fusion_order_takes_each_frame_across_its_faces():
+    names = ["front/000002.jpg", "back/000001.jpg", "front/000001.jpg", "back/000002.jpg"]
+
+    assert fusion_order(names) == [
+        "back/000001.jpg", "front/000001.jpg", "back/000002.jpg", "front/000002.jpg"
+    ]
 
 
 def view_at(camera_x, depth):

@@ -41,8 +41,10 @@ The fusion runs once every group is written, in both depth entrypoints, and
 replaces the files in `depths/`. It writes `depths/fusion.json`, with each
 frame's neighbour count and the fraction of checked pixels kept, which marks
 the depths fused; the stage deletes it whenever it writes a new depth, so a
-resumed run fuses again. It can be rerun without inference, after deleting
-`fusion.json`:
+resumed run fuses again. Views are loaded as they are needed, frame by frame
+across the cube faces, and at most 128 are held; the fused maps go to
+`depths/.fusing/` until all are written, so every neighbour is read unfused.
+It can be rerun without inference, after deleting `fusion.json`:
 
 ```bash
 python3 -m mapping.depth.depth_alignment <model_dir> --min-confidence 0.7 [--mask-dir <masks>]
@@ -68,9 +70,11 @@ group's pooled samples:
 - **Refinement:** twice, by least squares on relative error, over the inliers.
 
 The fit needs at least 30 inliers. Its samples' disparities must span a
-factor of 1.5, and it must keep the group's farthest usable depth in front of
-the camera. Otherwise the group takes a scale-only fit (at least 10 inliers),
-or failing that is skipped.
+factor of 1.5, and its shift may at most double the group's farthest usable
+depth over the scale-only value: a negative shift drives the disparity towards
+0 there, and the depth past float16's range. Otherwise the group takes a
+scale-only fit (at least 10 inliers), or failing that is skipped. Depths beyond
+the farthest usable one, which the fit was never checked on, are dropped.
 
 ### 3. Cross-view fusion
 

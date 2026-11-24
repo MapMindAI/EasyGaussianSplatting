@@ -16,6 +16,9 @@ from typing import NamedTuple
 import numpy as np
 
 SUMMARY_NAME = "fusion.json"
+FUSING_DIR_NAME = ".fusing"
+# Views held while fusing, about 1.5 MB each at 416 x 416 with their confidence.
+VIEW_CACHE_SIZE = 128
 
 MIN_TRACK_LENGTH = 3
 # Sparse references beyond this depth, in map units, are too noisy to fit to.
@@ -28,6 +31,9 @@ MIN_AFFINE_INLIERS = 30
 MIN_SCALE_INLIERS = 10
 # Below this ratio of the samples' largest to smallest disparity, a shift is unobservable.
 MIN_DISPARITY_SPAN = 1.5
+# A shift may stretch the farthest usable depth to at most this multiple of
+# its scale-only value; a disparity driven near 0 there sends it out of bound.
+MAX_FARTHEST_STRETCH = 2.0
 NEIGHBOUR_COUNT = 8
 MIN_SHARED_POINTS = 10
 CONFIRM_TOLERANCE = 0.05  # Log depth.
@@ -42,13 +48,17 @@ class Fit(NamedTuple):
     status: str
     samples: int = 0
     inliers: int = 0
+    # The farthest predicted depth the fit was checked over. Beyond it a
+    # negative shift drives the disparity towards 0 and the depth past any bound.
+    largest_depth: float = np.inf
 
 
 def aligned_depth(depth, fit):
-    """`depth` through `fit`; 0 where it is 0 or the fit sends it behind the camera."""
+    """`depth` through `fit`; 0 where it is 0, beyond fit.largest_depth, or
+    sent behind the camera."""
     depth = np.asarray(depth, dtype=np.float32)
     disparity = np.zeros_like(depth)
-    valid = depth > 0
+    valid = (depth > 0) & (depth <= fit.largest_depth)
     disparity[valid] = fit.scale / depth[valid] + fit.shift
     result = np.zeros_like(depth)
     positive = valid & (disparity > 0)
@@ -119,8 +129,8 @@ def _ransac(disparity, reference_disparity, candidates, refine):
 def fit_depth(predicted, reference, largest_depth, seed=0):
     """The Fit of `predicted` depths onto `reference` ones, in disparity, or None.
 
-    An affine fit when enough samples span enough disparity and it keeps every
-    depth up to `largest_depth` in front of the camera; else a scale.
+    An affine fit when enough samples span enough disparity and it stretches
+    no depth up to `largest_depth` past MAX_FARTHEST_STRETCH; else a scale.
     """
     predicted = np.asarray(predicted, dtype=np.float64)
     reference = np.asarray(reference, dtype=np.float64)
@@ -142,14 +152,14 @@ def fit_depth(predicted, reference, largest_depth, seed=0):
             if (
                 inliers.sum() >= MIN_AFFINE_INLIERS
                 and scale > 0
-                and scale / largest_depth + shift > 0
+                and scale / largest_depth + shift >= scale / (MAX_FARTHEST_STRETCH * largest_depth)
             ):
-                return Fit(scale, shift, FITTED, count, int(inliers.sum()))
+                return Fit(scale, shift, FITTED, count, int(inliers.sum()), largest_depth)
 
     candidates = np.column_stack([reference_disparity / disparity, np.zeros(count)])
     scale, _, inliers = _ransac(disparity, reference_disparity, candidates, _refine_scale)
     if inliers.sum() >= MIN_SCALE_INLIERS and scale > 0:
-        return Fit(scale, 0.0, SCALE_ONLY, count, int(inliers.sum()))
+        return Fit(scale, 0.0, SCALE_ONLY, count, int(inliers.sum()), largest_depth)
     return None
 
 
@@ -257,24 +267,40 @@ def fit_group(samples, largest_depth):
     return fit_depth(predicted[agree], reference[agree], largest_depth)
 
 
+def fusion_order(names):
+    """`names` by frame, then by face, so a frame's covisible neighbours -- the
+    other faces of the same and nearby frames -- are fused close together."""
+    from pathlib import PurePosixPath
+
+    return sorted(names, key=lambda name: (PurePosixPath(name).stem, name))
+
+
 def fuse_depths(model_dir, depth_dir, depth_filter, mask_dir=None):
     """Replaces each depth under `depth_dir` with it fused with its
     neighbours', and writes SUMMARY_NAME; returns whether it fused, which it
     skips when SUMMARY_NAME already exists. Pixels below the confidence floor
     or outside the masks in `mask_dir` (which may be None) are kept but neither
-    checked nor used as evidence."""
+    checked nor used as evidence.
+
+    Views are loaded as they are needed and at most VIEW_CACHE_SIZE are held.
+    The fused maps go to FUSING_DIR_NAME first, so every neighbour is read
+    unfused, and replace the originals once all are written."""
+    import os
+    import shutil
+    from collections import OrderedDict
+
     import pycolmap
     from tqdm import tqdm
 
     from mapping.depth.depth_maps import (
         depth_path,
+        holds_depth,
         load_depth_map,
         mask_at,
         save_depth_map,
         training_masks,
     )
     from mapping.depth.generate_depth import observed_depths
-    from mapping.depth.point_cloud import prefetched
     from mapping.file_listing import files_under
 
     summary_path = depth_dir / SUMMARY_NAME
@@ -287,44 +313,58 @@ def fuse_depths(model_dir, depth_dir, depth_filter, mask_dir=None):
     images = {image.name: image for image in reconstruction.images.values()}
     written = set(files_under(depth_dir))
     training_mask = training_masks(mask_dir)
+    by_name = sorted(
+        name for name in images
+        if depth_path(depth_dir, name) in written and holds_depth(depth_path(depth_dir, name))
+    )
+    # Picked in name order, so ties in shared points break as they always have.
+    neighbours_by_name = covisible_neighbours(
+        [np.unique(observations[name].point_indices) for name in by_name], len(points)
+    )
+    names = fusion_order(by_name)
+    position = {name: index for index, name in enumerate(names)}
+    neighbours = [None] * len(names)
+    for name, named_neighbours in zip(by_name, neighbours_by_name):
+        neighbours[position[name]] = [position[by_name[neighbour]] for neighbour in named_neighbours]
 
-    def load(name):
-        return name, load_depth_map(depth_path(depth_dir, name)), training_mask(name)
+    cache = OrderedDict()  # Frame index to (View, confidence, scale), least recent first.
 
-    frames = []  # (name, view, confidence, scale) per image with depth.
-    with_files = sorted(name for name in images if depth_path(depth_dir, name) in written)
-    for name, depth_map, mask in tqdm(
-        prefetched(load, with_files, 8), total=len(with_files), desc="Load", unit="image",
-        dynamic_ncols=True,
-    ):
-        if depth_map is None:
-            continue
+    def frame(index):
+        if index in cache:
+            cache.move_to_end(index)
+            return cache[index]
+        name = names[index]
+        depth_map = load_depth_map(depth_path(depth_dir, name))
+        mask = training_mask(name)
         camera = reconstruction.cameras[images[name].camera_id]
         usable = (depth_map.depth > 0) & (depth_map.confidence >= depth_filter.min_confidence)
         if mask is not None:
             usable &= mask_at(mask, usable.shape)
-        frames.append((name, View(
+        cache[index] = (View(
             depth_map.depth,
             usable,
             map_intrinsics(camera.calibration_matrix(), (camera.width, camera.height), usable.shape),
             observations[name].camera_from_world,
-        ), depth_map.confidence, depth_map.scale))
+        ), depth_map.confidence, depth_map.scale)
+        if len(cache) > VIEW_CACHE_SIZE:
+            cache.popitem(last=False)
+        return cache[index]
 
-    neighbours = covisible_neighbours(
-        [np.unique(observations[name].point_indices) for name, *_ in frames], len(points)
-    )
-    views = [view for _, view, *_ in frames]
+    fusing_dir = depth_dir / FUSING_DIR_NAME
+    shutil.rmtree(fusing_dir, ignore_errors=True)  # Left by an interrupted run.
     summary = {}
-    for frame, (name, view, confidence, scale) in enumerate(tqdm(
-        frames, desc="Cross-view check", unit="image", dynamic_ncols=True,
-    )):
-        depth = fused_depth(view, [views[neighbour] for neighbour in neighbours[frame]])
-        save_depth_map(depth_path(depth_dir, name), depth, confidence, scale)
+    for index, name in enumerate(tqdm(names, desc="Cross-view check", unit="image", dynamic_ncols=True)):
+        view, confidence, scale = frame(index)
+        depth = fused_depth(view, [frame(neighbour)[0] for neighbour in neighbours[index]])
+        save_depth_map(depth_path(fusing_dir, name), depth, confidence, scale)
         checked = int(view.usable.sum())
         summary[name] = {
-            "neighbours": len(neighbours[frame]),
+            "neighbours": len(neighbours[index]),
             "kept_fraction": float((view.usable & (depth > 0)).sum() / checked) if checked else None,
         }
+    for name in names:
+        os.replace(depth_path(fusing_dir, name), depth_path(depth_dir, name))
+    shutil.rmtree(fusing_dir)
     summary_path.write_text(json.dumps(summary, indent=1))
     kept = [entry["kept_fraction"] for entry in summary.values() if entry["kept_fraction"] is not None]
     print(

@@ -12,6 +12,7 @@ it, with depth_rows.
 """
 
 import os
+import zipfile
 from typing import NamedTuple
 
 import cv2
@@ -62,6 +63,17 @@ def save_depth_map(path, depth, confidence, scale):
 
 def save_empty_depth_map(path):
     save_depth_map(path, np.zeros((0, 0)), np.zeros((0, 0)), np.nan)
+
+
+def holds_depth(path):
+    """Whether a save_depth_map file holds a depth, read from its header alone."""
+    with zipfile.ZipFile(path) as archive, archive.open("depth.npy") as file:
+        version = np.lib.format.read_magic(file)
+        if version == (1, 0):
+            shape, _, _ = np.lib.format.read_array_header_1_0(file)
+        else:
+            shape, _, _ = np.lib.format.read_array_header_2_0(file)
+    return int(np.prod(shape)) > 0
 
 
 def load_depth_map(path):
