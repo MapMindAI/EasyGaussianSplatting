@@ -77,8 +77,7 @@ With `depth_lambda` > 0, each training image's map is filtered by
 
 - its confidence is at least `depth_min_confidence`;
 - its depth is within 0.1 to 5.0 model units (`depth / scale`);
-- the training mask keeps it (people, sky);
-- it is not on a Canny edge of the image.
+- the training mask keeps it (people, sky).
 
 Each kept map pixel becomes one sample at its centre in the training image.
 gsplat renders expected depth, samples it there, and adds
@@ -90,7 +89,8 @@ render is below 0.001 of the scene scale are skipped: nothing covers them yet.
 The depths came from a per-group disparity fit (`1/D_colmap = k/D + b`) in
 place of step 3's scale, then fused.
 
-Pixels kept at `depth_min_confidence` 0.9, over 60 sampled maps:
+Pixels kept at `depth_min_confidence` 0.9, over 60 sampled maps, measured
+with a Canny edge filter the loss has since dropped:
 
 | Filter | Map pixels kept |
 | --- | --- |

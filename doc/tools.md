@@ -197,9 +197,7 @@ kept map pixel, at its centre in the image as loaded: interpolating to full
 resolution would add about 20 times the points and no information. They drop
 pixels below `--min-confidence` (0.5; `depth_min_confidence` in the
 parameters), outside `--min-depth` (0.1) to `--max-depth` (5.0), in the depth
-model's units before scaling, under the training masks, and on colour edges,
-found at the map's resolution, so depth supervision does not pull geometry
-across foliage and other detail edges. Here those flags only shape the debug
+model's units before scaling, and under the training masks. Here those flags only shape the debug
 overlays, which show the depth that remains after filtering.
 `--debug-dir <directory>` writes a colourized depth overlay over every source
 image, preserving nested image paths and adding `_depth.png` to the filename.

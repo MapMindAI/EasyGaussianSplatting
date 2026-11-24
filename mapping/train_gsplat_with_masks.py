@@ -19,7 +19,6 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path[:] = [path for path in sys.path if os.path.abspath(path or ".") != SCRIPT_DIR]
 
-import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
 import tqdm  # noqa: E402
@@ -134,7 +133,7 @@ def attach_depths(dataset_class, depth_filter):
     generate_depth.py wrote, which is denser and covers the textureless surfaces
     SfM never triangulated. The file holds the depth model's full output at its
     own resolution in the COLMAP frame (mapping/depth/depth_maps.py); it is
-    filtered by `depth_filter`, the image's training mask, and colour edges, each
+    filtered by `depth_filter` and the image's training mask, each
     kept map pixel placed at its centre in the image as loaded, and put into
     the parser's normalized world. The scale comes off the parser rather than a module global so it
     survives a dataloader worker that re-imports instead of forking.
@@ -152,9 +151,8 @@ def attach_depths(dataset_class, depth_filter):
         if file_name in listed_files(self, "depths"):
             depth_map = load_depth_map(pathlib.Path(self.parser.data_dir, "depths", file_name))
             if depth_map is not None:
-                grayscale = cv2.cvtColor(data["image"].numpy(), cv2.COLOR_RGB2GRAY)
                 mask = data["mask"].numpy() if "mask" in data else None
-                depth = supervised_depth(depth_map, grayscale, mask, depth_filter)
+                depth = supervised_depth(depth_map, mask, depth_filter)
                 rows = depth_rows(depth, width, height)
         points, depths = depth_supervision_in_normalized_frame(
             self.parser.transform, rows, width, height

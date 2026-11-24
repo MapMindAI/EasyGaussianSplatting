@@ -286,8 +286,7 @@ def write_depth_point_cloud(model_dir, depth_dir, output_path, voxel_factor, mas
         bgr = cv2.imread(str(model_dir / "images" / image.name))
         if bgr is None:
             return None
-        grayscale = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-        depth = supervised_depth(depth_map, grayscale, training_mask(image.name), depth_filter)
+        depth = supervised_depth(depth_map, training_mask(image.name), depth_filter)
         return (
             depth_rows(depth, bgr.shape[1], bgr.shape[0]),
             bgr,
