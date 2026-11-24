@@ -37,20 +37,19 @@ def removal_mask(scores, keep_fraction):
     return mask
 
 
-def validate_pruning_configuration(configuration, steps, world_size):
+def validate_pruning_configuration(configuration, world_size):
     if world_size != 1 or configuration.patch_size is not None:
         raise ValueError("significance pruning requires one GPU and full training images")
-    if any(step >= configuration.max_steps for step in steps):
-        raise ValueError("pruning steps must leave an optimization step before max_steps")
     if configuration.with_eval3d or configuration.with_ut or configuration.camera_model != "pinhole":
         raise ValueError("significance pruning currently requires standard pinhole rasterization")
 
 
 def load_training_mask(data_directory, image_name, size):
-    path = Path(data_directory) / "masks" / f"{image_name}.png"
-    if not path.exists():
+    try:
+        image = Image.open(Path(data_directory) / "masks" / f"{image_name}.png")
+    except FileNotFoundError:
         return None
-    with Image.open(path) as image:
+    with image:
         mask = np.asarray(image.resize(size, Image.Resampling.NEAREST)) > 127
     # Empty per-image masks would make the training loss NaN.
     return mask if mask.any() else None
@@ -134,19 +133,20 @@ def score_gaussians(runner, parameters):
             view = torch.tensor(parser.camtoworlds[image_index], dtype=torch.float32, device=device)[None]
             if configuration.pose_opt:
                 view = runner.pose_adjust(view, torch.tensor([int(index)], device=device))
-            mask = load_training_mask(parser.data_dir, parser.image_names[image_index], (width, height))
-            if mask is None:
-                mask = parser.mask_dict[camera_id]
+            mask = load_training_mask(parser.data_dir, parser.image_names[image_index],
+                                      (resized_width, resized_height))
             if mask is not None:
+                mask = torch.from_numpy(mask).to(device)
+            elif parser.mask_dict[camera_id] is not None:
                 mask = torch.nn.functional.interpolate(
-                    torch.as_tensor(mask, device=device).float()[None, None],
+                    torch.as_tensor(parser.mask_dict[camera_id], device=device).float()[None, None],
                     size=(resized_height, resized_width), mode="nearest",
                 )[0, 0].bool()
             score_region(torch.linalg.inv(view), intrinsics, resized_width, resized_height, mask)
         # The volume reference is common to every score and cannot change ranking.
         log_volume = splats["scales"].sum(dim=-1)
         volume_weight = torch.exp(0.1 * (log_volume - log_volume.max()))
-        return (hits * opacity * volume_weight).cpu().numpy(), len(selected)
+        return (hits * opacity * volume_weight).cpu().numpy()
 
 
 def attach_pruning(trainer, parameters):
@@ -159,8 +159,8 @@ def attach_pruning(trainer, parameters):
     def __init__(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         configuration = self.cfg
-        if not len(self.trainset):
-            raise ValueError("significance pruning requires training views")
+        validate_pruning_configuration(configuration, self.world_size)
+        scoring_views = min(parameters.mcmc_prune_scoring_views, len(self.trainset))
         original_step = configuration.strategy.step_post_backward
         pruning_steps = frozenset(parameters.mcmc_prune_steps)
 
@@ -169,20 +169,18 @@ def attach_pruning(trainer, parameters):
                           info=info, lr=lr, scene=scene)
             if step + 1 not in pruning_steps:
                 return
-            before = len(params["means"])
-            scores, views = score_gaussians(self, parameters)
+            scores = score_gaussians(self, parameters)
             mask = torch.from_numpy(removal_mask(scores, parameters.mcmc_prune_keep_fraction)).to(self.device)
             # MCMC's state contains a shared binomial table, not per-Gaussian rows.
             remove(params, optimizers, {}, mask, scene=scene)
             after = len(params["means"])
             configuration.strategy.cap_max = min(configuration.strategy.cap_max, after)
-            record = {"iteration": step + 1, "before": before, "after": after,
-                      "cap_max": configuration.strategy.cap_max, "scoring_views": views,
-                      "resolution": parameters.mcmc_prune_resolution,
-                      "score": "accepted_pixel_hits * opacity * volume**0.1"}
+            line = json.dumps({"iteration": step + 1, "before": len(scores), "after": after,
+                               "cap_max": configuration.strategy.cap_max, "scoring_views": scoring_views,
+                               "resolution": parameters.mcmc_prune_resolution})
             with (Path(configuration.result_dir) / "pruning.jsonl").open("a") as stream:
-                stream.write(json.dumps(record) + "\n")
-            print(f"Significance pruning: {json.dumps(record)}", flush=True)
+                stream.write(line + "\n")
+            print(f"Significance pruning: {line}", flush=True)
 
         configuration.strategy.step_post_backward = step_post_backward
 

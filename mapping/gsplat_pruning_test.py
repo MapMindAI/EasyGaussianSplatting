@@ -69,22 +69,22 @@ def test_invalid_or_invisible_models_cannot_be_pruned(scores):
 
 
 @pytest.mark.parametrize("field,value", [
-    ("patch_size", 128), ("max_steps", 1000), ("with_eval3d", True),
+    ("patch_size", 128), ("with_eval3d", True),
     ("with_ut", True), ("camera_model", "fisheye"),
 ])
 def test_incompatible_resolved_configuration_is_rejected(field, value):
-    configuration = SimpleNamespace(patch_size=None, max_steps=2000, with_eval3d=False,
+    configuration = SimpleNamespace(patch_size=None, with_eval3d=False,
                                     with_ut=False, camera_model="pinhole")
     setattr(configuration, field, value)
     with pytest.raises(ValueError):
-        validate_pruning_configuration(configuration, [1000], 1)
+        validate_pruning_configuration(configuration, 1)
 
 
 @pytest.mark.parametrize("world_size", [0, 2])
 def test_pruning_requires_one_gpu(world_size):
     configuration = SimpleNamespace(patch_size=None)
     with pytest.raises(ValueError, match="one GPU"):
-        validate_pruning_configuration(configuration, [1000], world_size)
+        validate_pruning_configuration(configuration, world_size)
 
 
 def test_training_mask_missing_or_all_black_preserves_camera_mask(tmp_path):

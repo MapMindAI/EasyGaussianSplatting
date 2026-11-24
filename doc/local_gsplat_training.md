@@ -97,16 +97,6 @@ With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
 refinement; `cap_max` limits the count. `prune_opa` applies only to
 DefaultStrategy.
 
-A `data_factor` above 1 trains on `<workspace>/images_<data_factor>/`, which
-the first run writes from `images/`.
-
-The local command does not run segmentation or depth generation merely because
-`run_segmentation` or `run_depth` is set in the parameters file. Run those
-stages separately. When `run_depth: true`, the trainer uses any existing
-`<workspace>/depths/*.npy` files for depth supervision. It logs generated-depth
-minus sparse-COLMAP-depth statistics for samples within two pixels of each
-sparse point.
-
 ## Prune during MCMC training
 
 Enable optional significance pruning in a custom JobParameters file:
@@ -127,12 +117,9 @@ the final iteration. The default step list is empty, disabling pruning. Each
 event retains a fraction of the current population and lowers `cap_max` to
 prevent regrowth; MCMC relocation and noise continue under their existing settings.
 
-Scoring uses evenly sampled training cameras and masks without decoding RGB
-images. Images are capped at `mcmc_prune_resolution` on their longest side;
-crowded regions are subdivided to bound contributor-index buffers. The score is
-`accepted_pixel_hits × sigmoid(opacity) × volume**0.1`, using gsplat's integer
-hit reduction and the upstream unclipped volume weighting. The common volume
-reference is omitted because it does not affect ranking. Zero sampled hits do
+Scoring renders evenly sampled training cameras, with their masks, at most
+`mcmc_prune_resolution` on the longest side. The score is
+`accepted_pixel_hits × sigmoid(opacity) × volume**0.1`. Zero sampled hits do
 not establish invisibility from other views.
 
 Deletion preserves Adam and scene state; `pruning.jsonl` records each event.

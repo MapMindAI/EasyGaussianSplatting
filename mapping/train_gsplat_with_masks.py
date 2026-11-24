@@ -337,7 +337,7 @@ from mapping.gsplat_regularization import (  # noqa: E402
     stop_regularization_after_refinement,
 )
 from mapping.gsplat_pruning import (  # noqa: E402
-    attach_pruning, load_training_mask, validate_pruning, validate_pruning_configuration,
+    attach_pruning, load_training_mask, validate_pruning,
 )
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
@@ -452,8 +452,6 @@ def cli_with_configuration(function, configuration, verbose=False):
     pprint.pprint(vars(configuration), sort_dicts=False, width=100)
     sys.stdout.flush()
     if parameters is not None and parameters.mcmc_prune_steps:
-        world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", torch.cuda.device_count()))
-        validate_pruning_configuration(configuration, parameters.mcmc_prune_steps, world_size)
         attach_pruning(function.__globals__, parameters)
     # simple_trainer's functions and classes are only reachable once
     # runpy has defined them, through the globals of its main.

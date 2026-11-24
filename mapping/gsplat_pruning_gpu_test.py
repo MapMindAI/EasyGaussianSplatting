@@ -53,7 +53,7 @@ def test_pruning_preserves_adam_and_scene_state_while_mcmc_continues(tmp_path, m
             self.world_size, self.device, self.trainset = 1, "cuda", [0]
 
     monkeypatch.setattr(gsplat_pruning, "score_gaussians",
-                        lambda runner, _: (np.arange(len(runner.splats["means"])) + 1, 1))
+                        lambda runner, _: np.arange(len(runner.splats["means"])) + 1)
     gsplat_pruning.attach_pruning({"Runner": Runner}, parameters)
     runner = Runner()
     original_means = runner.splats["means"].detach().clone()
@@ -118,16 +118,15 @@ def test_scoring_maps_packed_ids_and_excludes_masked_or_invisible_hits(antialias
         antialiased=antialiased, pose_opt=False,
     )
     runner = SimpleNamespace(splats=splats, cfg=configuration, trainset=dataset)
-    dense_scores, views = gsplat_pruning.score_gaussians(runner, parameters)
+    dense_scores = gsplat_pruning.score_gaussians(runner, parameters)
     configuration.packed = True
-    packed_scores, _ = gsplat_pruning.score_gaussians(runner, parameters)
+    packed_scores = gsplat_pruning.score_gaussians(runner, parameters)
     np.testing.assert_array_equal(dense_scores, packed_scores)
-    assert views == 1
     assert (packed_scores[:2] > 0).all()
     assert (packed_scores[2:] == 0).all()
     monkeypatch.setattr(gsplat_pruning, "MAXIMUM_REGION_HITS", 10)
-    subdivided_scores, _ = gsplat_pruning.score_gaussians(runner, parameters)
+    subdivided_scores = gsplat_pruning.score_gaussians(runner, parameters)
     np.testing.assert_array_equal(subdivided_scores, packed_scores)
     parser.mask_dict[2] = np.zeros((32, 32), dtype=bool)
-    masked_scores, _ = gsplat_pruning.score_gaussians(runner, parameters)
+    masked_scores = gsplat_pruning.score_gaussians(runner, parameters)
     assert (masked_scores == 0).all()
