@@ -1,21 +1,14 @@
-"""MaskGaussian (arXiv 2412.20522) for simple_trainer's DefaultStrategy.
-
-Each Gaussian gets two logits, keep and drop. Every training render samples a
-hard keep/drop mask from them, and gsplat's masked rasterization
-(`rasterization(gaussian_masks=...)`) renders the dropped Gaussians as nothing
-while still giving them the gradient that would bring them back. A loss on the
-squared mean mask pushes Gaussians to drop, and those dropped in every one of
-PRUNE_DRAWS samples are pruned. Evaluation, the viewer, and the export keep a
-Gaussian when its keep logit is the larger.
-
-Settings follow the authors' code (github.com/kaikai23/MaskGaussian).
+"""MaskGaussian (arXiv 2412.20522) for simple_trainer's DefaultStrategy; see
+doc/gsplat_server.md. Settings follow the authors' code
+(github.com/kaikai23/MaskGaussian), except that evaluation, the viewer, and
+the export keep a Gaussian when its keep logit is the larger instead of
+sampling.
 """
 
 MASK_KEY = "mask_scores"
 INITIAL_SCORES = (10.0, 1.0)  # Keep and drop logits: keeps with probability 0.9999.
 LEARNING_RATE = 0.01
 PRUNE_DRAWS = 10
-# After refinement stops, prune this often; before, at every refinement step.
 PRUNE_EVERY_AFTER_REFINEMENT = 1000
 
 
@@ -31,7 +24,7 @@ def sample_masks(scores):
     """One hard keep (1) or drop (0) per Gaussian, straight through to `scores`."""
     import torch.nn.functional as functional
 
-    return functional.gumbel_softmax(functional.log_softmax(scores, dim=-1), hard=True)[:, 0]
+    return functional.gumbel_softmax(scores, hard=True)[:, 0]
 
 
 def kept(scores):
@@ -39,11 +32,12 @@ def kept(scores):
 
 
 def always_dropped(scores):
-    """Gaussians dropped in each of PRUNE_DRAWS samples."""
+    """Gaussians dropped in each of PRUNE_DRAWS samples, drawn at once."""
     import torch
 
     with torch.no_grad():
-        return sum(sample_masks(scores) for _ in range(PRUNE_DRAWS)) == 0
+        drop_probability = torch.softmax(scores, dim=-1)[:, 1]
+        return torch.rand_like(drop_probability) < drop_probability**PRUNE_DRAWS
 
 
 def add_mask_loss(masks, weight):
@@ -80,12 +74,15 @@ def enable_mask_gaussian(trainer, strategy_class, weight):
     original_rasterize = runner_class.rasterize_splats
 
     def rasterize_splats(self, *args, splats=None, **kwargs):
-        scores = (self.splats if splats is None else splats)[MASK_KEY]
-        if torch.is_grad_enabled():
-            masks = sample_masks(scores)
-            add_mask_loss(masks, weight)
-        else:
-            masks = kept(scores).float()
+        splats = self.splats if splats is None else splats
+        if not torch.is_grad_enabled():
+            # Evaluation and the viewer render only the kept Gaussians.
+            keep = kept(splats[MASK_KEY])
+            return original_rasterize(
+                self, *args, splats={name: value[keep] for name, value in splats.items()}, **kwargs
+            )
+        masks = sample_masks(splats[MASK_KEY])
+        add_mask_loss(masks, weight)
         return original_rasterize(self, *args, splats=splats, gaussian_masks=masks, **kwargs)
 
     original_step = strategy_class.step_post_backward
@@ -106,10 +103,9 @@ def enable_mask_gaussian(trainer, strategy_class, weight):
 
     def export_splats(**kwargs):
         keep = kept(splats_holder["splats"][MASK_KEY])
-        return original_export(**{
-            name: value[keep] if isinstance(value, torch.Tensor) and len(value) == len(keep) else value
-            for name, value in kwargs.items()
-        })
+        for name in ("means", "scales", "quats", "opacities", "sh0", "shN"):
+            kwargs[name] = kwargs[name][keep]
+        return original_export(**kwargs)
 
     trainer["create_splats_with_optimizers"] = create_splats_with_optimizers
     runner_class.rasterize_splats = rasterize_splats

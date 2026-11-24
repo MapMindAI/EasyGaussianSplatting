@@ -194,9 +194,7 @@ With `STRATEGY_DEFAULT`, `mask_gaussians: true` adds MaskGaussian
 `mapping/mask_gaussian.py`): each Gaussian learns keep and drop logits, every
 training render samples a hard mask from them, and the Gaussians dropped in 10
 samples in a row are pruned, at each refinement step and every 1000 steps
-after. A dropped Gaussian renders nothing but still gets the gradient that
-could bring it back, through the masked rasterization in our gsplat fork.
-`mask_lambda` (0.0005) weighs the squared mean mask in the loss; raise it to
+after, through the masked rasterization in our gsplat fork. `mask_lambda` (0.0005) weighs the squared mean mask in the loss; raise it to
 prune more. Evaluation and the exported PLY keep a Gaussian whose keep logit
 is the larger. `STRATEGY_MCMC` ignores it, since it holds `cap_max` anyway.
 `mapping/benchmark/mask_gaussian_benchmark.sh <cubemap_dir>` runs the mask

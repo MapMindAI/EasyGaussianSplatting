@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
-# Host: test MaskGaussian in the image, then compare it with the current
-# training on one cube-map reconstruction.
-#
-# 1. In the image: gsplat's masked-rasterization tests and the repo's mask and
-#    parameter tests, which must pass, then gsplat's projection, intersection,
-#    and rasterization tests, reported only.
-# 2. One model per configuration, through gsplat_sweep.sh: STRATEGY_MCMC as
-#    shipped, STRATEGY_DEFAULT, and STRATEGY_DEFAULT with mask_gaussians at two
-#    mask_lambda values, each layered over the base parameters.
-# 3. summarize_gsplat_sweep.py's report comparing them.
+# Host: run the MaskGaussian tests in the image, then train and compare
+# STRATEGY_MCMC, STRATEGY_DEFAULT, and STRATEGY_DEFAULT with mask_gaussians at
+# two mask_lambda values on one cube-map reconstruction, each layered over the
+# base parameters, and write summarize_gsplat_sweep.py's report.
 #
 # Set DOCKER_IMAGE to the image the Docker workflow built for this branch,
 # e.g. ghcr.io/mapmindai/gaussiansplatting:pr-<number>.
@@ -23,7 +17,7 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../scripts" && pwd)"
 source "${SCRIPTS_DIR}/docker_common.sh"
 
 REL_CUBEMAP_DIR="$(repo_relative_path "$1")"
-BASE_PARAMETERS="${REPO_ROOT}/$(repo_relative_path "${2:-${REPO_ROOT}/gsplat_server/config/gsplat_train_defaults.proto.txt}")"
+BASE_PARAMETERS="${2:-${REPO_ROOT}/gsplat_server/config/gsplat_train_defaults.proto.txt}"
 export SWEEP_NAME=mask_gaussian_sweep
 SWEEP_DIR="${REPO_ROOT}/${REL_CUBEMAP_DIR}/${SWEEP_NAME}"
 CONFIGURATIONS_DIR="${SWEEP_DIR}/configurations"
@@ -32,7 +26,7 @@ echo "Image: ${DOCKER_IMAGE}"
 echo "=== Tests"
 docker run "${DOCKER_RUN_FLAGS[@]}" "${DOCKER_IMAGE}" bash -c 'set -euo pipefail
 source scripts/gsplat_env.sh
-pip install --quiet pytest pytest-check
+pip install --quiet pytest pytest-check  # The gsplat pytest config loads pytest-check.
 bash gsplat_server/proto/build.sh  # Generated against the protobuf in the image.
 python3 -m pytest -q -p no:cacheprovider mapping/mask_gaussian_test.py gsplat_server/parameters_test.py
 (cd /opt/gsplat && python3 -m pytest -q -p no:cacheprovider tests/test_masked_opacities.py)
