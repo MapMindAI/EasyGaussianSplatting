@@ -3,11 +3,13 @@
 
 The same stage as mapping/depth/generate_depth.py -- covisibility grouping,
 scale fitting to COLMAP, and the depth and confidence output -- with the
-ONNX model at --model in place of the Triton DA3 one. It then merges every
-written depth, filtered by --min-confidence, the depth range, the masks in
---mask-dir, and colour edges, into <model_dir>/depth_points.ply, the cloud gsplat
-seeds its Gaussians from (see mapping/depth/point_cloud.py), rebuilding it
-whenever an image was predicted or the settings recorded beside it in
+ONNX model at --model in place of the Triton DA3 one. It then aligns each
+depth to the COLMAP points and fuses it with its neighbours' into
+<model_dir>/aligned_depths (see mapping/depth/depth_alignment.py), and merges
+those, filtered by --min-confidence, the depth range, the masks in --mask-dir,
+and colour edges, into <model_dir>/depth_points.ply, the cloud gsplat seeds its
+Gaussians from (see mapping/depth/point_cloud.py). Both are rebuilt whenever an
+image was predicted or the settings recorded beside the cloud in
 depth_points.json changed.
 """
 
@@ -16,6 +18,7 @@ import json
 import time
 from pathlib import Path
 
+from mapping.depth.depth_alignment import ALIGNED_DEPTH_DIR_NAME, SUMMARY_NAME, align_depths
 from mapping.depth.generate_depth import depth_filter, generate_depths, parse_depth_arguments
 from mapping.depth.point_cloud import POINT_CLOUD_NAME, write_depth_point_cloud
 from mapping.vggt_omega.depth_estimator import DEFAULT_MODEL_PATH, VggtOmegaDepthEstimator
@@ -44,6 +47,7 @@ def main():
         args, lambda: VggtOmegaDepthEstimator(args.model), GROUP_SIZE, MINIMUM_GROUP_SIZE
     )
 
+    aligned_dir = args.model_dir / ALIGNED_DEPTH_DIR_NAME
     cloud_path = args.model_dir / POINT_CLOUD_NAME
     # What the cloud was built from, so a changed filter or voxel rebuilds it.
     settings_path = cloud_path.with_suffix(".json")
@@ -55,14 +59,16 @@ def main():
     if (
         not predicted
         and cloud_path.exists()
+        and (aligned_dir / SUMMARY_NAME).exists()
         and settings_path.exists()
         and json.loads(settings_path.read_text()) == settings
     ):
-        print(f"{cloud_path} is up to date; keeping it")
+        print(f"{aligned_dir} and {cloud_path} are up to date; keeping them")
         return
+    align_depths(args.model_dir, args.depth_dir, aligned_dir, depth_filter(args), args.mask_dir)
     started = time.monotonic()
     count = write_depth_point_cloud(
-        args.model_dir, args.depth_dir, cloud_path, args.voxel_factor, args.mask_dir,
+        args.model_dir, aligned_dir, cloud_path, args.voxel_factor, args.mask_dir,
         depth_filter(args),
     )
     settings_path.write_text(json.dumps(settings, indent=2))

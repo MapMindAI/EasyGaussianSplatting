@@ -274,7 +274,9 @@ skips are the ones SfM barely covered anyway.
 
 What lands in `depths/` is one `<image_name>.npz` per image: the model's full,
 unfiltered 416x416 depth and confidence, with the group's scale
-(`mapping/depth/depth_maps.py`). The trainer filters it by
+(`mapping/depth/depth_maps.py`). Each is then refitted to its own COLMAP points
+and fused with its covisible neighbours into `aligned_depths/`, the depths
+the cloud and training use ([depth_alignment.md](depth_alignment.md)). The trainer filters them by
 `depth_min_confidence`, the image's mask, and colour edges (depth
 discontinuities are already removed), supervises each kept map
 pixel at its centre in the image as loaded, whatever `data_factor` is, and

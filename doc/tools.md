@@ -212,7 +212,10 @@ export at `models/vggt_omega_416.onnx` (with its `.onnx.data`), or pass
 `--model`. Groups hold up to 12 views, though the export's `.json` lists
 10 as its maximum. Inputs are a fixed 416x416; images are resized to that,
 ignoring aspect ratio, and the maps kept at that size. Groups of two views or more
-are kept. Whenever an image was predicted, it merges every `.npz` into
+are kept. Whenever an image was predicted, it aligns each depth to the COLMAP
+points and fuses it with its covisible neighbours' into
+`<model_dir>/aligned_depths/` (`mapping/depth/depth_alignment.py`, see
+[depth_alignment.md](depth_alignment.md)), then merges those into
 `<model_dir>/depth_points.ply` (`mapping/depth/point_cloud.py`): each map,
 filtered as above with the masks in `--mask-dir`, lifted pixel by pixel through
 the COLMAP intrinsics and poses, coloured from the image, and averaged per voxel, with torch on the GPU when
@@ -246,7 +249,7 @@ coloured cloud:
 python3 -m mapping.vggt_omega.example output/vggt_omega a.jpg b.jpg c.jpg
 ```
 
-Training reads `depths/` only when the parameters file sets `run_depth: true`
+Training reads `aligned_depths/` only when the parameters file sets `run_depth: true`
 and a positive `depth_lambda`, which weights gsplat's depth term; with
 `run_depth: true`, a `depth_points.ply` in the workspace is also added to the
 sparse SfM points that initialize the Gaussians, its points randomly thinned
