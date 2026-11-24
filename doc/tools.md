@@ -311,6 +311,16 @@ a configuration that already recorded evaluation metrics is skipped:
 mapping/benchmark/gsplat_sweep.sh data/panorama path/to/configurations
 ```
 
+`mapping/benchmark/depth_lambda_sweep.sh` runs `scripts/gsplat_train.sh` once
+per `depth_lambda` (default `0 0.001 0.003 0.01 0.03 0.1`; 0 keeps only the
+depth-cloud initialization) and once without depth, over one parameters file,
+into `<workspace>/depth_lambda_sweep/`. Depths are generated once; evaluated
+and failed runs are skipped, as in `gsplat_sweep.sh`:
+
+```
+mapping/benchmark/depth_lambda_sweep.sh data/panorama [parameters.proto.txt] [depth_lambda...]
+```
+
 The [historical sweep configurations](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Parameter-Sweep)
 are documented in the wiki. To sweep on a remote GPU instead,
 `mapping/benchmark/gsplat_server_sweep.py` submits the same files to a training
