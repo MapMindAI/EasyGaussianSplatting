@@ -34,12 +34,17 @@ def covisible_neighbours(point_indices_per_frame, point_count):
     at least MIN_SHARED_POINTS, most shared first. Each frame's indices must be unique."""
     from mapping.depth.covisibility_groups import shared_point_counts
 
-    shared = shared_point_counts(point_indices_per_frame, point_count).toarray()
-    np.fill_diagonal(shared, 0)
+    shared = shared_point_counts(point_indices_per_frame, point_count).tocsr()
+    shared.sort_indices()
     neighbours = []
-    for row in shared:
-        order = np.argsort(-row, kind="stable")[:NEIGHBOUR_COUNT]
-        neighbours.append([int(frame) for frame in order if row[frame] >= MIN_SHARED_POINTS])
+    for frame in range(shared.shape[0]):
+        row = slice(shared.indptr[frame], shared.indptr[frame + 1])
+        others, counts = shared.indices[row], shared.data[row]
+        keep = (others != frame) & (counts >= MIN_SHARED_POINTS)
+        others, counts = others[keep], counts[keep]
+        # Most shared first; ties by frame index.
+        order = np.lexsort((others, -counts))[:NEIGHBOUR_COUNT]
+        neighbours.append([int(other) for other in others[order]])
     return neighbours
 
 
@@ -57,12 +62,8 @@ def map_intrinsics(intrinsics, image_size, map_shape):
 
 
 def fused_depth(view, neighbour_views):
-    """`view`'s depth with each usable pixel checked against `neighbour_views`:
-    0 where it lies in free space a neighbour saw through at least as often as
-    a neighbour confirms it, else averaged with the confirming depths, each
-    weighted by its inverse square since depth error grows with depth. A pixel
-    no neighbour sees, or that each sees behind its own surface, is kept as it
-    is: occlusion is no evidence against it."""
+    """`view`'s depth with each usable pixel checked against `neighbour_views`,
+    by the rules in doc/cross_view_fusion.md."""
     depth = view.depth.copy()
     if not neighbour_views:
         return depth
@@ -120,14 +121,10 @@ def fuse_depths(model_dir, depth_dir, depth_filter, mask_dir=None):
     neighbours', and writes SUMMARY_NAME; returns whether it fused, which it
     skips when SUMMARY_NAME already exists. Pixels below the confidence floor
     or outside the masks in `mask_dir` (which may be None) are kept but neither
-    checked nor used as evidence.
-
-    Views are loaded on this thread as they are needed and at most
-    VIEW_CACHE_SIZE are held; FUSION_THREADS workers check and save them. The
-    fused maps go to FUSING_DIR_NAME first, so every neighbour is read unfused,
-    and replace the originals once all are written."""
+    checked nor used as evidence. The fused maps go to FUSING_DIR_NAME until
+    all are written, so every neighbour is read unfused."""
     import shutil
-    from collections import OrderedDict
+    from functools import lru_cache
 
     import pycolmap
     from tqdm import tqdm
@@ -154,26 +151,17 @@ def fuse_depths(model_dir, depth_dir, depth_filter, mask_dir=None):
     images = {image.name: image for image in reconstruction.images.values()}
     written = set(files_under(depth_dir))
     training_mask = training_masks(mask_dir)
-    by_name = sorted(
+    names = fusion_order(
         name for name in images
-        if depth_path(depth_dir, name) in written and holds_depth(depth_path(depth_dir, name))
+        if (path := depth_path(depth_dir, name)) in written and holds_depth(path)
     )
-    # Picked in name order, so ties in shared points break as they always have.
-    neighbours_by_name = covisible_neighbours(
-        [np.unique(observations[name].point_indices) for name in by_name], len(points)
+    neighbours = covisible_neighbours(
+        [np.unique(observations[name].point_indices) for name in names], len(points)
     )
-    names = fusion_order(by_name)
-    position = {name: index for index, name in enumerate(names)}
-    neighbours = [None] * len(names)
-    for name, named_neighbours in zip(by_name, neighbours_by_name):
-        neighbours[position[name]] = [position[by_name[neighbour]] for neighbour in named_neighbours]
 
-    cache = OrderedDict()  # Frame index to (View, confidence, scale), least recent first.
-
+    @lru_cache(maxsize=VIEW_CACHE_SIZE)
     def frame(index):
-        if index in cache:
-            cache.move_to_end(index)
-            return cache[index]
+        """(View, confidence, scale) of frame `index`, loaded on the calling thread only."""
         name = names[index]
         depth_map = load_depth_map(depth_path(depth_dir, name))
         mask = training_mask(name)
@@ -181,15 +169,12 @@ def fuse_depths(model_dir, depth_dir, depth_filter, mask_dir=None):
         usable = (depth_map.depth > 0) & (depth_map.confidence >= depth_filter.min_confidence)
         if mask is not None:
             usable &= mask_at(mask, usable.shape)
-        cache[index] = (View(
+        return View(
             depth_map.depth,
             usable,
             map_intrinsics(camera.calibration_matrix(), (camera.width, camera.height), usable.shape),
             observations[name].camera_from_world,
-        ), depth_map.confidence, depth_map.scale)
-        if len(cache) > VIEW_CACHE_SIZE:
-            cache.popitem(last=False)
-        return cache[index]
+        ), depth_map.confidence, depth_map.scale
 
     fusing_dir = depth_dir / FUSING_DIR_NAME
     shutil.rmtree(fusing_dir, ignore_errors=True)  # Left by an interrupted run.
@@ -204,7 +189,7 @@ def fuse_depths(model_dir, depth_dir, depth_filter, mask_dir=None):
             "kept_fraction": float((view.usable & (depth > 0)).sum() / checked) if checked else None,
         }
 
-    # Generated on this thread, so only it touches the cache.
+    # Generated on this thread, so only it calls frame.
     items = (
         (name, frame(index), [frame(neighbour)[0] for neighbour in neighbours[index]])
         for index, name in enumerate(names)

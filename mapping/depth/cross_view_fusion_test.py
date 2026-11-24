@@ -11,6 +11,12 @@ def test_neighbours_are_the_frames_sharing_the_most_points():
     assert neighbours == [[1, 2], [0, 2], [0, 1], []]
 
 
+def test_neighbours_sharing_as_many_points_keep_frame_order():
+    neighbours = covisible_neighbours([np.arange(0, 20), np.arange(10, 20), np.arange(0, 10)], 20)
+
+    assert neighbours[0] == [1, 2]
+
+
 def test_fusion_order_takes_each_frame_across_its_faces():
     names = ["front/000002.jpg", "back/000001.jpg", "front/000001.jpg", "back/000002.jpg"]
 

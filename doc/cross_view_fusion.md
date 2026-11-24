@@ -4,8 +4,7 @@
 covisible neighbours' before `depth_points.ply` is merged and the depth loss
 reads it. It adapts the fusion step of the World Composition stage of
 [HY-World 2.0](https://github.com/Tencent-Hunyuan/HY-World-2.0)
-([report](https://arxiv.org/abs/2604.14268), Sec. 7.1). The depths it checks
-are the group-scaled ones from `mapping/depth/scale_alignment.py`, unchanged.
+([report](https://arxiv.org/abs/2604.14268), Sec. 7.1).
 
 Without it, the merge (`point_cloud.py`) lifts every kept pixel and averages per
 voxel, and nothing checks one frame's depth against another's: each frame adds
@@ -13,14 +12,12 @@ its own offset copy of a surface, so walls merge into thick or doubled bands.
 
 ## Stage
 
-The fusion runs once every group is written, in both depth entrypoints, and
-replaces the files in `depths/`. It writes `depths/fusion.json`, with each
-frame's neighbour count and the fraction of checked pixels kept, which marks
-the depths fused; the stage deletes it whenever it writes a new depth, so a
-resumed run fuses again. Views load on the calling thread, frame by frame
-across the cube faces, through a cache of 128; up to 8 threads check them. The
-fused maps go to `depths/.fusing/` until all are written, so every neighbour is
-read unfused. It can be rerun without inference, after deleting `fusion.json`:
+`generate_depths` fuses once every group is written, and the fused maps
+replace the files in `depths/`. `depths/fusion.json` records each frame's
+neighbour count and the fraction of checked pixels kept, and marks the depths
+fused; writing any new depth deletes it, so a resumed run fuses again. Fusion
+is not repeatable: a second pass averages already-fused depths. To fuse depths
+written without it:
 
 ```bash
 python3 -m mapping.depth.cross_view_fusion <model_dir> --min-confidence 0.7 [--mask-dir <masks>]

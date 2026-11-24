@@ -222,6 +222,15 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
     monkeypatch.setattr(generate_depth, "align_sparse_depth", lambda *arguments: 1.0)
     runs = []
 
+    def fuse_depths(model_dir, depth_dir, depth_filter, mask_dir):
+        summary = depth_dir / SUMMARY_NAME
+        if summary.exists():
+            return False
+        summary.write_text("{}")
+        return True
+
+    monkeypatch.setattr(generate_depth, "fuse_depths", fuse_depths)
+
     class Estimator:
         def run(self, images):
             runs.append(len(images))
@@ -240,10 +249,9 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
     save_depth_map(depth_path(depth_dir, "front/a.jpg"), np.full((4, 4), 7.0), np.ones((4, 4)), 2.0)
     (depth_dir / SUMMARY_NAME).write_text("{}")
 
-    assert generate_depth.generate_depths(args, Estimator, 2, 2) == 1
+    assert generate_depth.generate_depths(args, Estimator, 2, 2)  # New depths, fused again.
 
     assert runs == [2]
-    assert not (depth_dir / SUMMARY_NAME).exists()  # New depths still need fusing.
     assert load_depth_map(depth_path(depth_dir, "front/a.jpg")).scale == 2.0
     written = load_depth_map(depth_path(depth_dir, "front/b.jpg"))
     np.testing.assert_array_equal(written.depth, np.ones((4, 4)))
@@ -251,5 +259,5 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
     assert load_depth_map(depth_path(depth_dir, "front/c.jpg")) is None
     assert load_depth_map(depth_path(depth_dir, "up/d.jpg")) is None
 
-    assert generate_depth.generate_depths(args, Estimator, 2, 2) == 0
+    assert not generate_depth.generate_depths(args, Estimator, 2, 2)
     assert runs == [2]
