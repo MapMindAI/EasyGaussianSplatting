@@ -38,16 +38,14 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── depth/                    # Depth supervision; grouping and scale ported from ArSession.
 │   │   ├── covisibility_groups.py # Groups of frames viewing the same scene.
 │   │   ├── covisibility_groups_test.py # Links and greedy group selection.
-│   │   ├── depth_alignment.py    # Per-frame disparity fit to COLMAP, and cross-view fusion.
+│   │   ├── depth_alignment.py    # Group disparity fit to COLMAP, and cross-view fusion.
 │   │   ├── depth_alignment_test.py # Fits, fallbacks, neighbours, and fusion.
 │   │   ├── depth_maps.py         # Depth files: full model output, filtered on load into one point per map pixel.
 │   │   ├── depth_maps_test.py    # Round trips, discontinuities, filtering, masks, and pixel-centre points.
 │   │   ├── generate_depth.py     # Shared depth stage, and its Triton DA3 entrypoint.
 │   │   ├── generate_depth_test.py # Grouping inputs, sampling, and observations.
 │   │   ├── point_cloud.py        # Written depths merged into gsplat's initial cloud.
-│   │   ├── point_cloud_test.py   # Unprojection, voxel merge, and the PLY round trip.
-│   │   ├── scale_alignment.py    # Group depth scale from sparse depths and cameras.
-│   │   └── scale_alignment_test.py # Pose-baseline and robust sparse fits.
+│   │   └── point_cloud_test.py   # Unprojection, voxel merge, and the PLY round trip.
 │   ├── sky_segmentation/         # U²-Net sky probability for the masks, run locally from ONNX.
 │   │   ├── sky_segmenter.py      # ONNX Runtime session over models/skyseg.onnx.
 │   │   ├── sky_segmenter_test.py # Model input.

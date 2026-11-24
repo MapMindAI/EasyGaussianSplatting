@@ -1,12 +1,12 @@
-"""Per-frame depth alignment to the COLMAP points, and cross-view outlier removal.
+"""Depth alignment to the COLMAP points, and cross-view fusion.
 
 Adapts HY-World 2.0's World Composition (see doc/depth_alignment.md). Each
-frame's group-scaled depth gets its own fit in disparity, 1/D_colmap = k/D + b,
-to the sparse points it observes. Each pixel is then checked against the
-aligned depths of the frames sharing the most sparse points with it: zeroed
-where it lies in space they saw through, averaged with them where they agree.
-The result is written in the depth_maps format under ALIGNED_DEPTH_DIR_NAME,
-with a per-frame summary beside it.
+multi-view group's prediction gets one fit in disparity, 1/D_colmap = k/D + b,
+to the sparse points its images observe. Once every group is written, each
+pixel is checked against the depths of the frames sharing the most sparse
+points with it: zeroed where it lies in space they saw through, averaged with
+them where they agree. The fused depths replace the written ones, with a
+per-frame summary, SUMMARY_NAME, beside them marking them fused.
 """
 
 import json
@@ -15,10 +15,11 @@ from typing import NamedTuple
 
 import numpy as np
 
-ALIGNED_DEPTH_DIR_NAME = "aligned_depths"
-SUMMARY_NAME = "alignment.json"
+SUMMARY_NAME = "fusion.json"
 
 MIN_TRACK_LENGTH = 3
+# Sparse references beyond this depth, in map units, are too noisy to fit to.
+MAX_REFERENCE_DEPTH = 20.0
 # A sample is dropped when its depth rank differs this many percentiles between the maps.
 PERCENTILE_TOLERANCE = 20.0
 INLIER_RELATIVE_ERROR = 0.05
@@ -32,7 +33,7 @@ MIN_SHARED_POINTS = 10
 CONFIRM_TOLERANCE = 0.05  # Log depth.
 VIOLATION_TOLERANCE = 0.05  # Log depth.
 
-FITTED, SCALE_ONLY, GROUP_SCALE = "fitted", "scale_only", "group_scale"
+FITTED, SCALE_ONLY = "fitted", "scale_only"
 
 
 class Fit(NamedTuple):
@@ -41,9 +42,6 @@ class Fit(NamedTuple):
     status: str
     samples: int = 0
     inliers: int = 0
-
-
-GROUP_FIT = Fit(1.0, 0.0, GROUP_SCALE)
 
 
 def aligned_depth(depth, fit):
@@ -56,6 +54,23 @@ def aligned_depth(depth, fit):
     positive = valid & (disparity > 0)
     result[positive] = 1 / disparity[positive]
     return result
+
+
+def usable_depths(predicted, reference):
+    return (
+        np.isfinite(predicted) & np.isfinite(reference)
+        & (predicted > 0) & (reference > 0) & (reference <= MAX_REFERENCE_DEPTH)
+    )
+
+
+def median_relative_error(fit, predicted, reference):
+    """How far `fit` carries one frame's sampled depths from its sparse ones; inf if unmeasured."""
+    predicted, reference = np.asarray(predicted), np.asarray(reference)
+    aligned = aligned_depth(predicted, fit)
+    usable = usable_depths(predicted, reference) & (aligned > 0)
+    if not usable.any():
+        return np.inf
+    return float(np.median(np.abs(aligned[usable] / reference[usable] - 1)))
 
 
 def percentile_agreement(predicted, reference):
@@ -101,19 +116,18 @@ def _ransac(disparity, reference_disparity, candidates, refine):
     return float(scale), float(shift), inliers
 
 
-def fit_frame(predicted, reference, largest_depth, seed=0):
-    """The Fit of `predicted` depths onto `reference` ones, in disparity.
+def fit_depth(predicted, reference, largest_depth, seed=0):
+    """The Fit of `predicted` depths onto `reference` ones, in disparity, or None.
 
     An affine fit when enough samples span enough disparity and it keeps every
-    depth up to `largest_depth` in front of the camera; else a scale; else the
-    group scale.
+    depth up to `largest_depth` in front of the camera; else a scale.
     """
     predicted = np.asarray(predicted, dtype=np.float64)
     reference = np.asarray(reference, dtype=np.float64)
     disparity, reference_disparity = 1 / predicted, 1 / reference
     count = len(predicted)
     if count < MIN_SCALE_INLIERS:
-        return GROUP_FIT._replace(samples=count)
+        return None
 
     random = np.random.default_rng(seed)
     if count >= MIN_AFFINE_INLIERS and disparity.max() >= MIN_DISPARITY_SPAN * disparity.min():
@@ -136,7 +150,7 @@ def fit_frame(predicted, reference, largest_depth, seed=0):
     scale, _, inliers = _ransac(disparity, reference_disparity, candidates, _refine_scale)
     if inliers.sum() >= MIN_SCALE_INLIERS and scale > 0:
         return Fit(scale, 0.0, SCALE_ONLY, count, int(inliers.sum()))
-    return GROUP_FIT._replace(samples=count)
+    return None
 
 
 def covisible_neighbours(point_indices_per_frame, point_count):
@@ -217,31 +231,38 @@ def fused_depth(view, neighbour_views):
     return depth
 
 
-def frame_samples(observation, depth_map, track_lengths, mask, image_shape, min_confidence):
+def frame_samples(observation, depth, confidence, track_lengths, mask, image_shape, min_confidence):
     """(predicted, reference) depths at the sparse points `observation` holds
-    that pass the confidence, mask, track, range, and percentile tests."""
+    that pass the confidence, mask, track, and range tests."""
     from mapping.depth.generate_depth import sample_at
-    from mapping.depth.scale_alignment import usable_depths
 
-    predicted = sample_at(depth_map.depth, observation.pixels, image_shape)
-    confidence = sample_at(depth_map.confidence, observation.pixels, image_shape)
+    predicted = sample_at(depth, observation.pixels, image_shape)
     reference = observation.depths
     keep = (
-        usable_depths(predicted, reference) & (confidence >= min_confidence)
+        usable_depths(predicted, reference)
+        & (sample_at(confidence, observation.pixels, image_shape) >= min_confidence)
         & (track_lengths[observation.point_indices] >= MIN_TRACK_LENGTH)
     )
     if mask is not None:
         keep &= sample_at(mask, observation.pixels, image_shape)
-    predicted, reference = predicted[keep], reference[keep]
+    return predicted[keep], reference[keep]
+
+
+def fit_group(samples, largest_depth):
+    """The one Fit of a group's per-frame (predicted, reference) `samples`, or None.
+    Samples whose depth rank disagrees between the two are left out."""
+    predicted = np.concatenate([predicted for predicted, _ in samples])
+    reference = np.concatenate([reference for _, reference in samples])
     agree = percentile_agreement(predicted, reference)
-    return predicted[agree], reference[agree]
+    return fit_depth(predicted[agree], reference[agree], largest_depth)
 
 
-def align_depths(model_dir, depth_dir, output_dir, depth_filter, mask_dir=None):
-    """Writes each depth under `depth_dir` aligned and fused into `output_dir`,
-    with SUMMARY_NAME; returns the summary. Pixels below the confidence floor
-    or outside the masks in `mask_dir` (which may be None) are aligned but
-    neither checked nor used as evidence."""
+def fuse_depths(model_dir, depth_dir, depth_filter, mask_dir=None):
+    """Replaces each depth under `depth_dir` with it fused with its
+    neighbours', and writes SUMMARY_NAME; returns whether it fused, which it
+    skips when SUMMARY_NAME already exists. Pixels below the confidence floor
+    or outside the masks in `mask_dir` (which may be None) are kept but neither
+    checked nor used as evidence."""
     import pycolmap
     from tqdm import tqdm
 
@@ -250,20 +271,19 @@ def align_depths(model_dir, depth_dir, output_dir, depth_filter, mask_dir=None):
         load_depth_map,
         mask_at,
         save_depth_map,
-        save_empty_depth_map,
         training_masks,
     )
     from mapping.depth.generate_depth import observed_depths
     from mapping.depth.point_cloud import prefetched
     from mapping.file_listing import files_under
 
+    summary_path = depth_dir / SUMMARY_NAME
+    if summary_path.exists():
+        print(f"{depth_dir} is already fused; keeping it")
+        return False
     started = time.monotonic()
     reconstruction = pycolmap.Reconstruction(model_dir / "sparse" / "0")
     points, observations = observed_depths(reconstruction)
-    track_lengths = np.array([
-        len(reconstruction.points3D[point_id].track.elements)
-        for point_id in sorted(reconstruction.points3D)
-    ])
     images = {image.name: image for image in reconstruction.images.values()}
     written = set(files_under(depth_dir))
     training_mask = training_masks(mask_dir)
@@ -271,62 +291,48 @@ def align_depths(model_dir, depth_dir, output_dir, depth_filter, mask_dir=None):
     def load(name):
         return name, load_depth_map(depth_path(depth_dir, name)), training_mask(name)
 
-    frames = []  # (name, fit, view, confidence, scale) per image with depth.
+    frames = []  # (name, view, confidence, scale) per image with depth.
     with_files = sorted(name for name in images if depth_path(depth_dir, name) in written)
     for name, depth_map, mask in tqdm(
-        prefetched(load, with_files, 8), total=len(with_files), desc="Align", unit="image",
+        prefetched(load, with_files, 8), total=len(with_files), desc="Load", unit="image",
         dynamic_ncols=True,
     ):
         if depth_map is None:
             continue
-        image = images[name]
-        camera = reconstruction.cameras[image.camera_id]
+        camera = reconstruction.cameras[images[name].camera_id]
         usable = (depth_map.depth > 0) & (depth_map.confidence >= depth_filter.min_confidence)
         if mask is not None:
             usable &= mask_at(mask, usable.shape)
-        predicted, reference = frame_samples(
-            observations[name], depth_map, track_lengths, mask,
-            (camera.height, camera.width), depth_filter.min_confidence,
-        )
-        fit = fit_frame(predicted, reference, float(depth_map.depth[usable].max()) if usable.any() else 1.0)
-        depth = aligned_depth(depth_map.depth, fit)
-        frames.append((name, fit, View(
-            depth,
-            usable & (depth > 0),
-            map_intrinsics(camera.calibration_matrix(), (camera.width, camera.height), depth.shape),
+        frames.append((name, View(
+            depth_map.depth,
+            usable,
+            map_intrinsics(camera.calibration_matrix(), (camera.width, camera.height), usable.shape),
             observations[name].camera_from_world,
         ), depth_map.confidence, depth_map.scale))
 
     neighbours = covisible_neighbours(
         [np.unique(observations[name].point_indices) for name, *_ in frames], len(points)
     )
-    views = [view for _, _, view, *_ in frames]
+    views = [view for _, view, *_ in frames]
     summary = {}
-    for frame, (name, fit, view, confidence, scale) in enumerate(tqdm(
+    for frame, (name, view, confidence, scale) in enumerate(tqdm(
         frames, desc="Cross-view check", unit="image", dynamic_ncols=True,
     )):
         depth = fused_depth(view, [views[neighbour] for neighbour in neighbours[frame]])
-        save_depth_map(depth_path(output_dir, name), depth, confidence, scale)
+        save_depth_map(depth_path(depth_dir, name), depth, confidence, scale)
         checked = int(view.usable.sum())
         summary[name] = {
-            **fit._asdict(),
             "neighbours": len(neighbours[frame]),
             "kept_fraction": float((view.usable & (depth > 0)).sum() / checked) if checked else None,
         }
-    for name in sorted(set(images) - set(summary)):
-        save_empty_depth_map(depth_path(output_dir, name))
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / SUMMARY_NAME).write_text(json.dumps(summary, indent=1))
-    statuses = [entry["status"] for entry in summary.values()]
+    summary_path.write_text(json.dumps(summary, indent=1))
     kept = [entry["kept_fraction"] for entry in summary.values() if entry["kept_fraction"] is not None]
     print(
-        f"Aligned {len(summary)} depths into {output_dir} in {time.monotonic() - started:.1f} s: "
-        + ", ".join(f"{statuses.count(status)} {status}" for status in (FITTED, SCALE_ONLY, GROUP_SCALE))
-        + f"; the cross-view check kept a median {np.median(kept) if kept else float('nan'):.0%} of pixels",
+        f"Fused {len(summary)} depths in {depth_dir} in {time.monotonic() - started:.1f} s; "
+        f"the cross-view check kept a median {np.median(kept) if kept else float('nan'):.0%} of pixels",
         flush=True,
     )
-    return summary
+    return True
 
 
 def main():
@@ -338,14 +344,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("model_dir", type=Path, help="holds images/ and sparse/")
     parser.add_argument("--depth-dir", type=Path, help="defaults to <model_dir>/depths")
-    parser.add_argument("--output-dir", type=Path, help=f"defaults to <model_dir>/{ALIGNED_DEPTH_DIR_NAME}")
     parser.add_argument("--min-confidence", type=float, default=DepthFilter().min_confidence)
     parser.add_argument("--mask-dir", type=Path, default=None)
     args = parser.parse_args()
-    align_depths(
+    fuse_depths(
         args.model_dir,
         args.depth_dir or args.model_dir / "depths",
-        args.output_dir or args.model_dir / ALIGNED_DEPTH_DIR_NAME,
         DepthFilter(min_confidence=args.min_confidence),
         args.mask_dir,
     )

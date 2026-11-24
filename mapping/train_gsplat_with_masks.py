@@ -131,11 +131,9 @@ def attach_depths(dataset_class, depth_filter):
     Its own source is the sparse COLMAP points, which it looks up in
     parser.point_indices -- a dict with no entry at all for a cube face SfM
     barely covered. That path is switched off and answered here with what
-    the depth stage aligned and fused into aligned_depths/
-    (mapping/depth/depth_alignment.py), which is denser and covers the
-    textureless surfaces SfM never triangulated. The file holds the depth
-    model's full output at its own resolution in the COLMAP frame
-    (mapping/depth/depth_maps.py); it is
+    generate_depth.py wrote, which is denser and covers the textureless surfaces
+    SfM never triangulated. The file holds the depth model's full output at its
+    own resolution in the COLMAP frame (mapping/depth/depth_maps.py); it is
     filtered by `depth_filter`, the image's training mask, and colour edges, each
     kept map pixel placed at its centre in the image as loaded, and put into
     the parser's normalized world. The scale comes off the parser rather than a module global so it
@@ -151,8 +149,8 @@ def attach_depths(dataset_class, depth_filter):
         height, width = data["image"].shape[:2]
         rows = np.zeros((0, 3), dtype=np.float32)
         file_name = f"{image_name}{DEPTH_SUFFIX}"
-        if file_name in listed_files(self, ALIGNED_DEPTH_DIR_NAME):
-            depth_map = load_depth_map(pathlib.Path(self.parser.data_dir, ALIGNED_DEPTH_DIR_NAME, file_name))
+        if file_name in listed_files(self, "depths"):
+            depth_map = load_depth_map(pathlib.Path(self.parser.data_dir, "depths", file_name))
             if depth_map is not None:
                 grayscale = cv2.cvtColor(data["image"].numpy(), cv2.COLOR_RGB2GRAY)
                 mask = data["mask"].numpy() if "mask" in data else None
@@ -330,7 +328,6 @@ from datasets.colmap import Dataset, Parser  # noqa: E402
 from datasets.normalize import transform_points  # noqa: E402
 from gsplat_server.parameters import load_parameters  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
-from mapping.depth.depth_alignment import ALIGNED_DEPTH_DIR_NAME  # noqa: E402
 from mapping.depth.depth_maps import (  # noqa: E402
     DEPTH_SUFFIX,
     DepthFilter,

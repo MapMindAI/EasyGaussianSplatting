@@ -262,10 +262,9 @@ upgrading an existing server so depth and sky masking use those dependencies.
 
 Each group is reconstructed in its own arbitrary scale, which is the part worth
 understanding: the depth VGGT-Omega returns is not in the input model's units,
-and a different group gets a different scale. So each group's depth is fitted to the
-COLMAP points its own images observe, and to the COLMAP camera baselines
-against the model's predicted ones, before anything is written. A group with
-neither enough sparse points nor consistent cameras is skipped rather than
+and a different group gets a different scale. So each group's depth gets one
+fit in disparity to the COLMAP points its own images observe before anything
+is written. A group without enough sparse points is skipped rather than
 written at a guessed scale, and the stage reports how many it skipped. An image
 in several groups keeps the best-matching prediction. An image left without
 depth trains without a depth term:
@@ -273,10 +272,10 @@ gsplat's own sparse-point depths do not stand in for them, since the images it
 skips are the ones SfM barely covered anyway.
 
 What lands in `depths/` is one `<image_name>.npz` per image: the model's full,
-unfiltered 416x416 depth and confidence, with the group's scale
-(`mapping/depth/depth_maps.py`). Each is then refitted to its own COLMAP points
-and fused with its covisible neighbours into `aligned_depths/`, the depths
-the cloud and training use ([depth_alignment.md](depth_alignment.md)). The trainer filters them by
+unfiltered 416x416 depth and confidence, aligned by the group's fit and then
+fused with its covisible neighbours' (`mapping/depth/depth_maps.py`,
+[depth_alignment.md](depth_alignment.md)), beside `groups.json`, which records
+the groups and their fits. The trainer filters them by
 `depth_min_confidence`, the image's mask, and colour edges (depth
 discontinuities are already removed), supervises each kept map
 pixel at its centre in the image as loaded, whatever `data_factor` is, and

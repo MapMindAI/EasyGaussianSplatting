@@ -168,26 +168,25 @@ Groups are built greedily around anchors, favouring supports near 5 degrees of
 parallax, spread-out cameras, and new coverage. DA3 takes exactly five views,
 so only full groups are formed; an image no group can hold gets no depth.
 
-Each group's depth is in its own arbitrary scale, so it is fitted to the COLMAP
-points its images observe and to their camera baselines
-(`mapping/depth/scale_alignment.py`). The model's predicted cameras give a
-first scale when at least three agree with COLMAP within 5 degrees; a
-frame-balanced weighted median of the log depth ratios, a MAD inlier band, and
-Huber reweighting then refine it, ignoring references beyond 20 map units.
-Without a camera scale, a group needs 30 inlier points over two frames, or is
-skipped rather than written at a guessed scale. An image in several groups
-keeps the prediction whose scaled depth best matches its own sparse depths.
+Each group's depth is in its own arbitrary scale, so as soon as the group is
+predicted it gets one fit in disparity, `1/D_colmap = k/D + b`, to the COLMAP
+points its images observe (`mapping/depth/depth_alignment.py`, see
+[depth_alignment.md](depth_alignment.md)), and is saved aligned. A group with
+neither an affine nor a scale-only fit is skipped rather than written at a
+guessed scale. An image in several groups keeps the prediction whose aligned
+depth best matches its own sparse depths. `depths/groups.json` records every
+group's images, fit, and per-image sparse error, and the images in no group.
 The `up/` and `down/` cube faces are skipped: their sky and ground views do not
 need depth supervision. Every image ends up with a `.npz`: one no group
 predicted (an up/down face, an image in no group, or a skipped group) gets an
 empty one, so a skipped group is not retried. Existing files are kept, so
 rerunning an interrupted stage predicts only the groups that still have an
-image without a file; `--overwrite` regenerates them all. The depths are then
-aligned per frame and fused into `aligned_depths/`, which training reads (see
-[depth_alignment.md](depth_alignment.md)).
+image without a file; `--overwrite` regenerates them all. Once new depths are
+written, each is fused with its covisible neighbours' in place, and
+`depths/fusion.json` marks them fused.
 Each `.npz` is the model's output at its own resolution
 (`mapping/depth/depth_maps.py`): depth as float16 in the COLMAP frame,
-confidence as a uint8 in steps of 0.05, and the group's scale; about 0.5 MB
+confidence as a uint8 in steps of 0.05, and the group's scale `1/k`; about 0.5 MB
 for VGGT-Omega's 416x416. The only filtering here zeroes depth
 discontinuities: the floaters a model predicts between a surface and its
 background. The point cloud merge and training filter the rest when they load
@@ -214,10 +213,7 @@ export at `models/vggt_omega_416.onnx` (with its `.onnx.data`), or pass
 `--model`. Groups hold up to 12 views, though the export's `.json` lists
 10 as its maximum. Inputs are a fixed 416x416; images are resized to that,
 ignoring aspect ratio, and the maps kept at that size. Groups of two views or more
-are kept. Whenever an image was predicted, it aligns each depth to the COLMAP
-points and fuses it with its covisible neighbours' into
-`<model_dir>/aligned_depths/` (`mapping/depth/depth_alignment.py`, see
-[depth_alignment.md](depth_alignment.md)), then merges those into
+are kept. It then merges every depth into
 `<model_dir>/depth_points.ply` (`mapping/depth/point_cloud.py`): each map,
 filtered as above with the masks in `--mask-dir`, lifted pixel by pixel through
 the COLMAP intrinsics and poses, coloured from the image, and averaged per voxel, with torch on the GPU when
@@ -251,7 +247,7 @@ coloured cloud:
 python3 -m mapping.vggt_omega.example output/vggt_omega a.jpg b.jpg c.jpg
 ```
 
-Training reads `aligned_depths/` only when the parameters file sets `run_depth: true`
+Training reads `depths/` only when the parameters file sets `run_depth: true`
 and a positive `depth_lambda`, which weights gsplat's depth term; with
 `run_depth: true`, a `depth_points.ply` in the workspace is also added to the
 sparse SfM points that initialize the Gaussians, its points randomly thinned

@@ -103,6 +103,6 @@ or depth; `scripts/gsplat_train.sh` does both when the parameters ask for them,
 or run them separately. When `run_depth: true`, the trainer initializes from the SfM points
 plus any `<workspace>/depth_points.ply` (thinned to keep the total within
 0.8 × `cap_max` under MCMC), and with a positive `depth_lambda` uses any
-existing `<workspace>/aligned_depths/*.npz` files for depth supervision. It logs generated-depth
+existing `<workspace>/depths/*.npz` files for depth supervision. It logs generated-depth
 minus sparse-COLMAP-depth statistics for samples within two pixels of each
 sparse point.

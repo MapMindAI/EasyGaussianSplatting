@@ -2,14 +2,15 @@ import numpy as np
 
 from mapping.depth.depth_alignment import (
     FITTED,
-    GROUP_SCALE,
     SCALE_ONLY,
     Fit,
     View,
     aligned_depth,
     covisible_neighbours,
-    fit_frame,
+    fit_depth,
+    fit_group,
     fused_depth,
+    median_relative_error,
     percentile_agreement,
 )
 
@@ -20,7 +21,7 @@ def test_fit_recovers_a_disparity_affine_despite_outliers():
     predicted = 1 / ((1 / reference - 0.02) / 0.9)  # 1/reference = 0.9/predicted + 0.02
     predicted[:30] *= random.uniform(1.3, 2.0, 30)
 
-    fit = fit_frame(predicted, reference, largest_depth=50.0)
+    fit = fit_depth(predicted, reference, largest_depth=50.0)
 
     assert fit.status == FITTED and fit.inliers == 170
     np.testing.assert_allclose([fit.scale, fit.shift], [0.9, 0.02], atol=1e-6)
@@ -30,7 +31,7 @@ def test_fit_recovers_a_disparity_affine_despite_outliers():
 def test_fit_falls_back_to_scale_when_the_depths_span_too_little():
     reference = np.linspace(5.0, 6.0, 50)
 
-    fit = fit_frame(reference / 1.1, reference, largest_depth=10.0)
+    fit = fit_depth(reference / 1.1, reference, largest_depth=10.0)
 
     assert fit.status == SCALE_ONLY and fit.shift == 0
     np.testing.assert_allclose(fit.scale, 1 / 1.1)
@@ -40,13 +41,30 @@ def test_fit_rejects_a_shift_that_sends_far_depths_behind_the_camera():
     reference = np.linspace(2.0, 8.0, 60)
     predicted = 1 / ((1 / reference + 0.05) / 1.2)  # A shift of -0.05 inverse units.
 
-    fit = fit_frame(predicted, reference, largest_depth=100.0)
+    fit = fit_depth(predicted, reference, largest_depth=100.0)
 
     assert fit.status != FITTED
 
 
-def test_too_few_samples_keep_the_group_scale():
-    assert fit_frame([1.0] * 5, [1.0] * 5, 10.0).status == GROUP_SCALE
+def test_too_few_samples_give_no_fit():
+    assert fit_depth([1.0] * 5, [1.0] * 5, 10.0) is None
+
+
+def test_a_group_shares_one_fit_across_its_frames():
+    reference = np.linspace(2.0, 12.0, 40)
+    predicted = 1 / ((1 / reference - 0.02) / 0.9)
+    # Neither frame spans enough disparity alone; together they do.
+    fit = fit_group([(predicted[:20], reference[:20]), (predicted[20:], reference[20:])], 50.0)
+
+    assert fit.status == FITTED and fit.samples == 40
+    np.testing.assert_allclose([fit.scale, fit.shift], [0.9, 0.02], atol=1e-6)
+
+
+def test_median_relative_error_measures_the_aligned_frame():
+    fit = Fit(0.5, 0.0, SCALE_ONLY)
+
+    assert median_relative_error(fit, [1.0, 2.0, 3.0], [2.0, 4.0, 6.6]) == 0.0
+    assert median_relative_error(fit, [1.0], [np.nan]) == np.inf
 
 
 def test_aligned_depth_keeps_holes_and_drops_depths_sent_behind_the_camera():

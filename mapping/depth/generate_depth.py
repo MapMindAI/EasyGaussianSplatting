@@ -5,13 +5,13 @@ The model's images are split into groups of frames that view the same part of
 the scene (see mapping/depth/covisibility_groups.py), each predicted in one
 request.
 
-Each group is reconstructed in its own arbitrary scale, so the depth it predicts
-is fitted to the COLMAP points the group's images observe and to the COLMAP
-camera baselines against the predicted cameras (see
-mapping/depth/scale_alignment.py). Groups without enough of that evidence are
-skipped rather than written at a guessed scale, and are not retried by a
-rerun. A frame in several groups keeps the prediction that best matches its own
-sparse depths.
+Each group is reconstructed in its own arbitrary scale, so as soon as it is
+predicted its depth gets one fit in disparity to the COLMAP points its images
+observe (see mapping/depth/depth_alignment.py), and is saved aligned. Groups
+without enough of that evidence are skipped rather than written at a guessed
+scale, and are not retried by a rerun. A frame in several groups keeps the
+prediction that best matches its own sparse depths. The groups, their fits,
+and each frame's sparse error are recorded in GROUPS_NAME beside the depths.
 
 Every image in the model ends up with a file: one no group predicted -- an
 up/down face, a frame in no covisible group, or one whose group failed -- gets
@@ -19,18 +19,19 @@ an empty one. Existing files are kept, so an interrupted run resumes by
 predicting only the groups that still have an image without one.
 
 The output is one "<image_name>.npz" per image under --depth-dir: the model's
-full depth and confidence at its own resolution, scaled into the frame of the
+full depth and confidence at its own resolution, aligned into the frame of the
 input model (see mapping/depth/depth_maps.py). Only depth discontinuities are
 removed here; the point cloud merge and training filter on confidence, masks,
 depth range, and colour edges when they load it.
 
 Run as a script, it predicts with DA3 on Triton, reached at --triton-url or
-$TRITON_URL, then aligns the depths into <model_dir>/aligned_depths for
-training (see mapping/depth/depth_alignment.py);
+$TRITON_URL, then fuses each depth with its neighbours' in place (see
+mapping/depth/depth_alignment.py);
 mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
 """
 
 import argparse
+import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -51,7 +52,16 @@ from mapping.depth.depth_maps import (
     upsample,
     without_depth_discontinuities,
 )
-from mapping.depth.scale_alignment import align_sparse_depth, median_relative_error, pose_depth_scale
+from mapping.depth.depth_alignment import (
+    FITTED,
+    SCALE_ONLY,
+    SUMMARY_NAME,
+    aligned_depth,
+    fit_group,
+    frame_samples,
+    fuse_depths,
+    median_relative_error,
+)
 from mapping.file_listing import files_under
 from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
 
@@ -59,6 +69,7 @@ from mapping.triton.endpoint import add_endpoint_argument, resolve_endpoint
 # to match the deployed model (see third_party/EasyTensorRT).
 GROUP_SIZE = 5
 SKIPPED_DEPTH_FACES = {"up", "down"}
+GROUPS_NAME = "groups.json"
 # Why a group produced nothing.
 UNREADABLE, UNSCALED = "unreadable", "unscaled"
 
@@ -107,7 +118,7 @@ def observed_depths(reconstruction):
     pose and observed points by image name.
 
     These are the same triangulated points gsplat's own depth option supervises
-    on; here they group the images and pin down one scale per group.
+    on; here they group the images and align each group's depth.
     """
     point_ids = np.array(sorted(reconstruction.points3D), dtype=np.int64)
     points = np.array(
@@ -130,6 +141,14 @@ def observed_depths(reconstruction):
             point_indices,
         )
     return points, observations
+
+
+def track_lengths(reconstruction):
+    """Each point's track length, in observed_depths' point-table order."""
+    return np.array([
+        len(reconstruction.points3D[point_id].track.elements)
+        for point_id in sorted(reconstruction.points3D)
+    ], dtype=np.int64)
 
 
 def depth_groups(points, observations, group_size, minimum_group_size):
@@ -202,8 +221,8 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     over groups of `minimum_group_size` to `group_size` images.
 
     The estimator's run(images_bgr) returns per-image `depth_list` and
-    `depth_conf_list` maps and its predicted `camera_from_world_list`. Returns
-    how many images it predicted, not counting the empty files.
+    `depth_conf_list` maps. Returns how many images it predicted, not counting
+    the empty files.
     """
     # Deferred so the helpers above stay testable without pycolmap or tqdm installed.
     import pycolmap
@@ -220,6 +239,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
               "pass --overwrite to regenerate")
         return 0
     points, observations = observed_depths(reconstruction)
+    lengths = track_lengths(reconstruction)
     print(
         f"Loaded {args.model_dir / 'sparse' / '0'}: {len(observations)} images, "
         f"{len(points)} points ({time.monotonic() - started:.1f} s)", flush=True
@@ -234,6 +254,14 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
         f"{len(ungrouped)} images in no group ({time.monotonic() - stage_started:.1f} s)",
         flush=True,
     )
+    groups_path = args.depth_dir / GROUPS_NAME
+    # Earlier runs' records of the groups this run does not predict again.
+    records = {
+        tuple(record["images"]): record
+        for record in (json.loads(groups_path.read_text())["groups"]
+                       if groups_path.exists() and not args.overwrite else [])
+    }
+    all_groups = groups
     pending = pending_groups(groups, done)
     if done:
         print(
@@ -243,12 +271,14 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     groups = pending
 
     if groups:
+        # New depths are not fused yet.
+        (args.depth_dir / SUMMARY_NAME).unlink(missing_ok=True)
         stage_started = time.monotonic()
         estimator = make_estimator()
         print(f"Loaded the depth model ({time.monotonic() - stage_started:.1f} s)", flush=True)
 
     def estimate(group):
-        """One group's depth maps and sparse error per image, or (None, why)."""
+        """(each image's aligned depth map and sparse error, the group's Fit), or (None, why)."""
         images = []
         for name in group:
             image = cv2.imread(str(images_dir / name))
@@ -258,34 +288,37 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
             images.append(image)
 
         result = estimator.run(images)
-        predicted = [
-            sample_at(depth, observations[name].pixels, image.shape)
-            for name, image, depth in zip(group, images, result["depth_list"])
+        masks = [training_mask(name) for name in group]
+        samples = [
+            frame_samples(
+                observations[name], depth, confidence, lengths, mask, image.shape[:2],
+                args.min_confidence,
+            )
+            for name, image, depth, confidence, mask in zip(
+                group, images, result["depth_list"], result["depth_conf_list"], masks
+            )
         ]
-        pose_scale = pose_depth_scale(
-            result["camera_from_world_list"],
-            [observations[name].camera_from_world for name in group],
-        )
-        scale = align_sparse_depth(
-            np.repeat(np.arange(len(group)), [len(values) for values in predicted]),
-            np.concatenate([observations[name].point_indices for name in group]),
-            np.concatenate(predicted),
-            np.concatenate([observations[name].depths for name in group]),
-            pose_scale,
-        )
-        if scale is None:
+        # Any sample implies a usable pixel, so this is positive whenever a fit is tried.
+        largest_depth = 0.0
+        for depth, confidence in zip(result["depth_list"], result["depth_conf_list"]):
+            usable = np.isfinite(depth) & (depth > 0) & (confidence >= args.min_confidence)
+            if usable.any():
+                largest_depth = max(largest_depth, float(depth[usable].max()))
+        fit = fit_group(samples, largest_depth)
+        if fit is None:
             return None, UNSCALED
-        group_scaled_by_cameras.append(pose_scale is not None)
 
         maps_by_name = []
-        for name, image, depth, confidence, sparse_predicted in zip(
-            group, images, result["depth_list"], result["depth_conf_list"], predicted
+        for name, image, depth, confidence, (predicted, reference) in zip(
+            group, images, result["depth_list"], result["depth_conf_list"], samples
         ):
-            error = median_relative_error(scale, sparse_predicted, observations[name].depths)
-            depth_map = DepthMap(without_depth_discontinuities(depth * scale), confidence, scale)
+            error = median_relative_error(fit, predicted, reference)
+            depth_map = DepthMap(
+                without_depth_discontinuities(aligned_depth(depth, fit)), confidence, 1 / fit.scale
+            )
             overlay_image = image if args.debug_dir is not None else None
             maps_by_name.append((name, depth_map, error, overlay_image))
-        return maps_by_name, None
+        return maps_by_name, fit
 
     def write_best(maps_by_name):
         """Save each image's map unless an earlier group fitted it better."""
@@ -303,24 +336,28 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
                 cv2.imwrite(str(overlay_path), depth_overlay(image, full_depth))
 
     overlay_filter = depth_filter(args)
-    training_mask = training_masks(args.mask_dir if args.debug_dir is not None else None)
+    training_mask = training_masks(args.mask_dir)
     # Groups share frames, so the writes stay on this thread: two workers
     # saving the same image's file would race.
     stage_started = time.monotonic()
     # A resumed run keeps every file already written, whatever its error.
     best_error = dict.fromkeys(done, -np.inf)
     skipped = {UNREADABLE: 0, UNSCALED: 0}
-    group_scaled_by_cameras = []
     with ThreadPoolExecutor(max_workers=args.num_threads) as pool:
         progress = tqdm(
-            pool.map(estimate, groups), total=len(groups), desc="Depth", unit="group",
-            dynamic_ncols=True,
+            zip(groups, pool.map(estimate, groups)), total=len(groups), desc="Depth",
+            unit="group", dynamic_ncols=True,
         )
-        for maps_by_name, failure in progress:
-            if failure is not None:
-                skipped[failure] += 1
+        for group, (maps_by_name, outcome) in progress:
+            record = {"images": group}
+            if maps_by_name is None:
+                skipped[outcome] += 1
+                record["status"] = outcome
             else:
+                record.update(outcome._asdict())
+                record["errors"] = {name: error for name, _, error, _ in maps_by_name}
                 write_best(maps_by_name)
+            records[tuple(group)] = record
             progress.set_postfix(
                 images=len(best_error), unscaled=skipped[UNSCALED],
                 unreadable=skipped[UNREADABLE], refresh=False,
@@ -331,17 +368,24 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     for name in without_depth:
         save_empty_depth_map(depth_path(args.depth_dir, name))
 
+    groups_path.parent.mkdir(parents=True, exist_ok=True)
+    groups_path.write_text(json.dumps({
+        "groups": [records[tuple(group)] for group in all_groups if tuple(group) in records],
+        "ungrouped": ungrouped,
+    }, indent=1))
     errors = [error for error in best_error.values() if np.isfinite(error)]
+    statuses = [record.get("status") for record in records.values()]
     print(
         f"Depths written to {args.depth_dir} ({predicted} images from "
         f"{len(groups)} groups in {time.monotonic() - stage_started:.1f} s, "
         f"{len(without_depth)} left empty; "
-        f"{sum(group_scaled_by_cameras)} groups scaled with camera baselines; "
+        f"{statuses.count(FITTED)} groups fitted, {statuses.count(SCALE_ONLY)} scale only, "
         f"{skipped[UNSCALED]} skipped for lack of scale evidence, "
         f"{skipped[UNREADABLE]} for unreadable images; {len(ungrouped)} images in no group "
         f"of {minimum_group_size} or more; median sparse depth error "
         f"{np.median(errors) if errors else float('nan'):.3f})"
     )
+    print(f"Groups recorded in {groups_path}")
     if args.debug_dir is not None:
         print(f"Depth overlays written to {args.debug_dir}")
     return predicted
@@ -361,12 +405,7 @@ def main():
         return DepthEstimator(triton_url, expected_num_images=GROUP_SIZE)
 
     generate_depths(args, make_estimator, GROUP_SIZE, minimum_group_size=GROUP_SIZE)
-    from mapping.depth.depth_alignment import ALIGNED_DEPTH_DIR_NAME, align_depths
-
-    align_depths(
-        args.model_dir, args.depth_dir, args.model_dir / ALIGNED_DEPTH_DIR_NAME,
-        depth_filter(args), args.mask_dir,
-    )
+    fuse_depths(args.model_dir, args.depth_dir, depth_filter(args), args.mask_dir)
 
 
 if __name__ == "__main__":

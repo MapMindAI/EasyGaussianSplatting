@@ -1,10 +1,12 @@
 """Tests for depth grouping inputs, sampling, and COLMAP observations."""
 
+import json
 from pathlib import Path
 
 import numpy as np
 import pytest
 
+from mapping.depth.depth_alignment import SCALE_ONLY, SUMMARY_NAME, Fit
 from mapping.depth.depth_maps import depth_path, load_depth_map, save_depth_map
 from mapping.depth.generate_depth import (
     Observations,
@@ -217,8 +219,8 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
     monkeypatch.setattr(generate_depth, "depth_groups", lambda *arguments: (
         [["front/a.jpg", "front/b.jpg"]], ["front/c.jpg"]
     ))
-    monkeypatch.setattr(generate_depth, "pose_depth_scale", lambda *arguments: 1.0)
-    monkeypatch.setattr(generate_depth, "align_sparse_depth", lambda *arguments: 1.0)
+    monkeypatch.setattr(generate_depth, "track_lengths", lambda reconstruction: np.full(1, 3))
+    monkeypatch.setattr(generate_depth, "fit_group", lambda *arguments: Fit(0.5, 0.0, SCALE_ONLY))
     runs = []
 
     class Estimator:
@@ -227,7 +229,6 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
             return {
                 "depth_list": [np.ones((4, 4), np.float32)] * len(images),
                 "depth_conf_list": [np.ones((4, 4), np.float32)] * len(images),
-                "camera_from_world_list": [np.eye(3, 4)] * len(images),
             }
 
     depth_dir = tmp_path / "depths"
@@ -235,16 +236,23 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
         model_dir=tmp_path, depth_dir=depth_dir, overwrite=False, mask_dir=None, debug_dir=None,
         num_threads=1, min_confidence=0.5, min_depth=0.1, max_depth=5.0,
     )
-    # An interrupted run already wrote "a".
+    # An interrupted run already wrote "a", and fused it.
     save_depth_map(depth_path(depth_dir, "front/a.jpg"), np.full((4, 4), 7.0), np.ones((4, 4)), 2.0)
+    (depth_dir / SUMMARY_NAME).write_text("{}")
 
     assert generate_depth.generate_depths(args, Estimator, 2, 2) == 1
 
     assert runs == [2]
+    assert not (depth_dir / SUMMARY_NAME).exists()  # New depths still need fusing.
     assert load_depth_map(depth_path(depth_dir, "front/a.jpg")).scale == 2.0
     written = load_depth_map(depth_path(depth_dir, "front/b.jpg"))
-    np.testing.assert_array_equal(written.depth, np.ones((4, 4)))
+    np.testing.assert_array_equal(written.depth, np.full((4, 4), 2.0))  # Aligned by the group's fit.
     np.testing.assert_array_equal(written.confidence, np.ones((4, 4)))
+    assert written.scale == 2.0
+    recorded = json.loads((depth_dir / generate_depth.GROUPS_NAME).read_text())
+    assert recorded["ungrouped"] == ["front/c.jpg"]
+    [group] = recorded["groups"]
+    assert group["images"] == ["front/a.jpg", "front/b.jpg"] and group["status"] == SCALE_ONLY
     assert load_depth_map(depth_path(depth_dir, "front/c.jpg")) is None
     assert load_depth_map(depth_path(depth_dir, "up/d.jpg")) is None
 
