@@ -72,7 +72,7 @@ MCMC the depth points are randomly thinned so the total stays within 80% of
 
 ## 6. Depth loss
 
-With `depth_lambda` > 0, each training image's map is filtered by
+With `depth_lambda_begin` > 0, each training image's map is filtered by
 `supervised_depth` (`mapping/depth/depth_maps.py`), which keeps a pixel when:
 
 - its confidence is at least `depth_min_confidence`;
@@ -81,7 +81,10 @@ With `depth_lambda` > 0, each training image's map is filtered by
 
 Each kept map pixel becomes one sample at its centre in the training image.
 gsplat renders expected depth, samples it there, and adds
-`depth_lambda · scene_scale · mean |1/D_render − 1/D|`. Samples where the
+`weight · scene_scale · mean |1/D_render − 1/D|`, the weight being
+`depth_lambda_begin`. A positive
+`depth_lambda_final` decreases `depth_lambda_begin` linearly to it at
+`refine_stop_iter`, then holds it (HY-World: 0.2 to 0.01). Samples where the
 render is below 0.001 of the scene scale are skipped: nothing covers them yet.
 
 ## Results on `VID_20260902_113042_00_006`
@@ -100,7 +103,7 @@ with a Canny edge filter the loss has since dropped:
 | Training mask | 47.6% |
 | Image edges | 45.3% |
 
-`depth_lambda` sweep (`mapping/benchmark/depth_lambda_sweep.sh`): MCMC,
+`depth_lambda_begin` sweep (`mapping/benchmark/depth_lambda_sweep.sh`): MCMC,
 `cap_max` 2M, 30k steps, 78 held-out views.
 
 | Run | PSNR | SSIM | LPIPS | Train (s) |

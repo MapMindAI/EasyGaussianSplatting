@@ -248,14 +248,14 @@ python3 -m mapping.vggt_omega.example output/vggt_omega a.jpg b.jpg c.jpg
 ```
 
 Training reads `depths/` only when the parameters file sets `run_depth: true`
-and a positive `depth_lambda`, which weights gsplat's depth term; with
+and a positive `depth_lambda_begin`, which weights gsplat's depth term; with
 `run_depth: true`, a `depth_points.ply` in the workspace is also added to the
 sparse SfM points that initialize the Gaussians, its points randomly thinned
 under MCMC to keep the total within 0.8 × `cap_max`:
 
 ```
 run_depth: true
-depth_lambda: 0.01
+depth_lambda_begin: 0.01
 ```
 
 Calling `mapping/train_gsplat_with_masks.py` directly does not generate masks
@@ -313,13 +313,14 @@ mapping/benchmark/gsplat_sweep.sh data/panorama path/to/configurations
 ```
 
 `mapping/benchmark/depth_lambda_sweep.sh` runs `scripts/gsplat_train.sh` once
-per `depth_lambda` (default `0 0.001 0.003 0.01 0.03 0.1`; 0 keeps only the
+per `depth_lambda_begin` (default `0 0.001 0.003 0.01 0.03 0.1`; 0 keeps only the
 depth-cloud initialization) and once without depth, over one parameters file,
 into `<workspace>/depth_lambda_sweep/`. Depths are generated once; evaluated
-and failed runs are skipped, as in `gsplat_sweep.sh`:
+and failed runs are skipped, as in `gsplat_sweep.sh`. With `depth_lambda_final`
+set in the parameters file, each value is the initial weight of the decrease:
 
 ```
-mapping/benchmark/depth_lambda_sweep.sh data/panorama [parameters.proto.txt] [depth_lambda...]
+mapping/benchmark/depth_lambda_sweep.sh data/panorama [parameters.proto.txt] [depth_lambda_begin...]
 ```
 
 The [historical sweep configurations](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Parameter-Sweep)

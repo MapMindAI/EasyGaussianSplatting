@@ -124,7 +124,10 @@ run_depth: false
 # Weight of the depth term in the loss; 0 keeps only the depth-cloud start.
 # gsplat's own default, which is tuned for the sparse SfM depths rather than the
 # denser generated ones, so lower it if depth dominates the photometric terms.
-depth_lambda: 0.01
+depth_lambda_begin: 0.01
+# When positive, depth_lambda_begin decreases linearly to this at refine_stop_iter
+# and holds; 0 keeps it constant. HY-World uses 0.2 to 0.01.
+depth_lambda_final: 0
 # Voxel edge of the merged depth cloud, as a fraction of the scene scale.
 depth_voxel_factor: 0.001
 # Depth confidence floor for both the merged cloud and the depth term.

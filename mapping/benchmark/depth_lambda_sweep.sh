@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Train one model per depth_lambda, plus one without depth, through
+# Train one model per depth_lambda_begin, plus one without depth, through
 # scripts/gsplat_train.sh (see doc/tools.md). Runs where gsplat_train.sh does.
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-  echo "Usage: $0 <workspace> [parameters.proto.txt] [depth_lambda...]" >&2
+  echo "Usage: $0 <workspace> [parameters.proto.txt] [depth_lambda_begin...]" >&2
   exit 1
 fi
 
@@ -36,7 +36,7 @@ for name in "${DEPTH_LAMBDAS[@]/#/depth_lambda_}" no_depth; do
     overrides='run_depth: false'
   else
     overrides="run_depth: true
-depth_lambda: ${name#depth_lambda_}"
+depth_lambda_begin: ${name#depth_lambda_}"
   fi
   printf '%s\n\n%s\n' "$(cat "${PARAMETERS_FILE}")" "${overrides}" >"${configuration}"
 

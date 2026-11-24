@@ -124,7 +124,7 @@ run_depth: true
 # Weight of the depth term in the loss. gsplat's own default, which is tuned
 # for the sparse SfM depths rather than the denser ones generate_depth.py
 # writes, so lower it if depth starts to dominate the photometric terms.
-depth_lambda: 0.01
+depth_lambda_begin: 0.01
 # Voxel edge of the merged depth cloud, as a fraction of the scene scale.
 depth_voxel_factor: 0.001
 # Depth confidence floor for both the merged cloud and the depth term.

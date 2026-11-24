@@ -334,6 +334,7 @@ from mapping.depth.depth_maps import (  # noqa: E402
     supervised_depth,
 )
 from mapping.depth.point_cloud import POINT_CLOUD_NAME, read_point_cloud  # noqa: E402
+from mapping.depth_loss_schedule import schedule_depth_loss  # noqa: E402
 from mapping.file_listing import files_under  # noqa: E402
 from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
@@ -347,7 +348,7 @@ from mapping.gsplat_world_frame import (  # noqa: E402
 def depth_loss_enabled(parameters):
     """Generated depths seed the Gaussians whenever run_depth is set, but only
     supervise them with a positive weight."""
-    return parameters.run_depth and parameters.depth_lambda > 0
+    return parameters.run_depth and parameters.depth_lambda_begin > 0
 
 
 def number(value):
@@ -424,7 +425,9 @@ def load_job_parameters():
         "--pose_opt_lr", number(parameters.pose_opt_lr),
     ]
     if depth_loss_enabled(parameters):
-        flags += ["--depth_loss", "--depth_lambda", number(parameters.depth_lambda)]
+        # A decaying weight is applied by schedule_depth_loss instead.
+        weight = 1.0 if parameters.depth_lambda_final > 0 else parameters.depth_lambda_begin
+        flags += ["--depth_loss", "--depth_lambda", number(weight)]
     if parameters.packed:
         flags.append("--packed")
     flags += strategy_flags(parameters)
@@ -477,6 +480,10 @@ attach_masks(Dataset)
 if parameters is not None and depth_loss_enabled(parameters):
     attach_depths(Dataset, DepthFilter(min_confidence=parameters.depth_min_confidence))
     guard_depth_loss(gsplat.losses)
+    if parameters.depth_lambda_final > 0:
+        schedule_depth_loss(
+            gsplat.losses, [gsplat.strategy.DefaultStrategy, gsplat.strategy.MCMCStrategy],
+            parameters.depth_lambda_begin, parameters.depth_lambda_final, parameters.refine_stop_iter)
 if parameters is not None and parameters.run_depth:
     # MCMC never grows past cap_max, so leave it room to relocate and add.
     maximum_points = (

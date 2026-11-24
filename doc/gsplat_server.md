@@ -217,6 +217,9 @@ which set both. Rename it to `opacity_reg_weight` (field number 3 is unchanged)
 and add `scale_reg_weight` with the same value to keep a run's behaviour; an
 omitted `scale_reg_weight` takes the shipped default.
 
+`depth_lambda_begin` replaces `depth_lambda`; rename it in parameter files
+(field number 24 is unchanged).
+
 `stop_regularization_after_refinement: true` drops both terms from
 `refine_stop_iter` on. With MCMC nothing relocates after that step, so the
 opacity term only dims every Gaussian; position noise still runs.
@@ -230,7 +233,10 @@ feature stages use.
 `run_depth: true` predicts depth for the uploaded images with VGGT-Omega,
 seeds the Gaussians from the sparse SfM points plus the merged depth cloud
 (`depth_points.ply`), and adds gsplat's depth term to the loss, weighted by
-`depth_lambda`; `depth_lambda: 0` keeps the initialization without the term. Under MCMC, the depth
+`depth_lambda_begin`; `depth_lambda_begin: 0` keeps the initialization without the term.
+A positive `depth_lambda_final` decreases the weight linearly from
+`depth_lambda_begin` to it at `refine_stop_iter`, then holds it; HY-World's trainer
+goes from 0.2 to 0.01. Under MCMC, the depth
 points are randomly thinned to keep the total within 0.8 × `cap_max`.
 `depth_voxel_factor` sets the cloud's voxel edge as a fraction of the scene
 scale, and `depth_min_confidence` the confidence floor both the cloud and the
@@ -238,7 +244,7 @@ depth term keep:
 
 ```
 run_depth: true
-depth_lambda: 0.01
+depth_lambda_begin: 0.01
 depth_voxel_factor: 0.001
 depth_min_confidence: 0.5
 ```
