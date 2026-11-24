@@ -41,6 +41,9 @@ opacity_reg_weight: 0.01
 scale_reg_weight: 0.01
 # Drop both terms from refine_stop_iter on, when MCMC no longer relocates.
 stop_regularization_after_refinement: false
+# PhysGaussian's anisotropy penalty; 0 is off (see doc/gsplat_server.md).
+anisotropy_reg_weight: 0
+max_scale_ratio: 5
 
 # Minimum opacity below which a Gaussian is pruned. It also sets the opacity
 # reset floor, which gsplat takes as prune_opa * 2, so lowering it does not

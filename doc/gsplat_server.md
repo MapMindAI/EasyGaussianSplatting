@@ -221,6 +221,16 @@ omitted `scale_reg_weight` takes the shipped default.
 `refine_stop_iter` on. With MCMC nothing relocates after that step, so the
 opacity term only dims every Gaussian; position noise still runs.
 
+`anisotropy_reg_weight` adds [PhysGaussian](https://arxiv.org/abs/2311.12198)'s
+penalty on needle-like Gaussians, every 10 steps:
+`anisotropy_reg_weight · mean(max(s_max / s_min − max_scale_ratio, 0))`.
+It is off at 0; PhysGaussian uses 0.1 and a ratio of 5:
+
+```text
+anisotropy_reg_weight: 0.1
+max_scale_ratio: 5
+```
+
 An uploaded `masks/` always wins. Segmentation runs inference on
 `segment_people.py --num-threads` worker threads, through the same helper the
 feature stages use.

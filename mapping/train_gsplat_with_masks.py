@@ -337,7 +337,10 @@ from mapping.depth.depth_maps import (  # noqa: E402
 )
 from mapping.depth.point_cloud import POINT_CLOUD_NAME, read_point_cloud  # noqa: E402
 from mapping.file_listing import files_under  # noqa: E402
-from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402
+from mapping.gsplat_regularization import (  # noqa: E402
+    regularize_anisotropy,
+    stop_regularization_after_refinement,
+)
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
     capture_scene_transform,
@@ -468,10 +471,12 @@ if block_option is not None:
     block, block_index, block_points, block_owners = block_gaussians.load_block(manifest_path, block_name)
     restrict_to_images(Dataset, set(block["training_images"]))
     block_training = (coarse_checkpoint, block_points, block_owners, block_index)
+strategy_classes = [gsplat.strategy.DefaultStrategy, gsplat.strategy.MCMCStrategy]
 if parameters is not None and parameters.stop_regularization_after_refinement:
-    stop_regularization_after_refinement(
-        gsplat.losses, [gsplat.strategy.DefaultStrategy, gsplat.strategy.MCMCStrategy],
-        parameters.refine_stop_iter)
+    stop_regularization_after_refinement(gsplat.losses, strategy_classes, parameters.refine_stop_iter)
+if parameters is not None and parameters.anisotropy_reg_weight > 0:
+    regularize_anisotropy(
+        strategy_classes, parameters.anisotropy_reg_weight, parameters.max_scale_ratio)
 if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)
 downsample_images(Parser)

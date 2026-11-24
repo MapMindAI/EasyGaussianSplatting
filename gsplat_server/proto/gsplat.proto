@@ -113,6 +113,10 @@ message JobParameters {
   // Drop both regularization terms from refine_stop_iter on. With MCMC nothing
   // relocates after that, so the opacity term only dims every Gaussian.
   bool stop_regularization_after_refinement = 35;
+  // PhysGaussian's anisotropy penalty on largest / smallest scale past
+  // max_scale_ratio; 0 is off (see doc/gsplat_server.md).
+  float anisotropy_reg_weight = 40;
+  float max_scale_ratio = 41;
 
   message Color {
     // Channel intensities in [0, 1].

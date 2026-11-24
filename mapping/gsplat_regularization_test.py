@@ -1,8 +1,15 @@
-"""Tests for stopping regularization after refinement."""
+"""Tests for stopping regularization after refinement, and the anisotropy penalty."""
 
 import types
 
-from mapping.gsplat_regularization import stop_regularization_after_refinement
+import pytest
+
+from mapping.gsplat_regularization import (
+    ANISOTROPY_STEP_INTERVAL,
+    anisotropy_loss,
+    regularize_anisotropy,
+    stop_regularization_after_refinement,
+)
 
 
 class Values:
@@ -50,3 +57,25 @@ def test_scale_regularization_stops_with_opacity():
     run_step(strategy, 0)
 
     assert losses.scale_reg_loss(Values()) == 0.0
+
+
+def test_anisotropy_penalizes_only_the_ratio_past_the_bound():
+    torch = pytest.importorskip("torch")
+    log_scales = torch.log(torch.tensor([[1.0, 2.0, 3.0], [1.0, 1.0, 8.0]]))
+
+    assert anisotropy_loss(log_scales, max_ratio=5.0).item() == pytest.approx(1.5)
+
+
+def test_anisotropy_adds_its_gradient_every_tenth_step():
+    torch = pytest.importorskip("torch")
+    strategy_class = type("Strategy", (), {"step_pre_backward": lambda self, *args, **kwargs: None})
+    regularize_anisotropy([strategy_class], weight=0.1, max_ratio=5.0)
+    scales = torch.log(torch.tensor([[1.0, 1.0, 8.0]])).requires_grad_()
+
+    gradients = []
+    for step in range(ANISOTROPY_STEP_INTERVAL + 1):
+        scales.grad = None
+        strategy_class().step_pre_backward(params={"scales": scales}, optimizers={}, state={}, step=step, info={})
+        gradients.append(scales.grad is not None)
+
+    assert gradients == [True] + [False] * (ANISOTROPY_STEP_INTERVAL - 1) + [True]
