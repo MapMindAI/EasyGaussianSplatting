@@ -7,6 +7,7 @@ from mapping.depth.depth_maps import (
     DepthMap,
     depth_path,
     depth_rows,
+    holds_depth,
     load_depth_map,
     save_depth_map,
     save_empty_depth_map,
@@ -30,6 +31,14 @@ def test_maps_round_trip_with_confidence_and_scale(tmp_path):
     np.testing.assert_allclose(loaded.confidence, [[0.2, 0.5], [1.0, 12.75]], rtol=1e-6)
     assert loaded.scale == 3.5
     assert [entry.name for entry in path.parent.iterdir()] == ["frame.jpg.npz"]
+
+
+def test_the_header_tells_whether_a_map_holds_depth(tmp_path):
+    save_empty_depth_map(tmp_path / "empty.npz")
+    save_depth_map(tmp_path / "full.npz", np.ones((2, 3)), np.ones((2, 3)), 1.0)
+
+    assert not holds_depth(tmp_path / "empty.npz")
+    assert holds_depth(tmp_path / "full.npz")
 
 
 def test_an_empty_map_means_no_depth(tmp_path):

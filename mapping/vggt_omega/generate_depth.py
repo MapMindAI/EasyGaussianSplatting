@@ -2,13 +2,13 @@
 """Predict per-image depth for a COLMAP model with VGGT-Omega, run locally.
 
 The same stage as mapping/depth/generate_depth.py -- covisibility grouping,
-scale fitting to COLMAP, and the depth and confidence output -- with the
-ONNX model at --model in place of the Triton DA3 one. It then merges every
-written depth, filtered by --min-confidence, the depth range, the masks in
---mask-dir, and colour edges, into <model_dir>/depth_points.ply, the cloud gsplat
-seeds its Gaussians from (see mapping/depth/point_cloud.py), rebuilding it
-whenever an image was predicted or the settings recorded beside it in
-depth_points.json changed.
+scale fitting to COLMAP, cross-view fusion, and the depth and confidence
+output -- with the ONNX model at --model in place of the Triton DA3 one. It
+then merges every depth, filtered by --min-confidence, the depth range, the
+masks in --mask-dir, and colour edges, into <model_dir>/depth_points.ply, the
+cloud gsplat seeds its Gaussians from (see mapping/depth/point_cloud.py),
+rebuilding it whenever the depths were fused or the settings recorded beside
+it in depth_points.json changed.
 """
 
 import argparse
@@ -40,7 +40,7 @@ def main():
     # infers while the other reads and filters. More would only queue on it.
     parser.set_defaults(num_threads=2)
     args = parse_depth_arguments(parser)
-    predicted = generate_depths(
+    fused = generate_depths(
         args, lambda: VggtOmegaDepthEstimator(args.model), GROUP_SIZE, MINIMUM_GROUP_SIZE
     )
 
@@ -53,7 +53,7 @@ def main():
         "mask_dir": None if args.mask_dir is None else str(args.mask_dir),
     }
     if (
-        not predicted
+        not fused
         and cloud_path.exists()
         and settings_path.exists()
         and json.loads(settings_path.read_text()) == settings

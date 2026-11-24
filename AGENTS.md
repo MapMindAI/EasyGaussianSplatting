@@ -38,6 +38,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── depth/                    # Depth supervision; grouping and scale ported from ArSession.
 │   │   ├── covisibility_groups.py # Groups of frames viewing the same scene.
 │   │   ├── covisibility_groups_test.py # Links and greedy group selection.
+│   │   ├── cross_view_fusion.py  # Each depth checked and averaged against its covisible neighbours'.
+│   │   ├── cross_view_fusion_test.py # Neighbours, fusion order, and the check.
 │   │   ├── depth_maps.py         # Depth files: full model output, filtered on load into one point per map pixel.
 │   │   ├── depth_maps_test.py    # Round trips, discontinuities, filtering, masks, and pixel-centre points.
 │   │   ├── generate_depth.py     # Shared depth stage, and its Triton DA3 entrypoint.
