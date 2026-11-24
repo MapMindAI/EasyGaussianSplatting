@@ -70,6 +70,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── gsplat_world_frame_test.py # Similarity inverse and the export wiring.
 │   ├── gsplat_regularization.py  # Drop opacity and scale regularization after refinement.
 │   ├── gsplat_regularization_test.py # The step gate on both terms.
+│   ├── mask_gaussian.py          # MaskGaussian masks, loss, and pruning for DefaultStrategy.
+│   ├── mask_gaussian_test.py     # Prune schedule, sampling, and the mask loss.
 │   ├── mapping_pipeline_test.py  # Gravity levelling of the solved map.
 │   ├── panorama_database.py      # Panorama video to a cube-map rig database.
 │   ├── panorama_database_test.py # Image counts and the FFmpeg decode commands.
@@ -86,7 +88,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── gsplat_train.sh           # Container: train a splat from a workspace.
 │   └── gsplat_train_blocks.sh    # Container: partition, coarse, blocks, merge.
 ├── third_party/
-│   ├── gsplat/                   # gsplat submodule the training stage uses.
+│   ├── gsplat/                   # gsplat submodule (MapMindAI fork, adds masked rasterization).
 │   ├── colmap/                   # COLMAP source the Jetson image builds from.
 │   └── EasyTensorRT/             # Triton server and clients for the features.
 ├── conftest.py                   # Puts the repo root on sys.path for the tests.

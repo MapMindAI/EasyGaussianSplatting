@@ -104,7 +104,8 @@ Built from `artifacts/docker/dev.dockerfile`:
 - **pycolmap** and the `tritonclient` gRPC client, for the mapping pipeline in
   `mapping/`.
 - A `gsplat` conda environment with [gsplat](https://github.com/nerfstudio-project/gsplat)
-  (Gaussian Splatting training, vendored as the `third_party/gsplat` submodule)
+  (Gaussian Splatting training, vendored as the `third_party/gsplat` submodule from
+  [our fork](https://github.com/MapMindAI/gsplat), which adds masked rasterization)
   and its compiled CUDA extensions.
 
 

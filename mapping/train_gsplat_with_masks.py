@@ -338,6 +338,7 @@ from mapping.depth.depth_maps import (  # noqa: E402
 from mapping.depth.point_cloud import POINT_CLOUD_NAME, read_point_cloud  # noqa: E402
 from mapping.file_listing import files_under  # noqa: E402
 from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402
+from mapping.mask_gaussian import enable_mask_gaussian  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
     capture_scene_transform,
@@ -441,16 +442,19 @@ original_cli = gsplat.distributed.cli
 
 
 block_training = None
+mask_gaussians_weight = None
 
 
 def cli_with_configuration(function, configuration, verbose=False):
     print("Training configuration:", flush=True)
     pprint.pprint(vars(configuration), sort_dicts=False, width=100)
     sys.stdout.flush()
+    # simple_trainer's functions and classes are only reachable once runpy has
+    # defined them, through the globals of its main.
     if block_training is not None:
-        # simple_trainer's functions and classes are only reachable once
-        # runpy has defined them, through the globals of its main.
         train_block(function.__globals__, *block_training, configuration.result_dir)
+    if mask_gaussians_weight is not None:
+        enable_mask_gaussian(function.__globals__, gsplat.strategy.DefaultStrategy, mask_gaussians_weight)
     return original_cli(function, configuration, verbose=verbose)
 
 
@@ -468,6 +472,11 @@ if block_option is not None:
     block, block_index, block_points, block_owners = block_gaussians.load_block(manifest_path, block_name)
     restrict_to_images(Dataset, set(block["training_images"]))
     block_training = (coarse_checkpoint, block_points, block_owners, block_index)
+if parameters is not None and parameters.mask_gaussians:
+    if parameters.strategy == gsplat_pb2.STRATEGY_MCMC:
+        print("mask_gaussians is ignored under STRATEGY_MCMC", flush=True)
+    else:
+        mask_gaussians_weight = parameters.mask_lambda
 if parameters is not None and parameters.stop_regularization_after_refinement:
     stop_regularization_after_refinement(
         gsplat.losses, [gsplat.strategy.DefaultStrategy, gsplat.strategy.MCMCStrategy],
