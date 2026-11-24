@@ -53,7 +53,7 @@ def parameters_to_complete_text(parameters):
     """
     lines = [parameters_to_text(parameters).rstrip("\n")]
     for field in parameters.DESCRIPTOR.fields:
-        if field.message_type is not None or getattr(parameters, field.name):
+        if field.message_type is not None or field.is_repeated or getattr(parameters, field.name):
             continue
         if field.enum_type is not None:
             zero = field.enum_type.values_by_number[0].name
