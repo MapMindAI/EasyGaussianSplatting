@@ -25,7 +25,9 @@ removed here; the point cloud merge and training filter on confidence, masks,
 depth range, and colour edges when they load it.
 
 Run as a script, it predicts with DA3 on Triton, reached at --triton-url or
-$TRITON_URL; mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
+$TRITON_URL, then aligns the depths into <model_dir>/aligned_depths for
+training (see mapping/depth/depth_alignment.py);
+mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
 """
 
 import argparse
@@ -359,6 +361,12 @@ def main():
         return DepthEstimator(triton_url, expected_num_images=GROUP_SIZE)
 
     generate_depths(args, make_estimator, GROUP_SIZE, minimum_group_size=GROUP_SIZE)
+    from mapping.depth.depth_alignment import ALIGNED_DEPTH_DIR_NAME, align_depths
+
+    align_depths(
+        args.model_dir, args.depth_dir, args.model_dir / ALIGNED_DEPTH_DIR_NAME,
+        depth_filter(args), args.mask_dir,
+    )
 
 
 if __name__ == "__main__":

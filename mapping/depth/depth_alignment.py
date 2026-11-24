@@ -19,8 +19,6 @@ ALIGNED_DEPTH_DIR_NAME = "aligned_depths"
 SUMMARY_NAME = "alignment.json"
 
 MIN_TRACK_LENGTH = 3
-# Sparse references beyond this depth, in map units, are too noisy to fit to.
-MAX_REFERENCE_DEPTH = 20.0
 # A sample is dropped when its depth rank differs this many percentiles between the maps.
 PERCENTILE_TOLERANCE = 20.0
 INLIER_RELATIVE_ERROR = 0.05
@@ -143,18 +141,10 @@ def fit_frame(predicted, reference, largest_depth, seed=0):
 
 def covisible_neighbours(point_indices_per_frame, point_count):
     """Each frame's up to NEIGHBOUR_COUNT frames sharing the most sparse points,
-    at least MIN_SHARED_POINTS, most shared first."""
-    from scipy import sparse
+    at least MIN_SHARED_POINTS, most shared first. Each frame's indices must be unique."""
+    from mapping.depth.covisibility_groups import shared_point_counts
 
-    frame_indices = np.repeat(
-        np.arange(len(point_indices_per_frame)), [len(points) for points in point_indices_per_frame]
-    )
-    incidence = sparse.csr_matrix(
-        (np.ones(len(frame_indices)), (frame_indices, np.concatenate(point_indices_per_frame))),
-        shape=(len(point_indices_per_frame), point_count),
-    )
-    incidence.data[:] = 1  # A point seen twice by one frame counts once.
-    shared = (incidence @ incidence.T).toarray()
+    shared = shared_point_counts(point_indices_per_frame, point_count).toarray()
     np.fill_diagonal(shared, 0)
     neighbours = []
     for row in shared:
@@ -186,12 +176,13 @@ def fused_depth(view, neighbour_views):
     depth = view.depth.copy()
     if not neighbour_views:
         return depth
+    from mapping.depth.point_cloud import unproject
+
     lines, columns = np.nonzero(view.usable)
     own = depth[lines, columns].astype(np.float64)
-    pixels = np.column_stack([columns + 0.5, lines + 0.5, np.ones(len(lines))])
-    camera_points = pixels @ np.linalg.inv(view.intrinsics).T * own[:, None]
-    rotation, translation = view.camera_from_world[:, :3], view.camera_from_world[:, 3]
-    world = (camera_points - translation) @ rotation
+    world = unproject(
+        np.column_stack([columns + 0.5, lines + 0.5]), own, view.intrinsics, view.camera_from_world
+    )
     confirmations = np.zeros(len(lines), dtype=np.int32)
     violations = np.zeros(len(lines), dtype=np.int32)
     weights = 1 / own**2
@@ -219,8 +210,8 @@ def fused_depth(view, neighbour_views):
         # The neighbour's surface sits at this ratio of the projected depth, along this ray too.
         rows, neighbour_depth = rows[confirmed], neighbour_depth[confirmed]
         estimate = own[rows] * neighbour_depth / local[rows, 2]
-        np.add.at(weights, rows, 1 / neighbour_depth**2)
-        np.add.at(weighted_depths, rows, estimate / neighbour_depth**2)
+        weights[rows] += 1 / neighbour_depth**2  # Rows are unique within one neighbour.
+        weighted_depths[rows] += estimate / neighbour_depth**2
     kept = (violations == 0) | (confirmations > violations)
     depth[lines, columns] = np.where(kept, weighted_depths / weights, 0)
     return depth
@@ -230,13 +221,13 @@ def frame_samples(observation, depth_map, track_lengths, mask, image_shape, min_
     """(predicted, reference) depths at the sparse points `observation` holds
     that pass the confidence, mask, track, range, and percentile tests."""
     from mapping.depth.generate_depth import sample_at
+    from mapping.depth.scale_alignment import usable_depths
 
     predicted = sample_at(depth_map.depth, observation.pixels, image_shape)
     confidence = sample_at(depth_map.confidence, observation.pixels, image_shape)
     reference = observation.depths
     keep = (
-        (predicted > 0) & (confidence >= min_confidence)
-        & (reference > 0) & (reference <= MAX_REFERENCE_DEPTH)
+        usable_depths(predicted, reference) & (confidence >= min_confidence)
         & (track_lengths[observation.point_indices] >= MIN_TRACK_LENGTH)
     )
     if mask is not None:
@@ -251,13 +242,13 @@ def align_depths(model_dir, depth_dir, output_dir, depth_filter, mask_dir=None):
     with SUMMARY_NAME; returns the summary. Pixels below the confidence floor
     or outside the masks in `mask_dir` (which may be None) are aligned but
     neither checked nor used as evidence."""
-    import cv2
     import pycolmap
     from tqdm import tqdm
 
     from mapping.depth.depth_maps import (
         depth_path,
         load_depth_map,
+        mask_at,
         save_depth_map,
         save_empty_depth_map,
         training_masks,
@@ -280,7 +271,7 @@ def align_depths(model_dir, depth_dir, output_dir, depth_filter, mask_dir=None):
     def load(name):
         return name, load_depth_map(depth_path(depth_dir, name)), training_mask(name)
 
-    names, fits, views = [], [], []
+    frames = []  # (name, fit, view, confidence, scale) per image with depth.
     with_files = sorted(name for name in images if depth_path(depth_dir, name) in written)
     for name, depth_map, mask in tqdm(
         prefetched(load, with_files, 8), total=len(with_files), desc="Align", unit="image",
@@ -292,41 +283,37 @@ def align_depths(model_dir, depth_dir, output_dir, depth_filter, mask_dir=None):
         camera = reconstruction.cameras[image.camera_id]
         usable = (depth_map.depth > 0) & (depth_map.confidence >= depth_filter.min_confidence)
         if mask is not None:
-            usable &= cv2.resize(
-                mask.astype(np.uint8), usable.shape[::-1], interpolation=cv2.INTER_NEAREST
-            ) > 0
+            usable &= mask_at(mask, usable.shape)
         predicted, reference = frame_samples(
             observations[name], depth_map, track_lengths, mask,
             (camera.height, camera.width), depth_filter.min_confidence,
         )
         fit = fit_frame(predicted, reference, float(depth_map.depth[usable].max()) if usable.any() else 1.0)
         depth = aligned_depth(depth_map.depth, fit)
-        names.append(name)
-        fits.append(fit)
-        views.append(View(
+        frames.append((name, fit, View(
             depth,
             usable & (depth > 0),
             map_intrinsics(camera.calibration_matrix(), (camera.width, camera.height), depth.shape),
             observations[name].camera_from_world,
-        ))
+        ), depth_map.confidence, depth_map.scale))
 
     neighbours = covisible_neighbours(
-        [np.unique(observations[name].point_indices) for name in names], len(points)
+        [np.unique(observations[name].point_indices) for name, *_ in frames], len(points)
     )
+    views = [view for _, _, view, *_ in frames]
     summary = {}
-    for frame, (name, fit, view) in enumerate(tqdm(
-        list(zip(names, fits, views)), desc="Cross-view check", unit="image", dynamic_ncols=True,
+    for frame, (name, fit, view, confidence, scale) in enumerate(tqdm(
+        frames, desc="Cross-view check", unit="image", dynamic_ncols=True,
     )):
         depth = fused_depth(view, [views[neighbour] for neighbour in neighbours[frame]])
-        depth_map = load_depth_map(depth_path(depth_dir, name))
-        save_depth_map(depth_path(output_dir, name), depth, depth_map.confidence, depth_map.scale)
+        save_depth_map(depth_path(output_dir, name), depth, confidence, scale)
         checked = int(view.usable.sum())
         summary[name] = {
             **fit._asdict(),
             "neighbours": len(neighbours[frame]),
             "kept_fraction": float((view.usable & (depth > 0)).sum() / checked) if checked else None,
         }
-    for name in sorted(set(images) - set(names)):
+    for name in sorted(set(images) - set(summary)):
         save_empty_depth_map(depth_path(output_dir, name))
 
     output_dir.mkdir(parents=True, exist_ok=True)

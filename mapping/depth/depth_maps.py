@@ -123,12 +123,15 @@ def supervised_depth(depth_map, grayscale, mask, depth_filter):
         & (depth_map.confidence >= depth_filter.min_confidence)
     )
     if mask is not None:
-        usable &= cv2.resize(
-            mask.astype(np.uint8), (width, height), interpolation=cv2.INTER_NEAREST
-        ) > 0
+        usable &= mask_at(mask, depth.shape)
     small = cv2.resize(grayscale, (width, height), interpolation=cv2.INTER_AREA)
     usable &= cv2.Canny(small.astype(np.uint8), 100, 200) == 0
     return np.where(usable, depth, 0).astype(np.float32)
+
+
+def mask_at(mask, shape):
+    """The boolean `mask`, at any size, resized by nearest neighbour to `shape` (height, width)."""
+    return cv2.resize(mask.astype(np.uint8), shape[::-1], interpolation=cv2.INTER_NEAREST) > 0
 
 
 def upsample(depth, width, height):

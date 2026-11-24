@@ -33,8 +33,8 @@ offset copy of the surface.
 
 ## Stage
 
-It runs inside `mapping/vggt_omega/generate_depth.py`, after prediction and
-before the merge. It reads `depths/` and writes `aligned_depths/` in the same
+It runs after prediction in both depth entrypoints, and before the merge in
+`mapping/vggt_omega/generate_depth.py`. It reads `depths/` and writes `aligned_depths/` in the same
 `.npz` format, plus `aligned_depths/alignment.json`. That file records, per
 frame: `scale` (k), `shift` (b), `status`, sample and inlier counts, the
 neighbour count, and the fraction of checked pixels kept. The merge and the

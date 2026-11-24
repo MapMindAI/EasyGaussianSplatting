@@ -182,7 +182,9 @@ need depth supervision. Every image ends up with a `.npz`: one no group
 predicted (an up/down face, an image in no group, or a skipped group) gets an
 empty one, so a skipped group is not retried. Existing files are kept, so
 rerunning an interrupted stage predicts only the groups that still have an
-image without a file; `--overwrite` regenerates them all.
+image without a file; `--overwrite` regenerates them all. The depths are then
+aligned per frame and fused into `aligned_depths/`, which training reads (see
+[depth_alignment.md](depth_alignment.md)).
 Each `.npz` is the model's output at its own resolution
 (`mapping/depth/depth_maps.py`): depth as float16 in the COLMAP frame,
 confidence as a uint8 in steps of 0.05, and the group's scale; about 0.5 MB

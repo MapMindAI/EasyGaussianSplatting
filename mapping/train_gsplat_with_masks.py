@@ -133,8 +133,9 @@ def attach_depths(dataset_class, depth_filter):
     barely covered. That path is switched off and answered here with what
     the depth stage aligned and fused into aligned_depths/
     (mapping/depth/depth_alignment.py), which is denser and covers the
-    textureless surfaces SfM never triangulated. The file holds the depth model's full output at its
-    own resolution in the COLMAP frame (mapping/depth/depth_maps.py); it is
+    textureless surfaces SfM never triangulated. The file holds the depth
+    model's full output at its own resolution in the COLMAP frame
+    (mapping/depth/depth_maps.py); it is
     filtered by `depth_filter`, the image's training mask, and colour edges, each
     kept map pixel placed at its centre in the image as loaded, and put into
     the parser's normalized world. The scale comes off the parser rather than a module global so it

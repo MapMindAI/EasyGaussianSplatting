@@ -65,11 +65,11 @@ def main():
     ):
         print(f"{aligned_dir} and {cloud_path} are up to date; keeping them")
         return
-    align_depths(args.model_dir, args.depth_dir, aligned_dir, depth_filter(args), args.mask_dir)
+    pixel_filter = depth_filter(args)
+    align_depths(args.model_dir, args.depth_dir, aligned_dir, pixel_filter, args.mask_dir)
     started = time.monotonic()
     count = write_depth_point_cloud(
-        args.model_dir, aligned_dir, cloud_path, args.voxel_factor, args.mask_dir,
-        depth_filter(args),
+        args.model_dir, aligned_dir, cloud_path, args.voxel_factor, args.mask_dir, pixel_filter
     )
     settings_path.write_text(json.dumps(settings, indent=2))
     print(
