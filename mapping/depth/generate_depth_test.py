@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from mapping.depth.cross_view_fusion import SUMMARY_NAME
 from mapping.depth.depth_maps import depth_path, load_depth_map, save_depth_map
 from mapping.depth.generate_depth import (
     Observations,
@@ -235,12 +236,14 @@ def test_generate_depths_resumes_missing_groups_and_leaves_skipped_images_empty(
         model_dir=tmp_path, depth_dir=depth_dir, overwrite=False, mask_dir=None, debug_dir=None,
         num_threads=1, min_confidence=0.5, min_depth=0.1, max_depth=5.0,
     )
-    # An interrupted run already wrote "a".
+    # An interrupted run already wrote "a", and fused it.
     save_depth_map(depth_path(depth_dir, "front/a.jpg"), np.full((4, 4), 7.0), np.ones((4, 4)), 2.0)
+    (depth_dir / SUMMARY_NAME).write_text("{}")
 
     assert generate_depth.generate_depths(args, Estimator, 2, 2) == 1
 
     assert runs == [2]
+    assert not (depth_dir / SUMMARY_NAME).exists()  # New depths still need fusing.
     assert load_depth_map(depth_path(depth_dir, "front/a.jpg")).scale == 2.0
     written = load_depth_map(depth_path(depth_dir, "front/b.jpg"))
     np.testing.assert_array_equal(written.depth, np.ones((4, 4)))

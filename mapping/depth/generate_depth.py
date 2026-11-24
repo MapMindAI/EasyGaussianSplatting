@@ -25,7 +25,9 @@ removed here; the point cloud merge and training filter on confidence, masks,
 depth range, and colour edges when they load it.
 
 Run as a script, it predicts with DA3 on Triton, reached at --triton-url or
-$TRITON_URL; mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
+$TRITON_URL, then fuses each depth with its neighbours' in place (see
+mapping/depth/cross_view_fusion.py);
+mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
 """
 
 import argparse
@@ -38,6 +40,7 @@ import cv2
 import numpy as np
 
 from mapping.depth.covisibility_groups import Frame, centre_and_rotation, select_groups
+from mapping.depth.cross_view_fusion import SUMMARY_NAME, fuse_depths
 from mapping.depth.depth_maps import (
     DepthFilter,
     DepthMap,
@@ -241,6 +244,8 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
     groups = pending
 
     if groups:
+        # New depths are not fused yet.
+        (args.depth_dir / SUMMARY_NAME).unlink(missing_ok=True)
         stage_started = time.monotonic()
         estimator = make_estimator()
         print(f"Loaded the depth model ({time.monotonic() - stage_started:.1f} s)", flush=True)
@@ -359,6 +364,7 @@ def main():
         return DepthEstimator(triton_url, expected_num_images=GROUP_SIZE)
 
     generate_depths(args, make_estimator, GROUP_SIZE, minimum_group_size=GROUP_SIZE)
+    fuse_depths(args.model_dir, args.depth_dir, depth_filter(args), args.mask_dir)
 
 
 if __name__ == "__main__":
