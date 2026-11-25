@@ -234,6 +234,11 @@ anisotropy_reg_weight: 0.1
 max_scale_ratio: 5
 ```
 
+It stays off by default: in the
+[anisotropy weight sweep](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Anisotropy-Weight-Sweep)
+every weight costs 0.1–0.3 dB PSNR, since the needles draw reflections and thin
+edges. Where Gaussian shape matters more, 0.01–0.03 costs least.
+
 An uploaded `masks/` always wins. Segmentation runs inference on
 `segment_people.py --num-threads` worker threads, through the same helper the
 feature stages use.
