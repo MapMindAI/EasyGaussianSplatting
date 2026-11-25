@@ -24,7 +24,7 @@ The output is one "<image_name>.npz" per image under --depth-dir: the model's
 full depth and confidence at its own resolution, scaled into the frame of the
 input model (see mapping/depth/depth_maps.py). Only depth discontinuities are
 removed here; the point cloud merge and training filter on confidence, masks,
-depth range, and colour edges when they load it.
+and depth range when they load it.
 
 Run as a script, it predicts with DA3 on Triton, reached at --triton-url or
 $TRITON_URL; mapping/vggt_omega/generate_depth.py runs VGGT-Omega instead.
@@ -298,8 +298,7 @@ def generate_depths(args, make_estimator, group_size, minimum_group_size):
             best_error[name] = error
             save_depth_map(depth_path(args.depth_dir, name), *depth_map)
             if image is not None:
-                grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-                depth = supervised_depth(depth_map, grayscale, training_mask(name), overlay_filter)
+                depth = supervised_depth(depth_map, training_mask(name), overlay_filter)
                 overlay_path = depth_debug_path(args.debug_dir, name)
                 overlay_path.parent.mkdir(parents=True, exist_ok=True)
                 full_depth = upsample(depth, image.shape[1], image.shape[0])

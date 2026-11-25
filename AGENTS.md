@@ -27,6 +27,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   └── config/                   # Shipped JobParameters defaults.
 ├── mapping/
 │   ├── benchmark/                # Parameter sweeps and their Markdown report.
+│   │   ├── depth_lambda_sweep.sh # gsplat_train.sh once per constant or decreasing depth weight.
 │   │   ├── summarize_gsplat_sweep_test.py # Report sections and PLY geometry.
 │   ├── triton/                   # Everything served by Triton.
 │   │   ├── clients.py      # SuperPoint/LightGlue/SALAD/DA3 clients.
@@ -68,6 +69,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── file_listing_test.py      # Nested files, symlinked folders, and a missing directory.
 │   ├── gps.py                    # Capture GPS as face EXIF, UTM priors, and map alignment.
 │   ├── gps_test.py               # Track parsing, the fit, and the alignment.
+│   ├── depth_loss_schedule.py    # Linear decrease of depth_lambda_begin until refine_stop_iter.
+│   ├── depth_loss_schedule_test.py # The decay and its step tracking.
 │   ├── gsplat_world_frame.py     # Undo gsplat's world normalization on export.
 │   ├── gsplat_world_frame_test.py # Similarity inverse and the export wiring.
 │   ├── gsplat_regularization.py  # Stop regularization after refinement; anisotropy penalty.
