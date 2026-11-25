@@ -57,7 +57,7 @@ strategy: STRATEGY_MCMC
 # MCMC only: Gaussian count to converge to. Ignored by STRATEGY_DEFAULT.
 cap_max: 20000000
 # MCMC only: relocate Gaussians at or below this opacity during refinement.
-min_opacity: 0.1
+min_opacity: 0.05
 
 
 # Spherical-harmonic degree for view-dependent colour.
@@ -71,7 +71,7 @@ packed: false
 # Gaussian learning rates. These match simple_trainer's defaults.
 # Positions are scaled by the scene size internally, so keep means_lr small.
 means_lr: 0.00005
-scales_lr: 0.001
+scales_lr: 0.005
 opacities_lr: 0.01
 quats_lr: 0.001
 # Degree-zero spherical harmonics control base colour; higher degrees control
@@ -86,7 +86,7 @@ pose_opt_lr: 0.00001
 # Generate masks before training when none are supplied.
 # Mask R-CNN masks people; U²-Net (models/skyseg.onnx) masks sky.
 mask_people: false
-mask_sky: true
+mask_sky: false
 # Colour the splats are composited over, in [0, 1] per channel. Leave it out
 # and gsplat renders onto black instead. See doc/gsplat_server.md.
 background_color { red: 1.0 green: 1.0 blue: 1.0 }

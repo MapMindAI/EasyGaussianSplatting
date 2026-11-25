@@ -224,6 +224,21 @@ omitted `scale_reg_weight` takes the shipped default.
 `refine_stop_iter` on. With MCMC nothing relocates after that step, so the
 opacity term only dims every Gaussian; position noise still runs.
 
+`anisotropy_reg_weight` adds [PhysGaussian](https://arxiv.org/abs/2311.12198)'s
+penalty on needle-like Gaussians, every 10 steps:
+`anisotropy_reg_weight · mean(max(s_max / s_min − max_scale_ratio, 0))`.
+It is off at 0; PhysGaussian uses 0.1 and a ratio of 5:
+
+```text
+anisotropy_reg_weight: 0.1
+max_scale_ratio: 5
+```
+
+It stays off by default: in the
+[anisotropy weight sweep](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Anisotropy-Weight-Sweep)
+every weight costs 0.1–0.3 dB PSNR, since the needles draw reflections and thin
+edges. Where Gaussian shape matters more, 0.01–0.03 costs least.
+
 An uploaded `masks/` always wins. Segmentation runs inference on
 `segment_people.py --num-threads` worker threads, through the same helper the
 feature stages use.

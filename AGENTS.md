@@ -27,7 +27,9 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   └── config/                   # Shipped JobParameters defaults.
 ├── mapping/
 │   ├── benchmark/                # Parameter sweeps and their Markdown report.
+│   │   ├── anisotropy_sweep.sh   # gsplat_train.sh once per anisotropy_reg_weight.
 │   │   ├── depth_lambda_sweep.sh # gsplat_train.sh once per constant or decreasing depth weight.
+│   │   ├── sweep_common.sh       # Run step of the gsplat_train.sh sweeps.
 │   │   ├── summarize_gsplat_sweep_test.py # Report sections and PLY geometry.
 │   ├── triton/                   # Everything served by Triton.
 │   │   ├── clients.py      # SuperPoint/LightGlue/SALAD/DA3 clients.
@@ -73,8 +75,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── depth_loss_schedule_test.py # The decay and its step tracking.
 │   ├── gsplat_world_frame.py     # Undo gsplat's world normalization on export.
 │   ├── gsplat_world_frame_test.py # Similarity inverse and the export wiring.
-│   ├── gsplat_regularization.py  # Drop opacity and scale regularization after refinement.
-│   ├── gsplat_regularization_test.py # The step gate on both terms.
+│   ├── gsplat_regularization.py  # Stop regularization after refinement; anisotropy penalty.
+│   ├── gsplat_regularization_test.py # The step gate on both terms, and the anisotropy penalty.
 │   ├── mapping_pipeline_test.py  # Gravity levelling of the solved map.
 │   ├── panorama_database.py      # Panorama video to a cube-map rig database.
 │   ├── panorama_database_test.py # Image counts and the FFmpeg decode commands.
