@@ -57,7 +57,7 @@ strategy: STRATEGY_MCMC
 # MCMC only: Gaussian count to converge to. Ignored by STRATEGY_DEFAULT.
 cap_max: 20000000
 # MCMC only: relocate Gaussians at or below this opacity during refinement.
-min_opacity: 0.1
+min_opacity: 0.05
 
 
 # Spherical-harmonic degree for view-dependent colour.
