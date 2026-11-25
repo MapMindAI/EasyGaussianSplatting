@@ -121,12 +121,10 @@ def without_depth_discontinuities(depth):
     return np.where(valid & (np.hypot(gradient_x, gradient_y) <= DEPTH_EDGE_THRESHOLD), depth, 0)
 
 
-def supervised_depth(depth_map, grayscale, mask, depth_filter):
-    """`depth_map`'s depth at its own resolution, 0 wherever `depth_filter`,
-    the training `mask` (True to keep, at any size, or None), or a colour edge
-    of the `grayscale` image (at any size) rejects it."""
+def supervised_depth(depth_map, mask, depth_filter):
+    """`depth_map`'s depth at its own resolution, 0 wherever `depth_filter` or
+    the training `mask` (True to keep, at any size, or None) rejects it."""
     depth = depth_map.depth
-    height, width = depth.shape
     usable = (
         np.isfinite(depth)
         & (depth > 0)
@@ -136,8 +134,6 @@ def supervised_depth(depth_map, grayscale, mask, depth_filter):
     )
     if mask is not None:
         usable &= mask_at(mask, depth.shape)
-    small = cv2.resize(grayscale, (width, height), interpolation=cv2.INTER_AREA)
-    usable &= cv2.Canny(small.astype(np.uint8), 100, 200) == 0
     return np.where(usable, depth, 0).astype(np.float32)
 
 

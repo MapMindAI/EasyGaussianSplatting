@@ -4,8 +4,8 @@
 The same stage as mapping/depth/generate_depth.py -- covisibility grouping,
 scale fitting to COLMAP, cross-view fusion, and the depth and confidence
 output -- with the ONNX model at --model in place of the Triton DA3 one. It
-then merges every depth, filtered by --min-confidence, the depth range, the
-masks in --mask-dir, and colour edges, into <model_dir>/depth_points.ply, the
+then merges every depth, filtered by --min-confidence, the depth range, and the
+masks in --mask-dir, into <model_dir>/depth_points.ply, the
 cloud gsplat seeds its Gaussians from (see mapping/depth/point_cloud.py),
 rebuilding it whenever the depths were fused or the settings recorded beside
 it in depth_points.json changed.

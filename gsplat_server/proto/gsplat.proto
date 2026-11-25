@@ -80,7 +80,10 @@ message JobParameters {
   // Weight of the depth term in the loss; 0 leaves the term off. The gsplat
   // default is tuned for sparse SfM depths, so lower it if denser generated
   // depths dominate the photometric terms. Only read when run_depth is set.
-  float depth_lambda = 24;
+  float depth_lambda_begin = 24;
+  // When positive, depth_lambda_begin decreases linearly to this at refine_stop_iter
+  // and holds; 0 keeps depth_lambda_begin constant. HY-World uses 0.2 to 0.01.
+  float depth_lambda_final = 42;
   // Voxel edge of the merged depth cloud the Gaussians start from, as a
   // fraction of the scene scale (the largest camera distance from the cameras'
   // mean). Only read when run_depth is set.

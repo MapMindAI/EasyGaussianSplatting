@@ -59,26 +59,14 @@ def test_supervised_depth_filters_confidence_scaled_range_and_mask():
     confidence[1] = 0.4
     mask = np.ones((8, 8), dtype=bool)
     mask[6:] = False  # Covers the map's last row once resized.
-    grayscale = np.full((8, 8), 128, dtype=np.uint8)
 
-    kept = supervised_depth(DepthMap(depth, confidence, 2.0), grayscale, mask, DepthFilter(0.5, 0.1, 5.0))
+    kept = supervised_depth(DepthMap(depth, confidence, 2.0), mask, DepthFilter(0.5, 0.1, 5.0))
 
     assert kept[0, 0] == 0
     assert (kept[1] == 0).all() and (kept[3] == 0).all()
     assert (kept[2] == 2.0).all() and (kept[0, 1:] == 2.0).all()
-    lenient = supervised_depth(DepthMap(depth, confidence, 2.0), grayscale, None, DepthFilter(0.3, 0.1, 5.0))
+    lenient = supervised_depth(DepthMap(depth, confidence, 2.0), None, DepthFilter(0.3, 0.1, 5.0))
     assert (lenient[1:] == 2.0).all()
-
-
-def test_supervised_depth_drops_colour_edges():
-    grayscale = np.zeros((20, 20), dtype=np.uint8)
-    grayscale[:, 10:] = 255
-    depth_map = DepthMap(np.ones((20, 20), np.float32), np.ones((20, 20), np.float32), 1.0)
-
-    kept = supervised_depth(depth_map, grayscale, None, DepthFilter())
-
-    assert (kept[:, 9:11] == 0).any(axis=1).all()
-    assert kept[0, 0] == 1.0
 
 
 def test_training_masks_read_listed_masks_only(tmp_path):

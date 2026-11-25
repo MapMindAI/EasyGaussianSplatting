@@ -19,7 +19,6 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path[:] = [path for path in sys.path if os.path.abspath(path or ".") != SCRIPT_DIR]
 
-import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
 import tqdm  # noqa: E402
@@ -134,7 +133,7 @@ def attach_depths(dataset_class, depth_filter):
     generate_depth.py wrote, which is denser and covers the textureless surfaces
     SfM never triangulated. The file holds the depth model's full output at its
     own resolution in the COLMAP frame (mapping/depth/depth_maps.py); it is
-    filtered by `depth_filter`, the image's training mask, and colour edges, each
+    filtered by `depth_filter` and the image's training mask, each
     kept map pixel placed at its centre in the image as loaded, and put into
     the parser's normalized world. The scale comes off the parser rather than a module global so it
     survives a dataloader worker that re-imports instead of forking.
@@ -152,9 +151,8 @@ def attach_depths(dataset_class, depth_filter):
         if file_name in listed_files(self, "depths"):
             depth_map = load_depth_map(pathlib.Path(self.parser.data_dir, "depths", file_name))
             if depth_map is not None:
-                grayscale = cv2.cvtColor(data["image"].numpy(), cv2.COLOR_RGB2GRAY)
                 mask = data["mask"].numpy() if "mask" in data else None
-                depth = supervised_depth(depth_map, grayscale, mask, depth_filter)
+                depth = supervised_depth(depth_map, mask, depth_filter)
                 rows = depth_rows(depth, width, height)
         points, depths = depth_supervision_in_normalized_frame(
             self.parser.transform, rows, width, height
@@ -336,6 +334,7 @@ from mapping.depth.depth_maps import (  # noqa: E402
     supervised_depth,
 )
 from mapping.depth.point_cloud import POINT_CLOUD_NAME, read_point_cloud  # noqa: E402
+from mapping.depth_loss_schedule import schedule_depth_loss  # noqa: E402
 from mapping.file_listing import files_under  # noqa: E402
 from mapping.gsplat_regularization import stop_regularization_after_refinement  # noqa: E402
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
@@ -349,7 +348,7 @@ from mapping.gsplat_world_frame import (  # noqa: E402
 def depth_loss_enabled(parameters):
     """Generated depths seed the Gaussians whenever run_depth is set, but only
     supervise them with a positive weight."""
-    return parameters.run_depth and parameters.depth_lambda > 0
+    return parameters.run_depth and parameters.depth_lambda_begin > 0
 
 
 def number(value):
@@ -426,7 +425,9 @@ def load_job_parameters():
         "--pose_opt_lr", number(parameters.pose_opt_lr),
     ]
     if depth_loss_enabled(parameters):
-        flags += ["--depth_loss", "--depth_lambda", number(parameters.depth_lambda)]
+        # A decaying weight is applied by schedule_depth_loss instead.
+        weight = 1.0 if parameters.depth_lambda_final > 0 else parameters.depth_lambda_begin
+        flags += ["--depth_loss", "--depth_lambda", number(weight)]
     if parameters.packed:
         flags.append("--packed")
     flags += strategy_flags(parameters)
@@ -479,6 +480,10 @@ attach_masks(Dataset)
 if parameters is not None and depth_loss_enabled(parameters):
     attach_depths(Dataset, DepthFilter(min_confidence=parameters.depth_min_confidence))
     guard_depth_loss(gsplat.losses)
+    if parameters.depth_lambda_final > 0:
+        schedule_depth_loss(
+            gsplat.losses, [gsplat.strategy.DefaultStrategy, gsplat.strategy.MCMCStrategy],
+            parameters.depth_lambda_begin, parameters.depth_lambda_final, parameters.refine_stop_iter)
 if parameters is not None and parameters.run_depth:
     # MCMC never grows past cap_max, so leave it room to relocate and add.
     maximum_points = (

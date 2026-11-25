@@ -5,6 +5,7 @@ covisible neighbours' before `depth_points.ply` is merged and the depth loss
 reads it. It adapts the fusion step of the World Composition stage of
 [HY-World 2.0](https://github.com/Tencent-Hunyuan/HY-World-2.0)
 ([report](https://arxiv.org/abs/2604.14268), Sec. 7.1).
+[depth_pipeline.md](depth_pipeline.md) covers the whole depth process.
 
 Without it, the merge (`point_cloud.py`) lifts every kept pixel and averages per
 voxel, and nothing checks one frame's depth against another's: each frame adds

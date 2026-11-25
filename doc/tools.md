@@ -197,9 +197,7 @@ kept map pixel, at its centre in the image as loaded: interpolating to full
 resolution would add about 20 times the points and no information. They drop
 pixels below `--min-confidence` (0.5; `depth_min_confidence` in the
 parameters), outside `--min-depth` (0.1) to `--max-depth` (5.0), in the depth
-model's units before scaling, under the training masks, and on colour edges,
-found at the map's resolution, so depth supervision does not pull geometry
-across foliage and other detail edges. Here those flags only shape the debug
+model's units before scaling, and under the training masks. Here those flags only shape the debug
 overlays, which show the depth that remains after filtering.
 `--debug-dir <directory>` writes a colourized depth overlay over every source
 image, preserving nested image paths and adding `_depth.png` to the filename.
@@ -250,14 +248,14 @@ python3 -m mapping.vggt_omega.example output/vggt_omega a.jpg b.jpg c.jpg
 ```
 
 Training reads `depths/` only when the parameters file sets `run_depth: true`
-and a positive `depth_lambda`, which weights gsplat's depth term; with
+and a positive `depth_lambda_begin`, which weights gsplat's depth term; with
 `run_depth: true`, a `depth_points.ply` in the workspace is also added to the
 sparse SfM points that initialize the Gaussians, its points randomly thinned
 under MCMC to keep the total within 0.8 × `cap_max`:
 
 ```
 run_depth: true
-depth_lambda: 0.01
+depth_lambda_begin: 0.003
 ```
 
 Calling `mapping/train_gsplat_with_masks.py` directly does not generate masks
@@ -312,6 +310,18 @@ a configuration that already recorded evaluation metrics is skipped:
 
 ```
 mapping/benchmark/gsplat_sweep.sh data/panorama path/to/configurations
+```
+
+`mapping/benchmark/depth_lambda_sweep.sh` runs `scripts/gsplat_train.sh` once
+per depth weight and once without depth, over one parameters file, into
+`<workspace>/depth_lambda_sweep/`. A weight is a constant `depth_lambda_begin`
+(0 keeps only the depth-cloud initialization), or `begin:final`, decreasing
+linearly to `depth_lambda_final` at `refine_stop_iter`. The default is
+`0 0.001 0.003 0.01 0.03 0.1 0.05:0.01 0.1:0.01 0.2:0.01`. Depths are generated
+once; evaluated and failed runs are skipped, as in `gsplat_sweep.sh`:
+
+```
+mapping/benchmark/depth_lambda_sweep.sh data/panorama [parameters.proto.txt] [weight | begin:final ...]
 ```
 
 The [historical sweep configurations](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Parameter-Sweep)
