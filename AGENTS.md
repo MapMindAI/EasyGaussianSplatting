@@ -80,8 +80,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── mapping_pipeline_test.py  # Gravity levelling of the solved map.
 │   ├── panorama_database.py      # Panorama video to a cube-map rig database.
 │   ├── panorama_database_test.py # Image counts and the FFmpeg decode commands.
-│   ├── split_ply.py              # Bisect a splat PLY into parts under 2 GiB.
-│   ├── split_ply_test.py         # PLY round trip, bisection, and the size limit.
+│   ├── split_ply.py              # Bisect a splat PLY into parts under 2 GiB and 15M Gaussians.
+│   ├── split_ply_test.py         # PLY round trip, bisection, and both limits.
 │   └── train_gsplat_with_masks.py # simple_trainer entrypoint; reads JobParameters.
 ├── scripts/
 │   ├── run_pipeline.sh           # Host: the whole pipeline in one `docker run`.
