@@ -9,8 +9,8 @@
 # images without one and their merged point cloud. Results default to
 # <workspace>/gsplat_output_<YYYYmmdd_HHMMSS>, with the resolved parameters in
 # cfg.proto.txt. Further flags go to
-# train_gsplat_with_masks.py. A final PLY of 2 GiB or more is also bisected
-# into ply/split/ until every part is smaller.
+# train_gsplat_with_masks.py. A final PLY of 2 GiB or more, or over 15M
+# Gaussians, is also bisected into ply/split/ until every part is under both.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

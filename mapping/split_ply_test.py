@@ -36,6 +36,13 @@ def test_split_ply_keeps_every_gaussian_under_the_limit(tmp_path):
     assert sorted(merged[:, 3]) == sorted(rows[:, 3])
 
 
+def test_split_ply_keeps_every_part_under_the_gaussian_limit(tmp_path):
+    write_grid(tmp_path / "grid.ply", 10, 10)
+    written = split_ply.split_ply(str(tmp_path / "grid.ply"), str(tmp_path / "parts"), max_gaussians=30)
+    counts = [len(split_ply.read_ply(path)[2]) for path in written]
+    assert len(written) == 4 and sum(counts) == 100 and max(counts) <= 30
+
+
 def test_split_ply_skips_a_small_file(tmp_path):
     write_grid(tmp_path / "grid.ply", 2, 2)
     assert split_ply.split_ply(str(tmp_path / "grid.ply"), str(tmp_path / "parts")) == []

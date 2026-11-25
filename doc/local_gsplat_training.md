@@ -67,8 +67,9 @@ runs segmentation according to `mask_people` and `mask_sky`, then trains into
 parameters, defaults included, as `cfg.proto.txt` there. Existing
 masks are reused. Both masks are inferred locally.
 Pass the script in place of the `bash -lc '...'` block. If the final PLY is
-2 GiB or larger, it also bisects it along the longer horizontal axis into
-`ply/split/point_cloud_<step>_NN.ply`, each under 2 GiB, for browser viewers.
+2 GiB or larger, or holds over 15M Gaussians, it also bisects it along the
+longer horizontal axis into `ply/split/point_cloud_<step>_NN.ply`, each under
+both limits, for browser viewers.
 
 The final model and PLY files are written under
 `<workspace>/gsplat_output/`. `--shm-size=8g` is required for the data-loader
