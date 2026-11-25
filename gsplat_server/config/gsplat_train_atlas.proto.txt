@@ -122,7 +122,7 @@ background_color { red: 1.0 green: 1.0 blue: 1.0 }
 # over the images and needs the depth model served alongside the others.
 run_depth: true
 # Weight of the depth term in the loss. 0.003 scored best in the depth weight
-# sweeps; from 0.01 up it costs PSNR (doc/depth_pipeline.md).
+# sweeps; from 0.01 up it costs PSNR (wiki: Benchmark - Depth Weight Sweep).
 depth_lambda_begin: 0.003
 # Voxel edge of the merged depth cloud, as a fraction of the scene scale.
 depth_voxel_factor: 0.001

@@ -123,7 +123,7 @@ background_color { red: 1.0 green: 1.0 blue: 1.0 }
 run_depth: false
 # Weight of the depth term in the loss; 0 keeps only the depth-cloud start.
 # 0.003 scored best in the depth weight sweeps; from 0.01 up it costs PSNR
-# (doc/depth_pipeline.md).
+# (wiki: Benchmark - Depth Weight Sweep).
 depth_lambda_begin: 0.003
 # When positive, depth_lambda_begin decreases linearly to this at refine_stop_iter
 # and holds; 0 keeps it constant. HY-World uses 0.2 to 0.01.

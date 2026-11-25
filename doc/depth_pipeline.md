@@ -87,39 +87,7 @@ gsplat renders expected depth, samples it there, and adds
 `refine_stop_iter`, then holds it (HY-World: 0.2 to 0.01). Samples where the
 render is below 0.001 of the scene scale are skipped: nothing covers them yet.
 
-## Results on `VID_20260902_113042_00_006`
+## Results
 
-The depths came from a per-group disparity fit (`1/D_colmap = k/D + b`) in
-place of step 3's scale, then fused.
-
-Pixels kept at `depth_min_confidence` 0.9, over 60 sampled maps, measured
-with a Canny edge filter the loss has since dropped:
-
-| Filter | Map pixels kept |
-| --- | --- |
-| Has depth | 83.3% |
-| Confidence | 48.1% |
-| Depth range | 48.1% |
-| Training mask | 47.6% |
-| Image edges | 45.3% |
-
-`depth_lambda_begin` sweep (`mapping/benchmark/depth_lambda_sweep.sh`): MCMC,
-`cap_max` 2M, 30k steps, 78 held-out views.
-
-| Run | PSNR | SSIM | LPIPS | Train (s) |
-| --- | --- | --- | --- | --- |
-| No depth | 22.81 | 0.7630 | 0.3896 | 412 |
-| λ = 0 (cloud only) | 22.72 | 0.7616 | 0.3640 | 364 |
-| λ = 0.001 | 22.69 | 0.7619 | 0.3631 | 435 |
-| λ = 0.003 | 22.79 | 0.7619 | 0.3620 | 433 |
-| λ = 0.01 | 22.60 | 0.7610 | 0.3623 | 441 |
-| λ = 0.03 | 22.44 | 0.7582 | 0.3629 | 434 |
-| λ = 0.1 | 22.36 | 0.7554 | 0.3692 | 431 |
-
-The cloud improves LPIPS by 0.026. The loss adds nothing up to 0.003, costs
-PSNR from 0.01, and adds about 70 s.
-
-The [Wuxi Chongansi sweep](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Depth-Weight-Sweep)
-(20M cap, 50k steps, 126 views) agrees: up to 0.01 matches λ = 0, 0.1 costs
-0.6 dB, and decreasing from 0.05–0.2 to 0.01 scores below a constant 0.01.
-`depth_lambda_begin` therefore defaults to 0.003.
+The [depth weight sweep](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Depth-Weight-Sweep)
+sets `depth_lambda_begin` to 0.003; from 0.01 up the depth term costs PSNR.
