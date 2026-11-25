@@ -71,7 +71,7 @@ packed: false
 # Gaussian learning rates. These match simple_trainer's defaults.
 # Positions are scaled by the scene size internally, so keep means_lr small.
 means_lr: 0.00005
-scales_lr: 0.001
+scales_lr: 0.005
 opacities_lr: 0.01
 quats_lr: 0.001
 # Degree-zero spherical harmonics control base colour; higher degrees control
