@@ -122,9 +122,9 @@ background_color { red: 1.0 green: 1.0 blue: 1.0 }
 # another pass over the images on the GPU.
 run_depth: false
 # Weight of the depth term in the loss; 0 keeps only the depth-cloud start.
-# gsplat's own default, which is tuned for the sparse SfM depths rather than the
-# denser generated ones, so lower it if depth dominates the photometric terms.
-depth_lambda_begin: 0.01
+# 0.003 scored best in the depth weight sweeps; from 0.01 up it costs PSNR
+# (doc/depth_pipeline.md).
+depth_lambda_begin: 0.003
 # When positive, depth_lambda_begin decreases linearly to this at refine_stop_iter
 # and holds; 0 keeps it constant. HY-World uses 0.2 to 0.01.
 depth_lambda_final: 0

@@ -118,3 +118,8 @@ with a Canny edge filter the loss has since dropped:
 
 The cloud improves LPIPS by 0.026. The loss adds nothing up to 0.003, costs
 PSNR from 0.01, and adds about 70 s.
+
+The [Wuxi Chongansi sweep](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Depth-Weight-Sweep)
+(20M cap, 50k steps, 126 views) agrees: up to 0.01 matches λ = 0, 0.1 costs
+0.6 dB, and decreasing from 0.05–0.2 to 0.01 scores below a constant 0.01.
+`depth_lambda_begin` therefore defaults to 0.003.

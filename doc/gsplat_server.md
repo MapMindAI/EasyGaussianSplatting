@@ -244,7 +244,7 @@ depth term keep:
 
 ```
 run_depth: true
-depth_lambda_begin: 0.01
+depth_lambda_begin: 0.003
 depth_voxel_factor: 0.001
 depth_min_confidence: 0.5
 ```

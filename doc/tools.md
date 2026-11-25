@@ -255,7 +255,7 @@ under MCMC to keep the total within 0.8 × `cap_max`:
 
 ```
 run_depth: true
-depth_lambda_begin: 0.01
+depth_lambda_begin: 0.003
 ```
 
 Calling `mapping/train_gsplat_with_masks.py` directly does not generate masks
