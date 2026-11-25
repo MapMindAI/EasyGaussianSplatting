@@ -86,7 +86,7 @@ pose_opt_lr: 0.00001
 # Generate masks before training when none are supplied.
 # Mask R-CNN masks people; U²-Net (models/skyseg.onnx) masks sky.
 mask_people: false
-mask_sky: true
+mask_sky: false
 # Colour the splats are composited over, in [0, 1] per channel. Leave it out
 # and gsplat renders onto black instead. See doc/gsplat_server.md.
 background_color { red: 1.0 green: 1.0 blue: 1.0 }
