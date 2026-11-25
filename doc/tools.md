@@ -324,6 +324,14 @@ once; evaluated and failed runs are skipped, as in `gsplat_sweep.sh`:
 mapping/benchmark/depth_lambda_sweep.sh data/panorama [parameters.proto.txt] [weight | begin:final ...]
 ```
 
+`mapping/benchmark/anisotropy_sweep.sh` does the same per `anisotropy_reg_weight`
+(default `0 0.01 0.03 0.1 0.3 1`), into `<workspace>/anisotropy_sweep/`;
+`max_scale_ratio` comes from the parameters file:
+
+```
+mapping/benchmark/anisotropy_sweep.sh data/panorama [parameters.proto.txt] [weight ...]
+```
+
 The [historical sweep configurations](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Parameter-Sweep)
 are documented in the wiki. To sweep on a remote GPU instead,
 `mapping/benchmark/gsplat_server_sweep.py` submits the same files to a training
