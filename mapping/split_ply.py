@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Bisect a Gaussian splat PLY into files under a size limit.
+"""Bisect a Gaussian splat PLY into files under a size and Gaussian-count limit.
 
 Splits at the median of the longer horizontal axis, over the middle 90% of
-the means so far outliers don't pick it, until every part is under the limit.
-A PLY already under it is left alone.
+the means so far outliers don't pick it, until every part is under both limits.
+A PLY already under them is left alone.
 
 Usage: python3 -m mapping.split_ply <point_cloud.ply> <output_dir> [--max-bytes N]
 """
@@ -14,6 +14,7 @@ import numpy as np
 
 # Browser viewers such as SuperSplat cannot load a file of 2 GiB or more.
 MAX_BYTES = 2**31 - 1
+MAX_GAUSSIANS = 15_000_000
 
 
 def read_ply(path):
@@ -55,13 +56,13 @@ def bisect(xy, max_rows):
     return parts
 
 
-def split_ply(path, output_dir, max_bytes=MAX_BYTES):
+def split_ply(path, output_dir, max_bytes=MAX_BYTES, max_gaussians=MAX_GAUSSIANS):
     """Write the parts of `path` as <stem>_NN.ply in output_dir; the paths written."""
-    if os.path.getsize(path) <= max_bytes:
-        return []
     preamble, properties, rows = read_ply(path)
     header_bytes = sum(len(line) + 1 for line in preamble + properties) + 64
-    max_rows = (max_bytes - header_bytes) // rows.strides[0]
+    max_rows = min((max_bytes - header_bytes) // rows.strides[0], max_gaussians)
+    if len(rows) <= max_rows:
+        return []
     xy = np.array(rows[:, :2])
     os.makedirs(output_dir, exist_ok=True)
     stem = os.path.splitext(os.path.basename(path))[0]
