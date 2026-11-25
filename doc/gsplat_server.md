@@ -190,8 +190,7 @@ operate: `prune_opa` also sets the opacity reset floor (gsplat resets to
 comparisons.
 
 The directory must hold `images/` and `sparse/`; a `masks/` directory is
-uploaded too if present, and training then skips the masked pixels (see
-`mapping/triton/segment_people.py`). Nothing else is uploaded, so an earlier
+uploaded too if present (see `mapping/triton/segment_people.py`). Nothing else is uploaded, so an earlier
 `gsplat_output/` in the same directory costs nothing.
 
 Set `mask_people` and `mask_sky` independently to generate masks before
@@ -239,7 +238,8 @@ It stays off by default: in the
 every weight costs 0.1–0.3 dB PSNR, since the needles draw reflections and thin
 edges. Where Gaussian shape matters more, 0.01–0.03 costs least.
 
-An uploaded `masks/` always wins. Segmentation runs inference on
+An uploaded `masks/` always wins over segmentation, but training and the depth
+cloud ignore it unless `mask_people` or `mask_sky` is set. Segmentation runs inference on
 `segment_people.py --num-threads` worker threads, through the same helper the
 feature stages use.
 

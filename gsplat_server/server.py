@@ -17,7 +17,9 @@ from pathlib import Path
 
 import grpc
 
-from gsplat_server.parameters import parameters_from_dict, parameters_to_dict, parameters_to_text
+from gsplat_server.parameters import (
+    masking_enabled, parameters_from_dict, parameters_to_dict, parameters_to_text,
+)
 from gsplat_server.proto import gsplat_pb2, gsplat_pb2_grpc
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -142,13 +144,15 @@ def segmentation_command(model_directory, mask_people, mask_sky):
 
 
 def depth_command(model_directory, parameters):
-    return [
+    command = [
         "python3", str(DEPTH_ENTRYPOINT),
         str(model_directory), str(model_directory / "depths"),
-        "--mask-dir", str(model_directory / "masks"),
         "--voxel-factor", f"{parameters.depth_voxel_factor:.7g}",
         "--min-confidence", f"{parameters.depth_min_confidence:.7g}",
     ]
+    if masking_enabled(parameters):
+        command += ["--mask-dir", str(model_directory / "masks")]
+    return command
 
 
 def job_steps(job, directory):
@@ -162,7 +166,7 @@ def job_steps(job, directory):
     model_directory = directory / "model"
     parameters = parameters_from_dict(job["parameters"])
     steps = []
-    if (parameters.mask_people or parameters.mask_sky) and not (
+    if masking_enabled(parameters) and not (
         model_directory / "masks"
     ).is_dir():
         steps.append(("segmentation", segmentation_command(
