@@ -21,6 +21,11 @@ export PYTORCH_ALLOC_CONF=expandable_segments:True
 
 for run_dir in "${SWEEP_DIR}"/*/; do
   name="$(basename "${run_dir}")"
+  # sweep_status.txt is written once training ends, so this also skips a run in progress.
+  if ! grep -qs '^exit_status 0$' "${run_dir}sweep_status.txt"; then
+    echo "=== ${name}: failed or unfinished, skipping"
+    continue
+  fi
   checkpoint="$(ls -v "${run_dir}"ckpts/ckpt_*_rank0.pt 2>/dev/null | tail -n 1)"
   if [ -z "${checkpoint}" ] || [ ! -f "${run_dir}cfg.proto.txt" ]; then
     echo "=== ${name}: no checkpoint or cfg.proto.txt, skipping"

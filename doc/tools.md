@@ -343,7 +343,8 @@ mapping/benchmark/grid_sweep.sh data/panorama [parameters.proto.txt] \
 
 `mapping/benchmark/evaluate_sweep.sh` re-evaluates every run of such a sweep
 from its final checkpoint with another `test_every`, without retraining, into
-`<run>/renders_test_every_<N>/` (`renders/`, `stats/`, and the log). Views
+`<run>/renders_test_every_<N>/` (`renders/`, `stats/`, and the log), skipping
+runs that failed or are still training. Views
 held out by the new `test_every` but not the original were trained on, so their
 metrics are optimistic:
 
