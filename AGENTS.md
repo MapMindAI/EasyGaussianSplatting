@@ -29,6 +29,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── benchmark/                # Parameter sweeps and their Markdown report.
 │   │   ├── anisotropy_sweep.sh   # gsplat_train.sh once per anisotropy_reg_weight.
 │   │   ├── depth_lambda_sweep.sh # gsplat_train.sh once per constant or decreasing depth weight.
+│   │   ├── grid_sweep.sh         # gsplat_train.sh once per combination of field values.
 │   │   ├── sweep_common.sh       # Run step of the gsplat_train.sh sweeps.
 │   │   ├── summarize_gsplat_sweep_test.py # Report sections and PLY geometry.
 │   ├── triton/                   # Everything served by Triton.

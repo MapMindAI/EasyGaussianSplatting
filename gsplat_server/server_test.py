@@ -268,15 +268,24 @@ def test_depth_reads_the_model_and_writes_beside_it(tmp_path):
     parameters = load_default_parameters()
     parameters.depth_voxel_factor = 0.002
     parameters.depth_min_confidence = 0.8
+    parameters.mask_sky = True
 
     command = server.depth_command(tmp_path, parameters)
 
     assert str(server.DEPTH_ENTRYPOINT) in command
     assert str(tmp_path / "depths") in command
     assert command[-6:] == [
-        "--mask-dir", str(tmp_path / "masks"),
         "--voxel-factor", "0.002", "--min-confidence", "0.8",
+        "--mask-dir", str(tmp_path / "masks"),
     ]
+
+
+def test_depth_ignores_masks_when_masking_is_off(tmp_path):
+    parameters = load_default_parameters()
+    parameters.mask_people = False
+    parameters.mask_sky = False
+
+    assert "--mask-dir" not in server.depth_command(tmp_path, parameters)
 
 
 def test_depth_runs_over_an_existing_depths_directory_to_fill_it(tmp_path, parameters):

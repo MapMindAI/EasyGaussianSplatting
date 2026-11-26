@@ -332,6 +332,15 @@ mapping/benchmark/depth_lambda_sweep.sh data/panorama [parameters.proto.txt] [we
 mapping/benchmark/anisotropy_sweep.sh data/panorama [parameters.proto.txt] [weight ...]
 ```
 
+`mapping/benchmark/grid_sweep.sh` trains every combination of the values given
+per `JobParameters` field, into `<workspace>/grid_sweep/<field>_<value>__...`.
+This example is 3 × 2 × 2 = 12 runs:
+
+```
+mapping/benchmark/grid_sweep.sh data/panorama [parameters.proto.txt] \
+  opacities_lr=0.1,0.05,0.01 min_opacity=0.01,0.1 opacity_reg_weight=0.001,0.01
+```
+
 The [historical sweep configurations](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Parameter-Sweep)
 are documented in the wiki. To sweep on a remote GPU instead,
 `mapping/benchmark/gsplat_server_sweep.py` submits the same files to a training

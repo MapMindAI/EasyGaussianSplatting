@@ -36,7 +36,8 @@ docker run -it --rm --gpus all --shm-size=8g \
 Direct invocation of `segment_people.py` enables both models by default.
 `--no-mask-people` skips Mask R-CNN, and `--no-mask-sky` skips the U²-Net sky
 model, which needs `models/skyseg.onnx` (see [tools.md](tools.md#sky-segmentation)).
-Training works without `masks/`.
+Training works without `masks/`. With `--job_parameters`, training and the depth
+cloud read it only when `mask_people` or `mask_sky` is set.
 
 ## Train
 

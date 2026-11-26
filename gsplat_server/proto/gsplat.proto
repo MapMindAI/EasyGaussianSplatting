@@ -66,6 +66,7 @@ message JobParameters {
   // Optimize camera poses alongside the model.
   bool pose_opt = 19;
   // Mask people with Mask R-CNN before training when the upload has no masks/.
+  // Training and the depth cloud read masks/ only when this or mask_sky is set.
   bool mask_people = 20;
   // Mask sky with U²-Net before training when the upload has no masks/.
   bool mask_sky = 21;

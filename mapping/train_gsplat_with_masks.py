@@ -324,7 +324,7 @@ import gsplat.rendering  # noqa: E402
 import gsplat.strategy  # noqa: E402
 from datasets.colmap import Dataset, Parser  # noqa: E402
 from datasets.normalize import transform_points  # noqa: E402
-from gsplat_server.parameters import load_parameters  # noqa: E402
+from gsplat_server.parameters import load_parameters, masking_enabled  # noqa: E402
 from mapping import block_gaussians  # noqa: E402
 from mapping.depth.depth_maps import (  # noqa: E402
     DEPTH_SUFFIX,
@@ -481,7 +481,8 @@ if parameters is not None and parameters.anisotropy_reg_weight > 0:
 if parameters is not None and parameters.HasField("background_color"):
     composite_over_background(gsplat.rendering, parameters.background_color)
 downsample_images(Parser)
-attach_masks(Dataset)
+if parameters is None or masking_enabled(parameters):
+    attach_masks(Dataset)
 if parameters is not None and depth_loss_enabled(parameters):
     attach_depths(Dataset, DepthFilter(min_confidence=parameters.depth_min_confidence))
     guard_depth_loss(gsplat.losses)

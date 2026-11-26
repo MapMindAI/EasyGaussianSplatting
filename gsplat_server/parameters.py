@@ -63,3 +63,8 @@ def parameters_to_complete_text(parameters):
             zero = "0"
         lines.append(f"{field.name}: {zero}")
     return "\n".join(line for line in lines if line) + "\n"
+
+
+def masking_enabled(parameters):
+    """Whether training and the depth cloud read masks/."""
+    return parameters.mask_people or parameters.mask_sky
