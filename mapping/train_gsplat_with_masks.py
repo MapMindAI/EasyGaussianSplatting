@@ -483,14 +483,16 @@ if parameters is not None and parameters.HasField("background_color"):
 downsample_images(Parser)
 if parameters is None or masking_enabled(parameters):
     attach_masks(Dataset)
-if parameters is not None and depth_loss_enabled(parameters):
+# A --ckpt run only evaluates: the checkpoint replaces the seed, and there is no loss.
+training = parameters is not None and "--ckpt" not in sys.argv
+if training and depth_loss_enabled(parameters):
     attach_depths(Dataset, DepthFilter(min_confidence=parameters.depth_min_confidence))
     guard_depth_loss(gsplat.losses)
     if parameters.depth_lambda_final > 0:
         schedule_depth_loss(
             gsplat.losses, [gsplat.strategy.DefaultStrategy, gsplat.strategy.MCMCStrategy],
             parameters.depth_lambda_begin, parameters.depth_lambda_final, parameters.refine_stop_iter)
-if parameters is not None and parameters.run_depth:
+if training and parameters.run_depth:
     # MCMC never grows past cap_max, so leave it room to relocate and add.
     maximum_points = (
         int(0.8 * parameters.cap_max) if parameters.strategy == gsplat_pb2.STRATEGY_MCMC else None
