@@ -77,6 +77,8 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── depth_loss_schedule_test.py # The decay and its step tracking.
 │   ├── gsplat_world_frame.py     # Undo gsplat's world normalization on export.
 │   ├── gsplat_world_frame_test.py # Similarity inverse and the export wiring.
+│   ├── gsplat_per_image_metrics.py # Each validation image's metrics beside simple_trainer's averages.
+│   ├── gsplat_per_image_metrics_test.py # Rows, color-corrected columns, and count checks.
 │   ├── gsplat_regularization.py  # Stop regularization after refinement; anisotropy penalty.
 │   ├── gsplat_regularization_test.py # The step gate on both terms, and the anisotropy penalty.
 │   ├── mapping_pipeline_test.py  # Gravity levelling of the solved map.

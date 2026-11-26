@@ -336,6 +336,7 @@ from mapping.depth.depth_maps import (  # noqa: E402
 from mapping.depth.point_cloud import POINT_CLOUD_NAME, read_point_cloud  # noqa: E402
 from mapping.depth_loss_schedule import schedule_depth_loss  # noqa: E402
 from mapping.file_listing import files_under  # noqa: E402
+from mapping.gsplat_per_image_metrics import record_per_image_metrics  # noqa: E402
 from mapping.gsplat_regularization import (  # noqa: E402
     regularize_anisotropy,
     stop_regularization_after_refinement,
@@ -451,9 +452,10 @@ def cli_with_configuration(function, configuration, verbose=False):
     print("Training configuration:", flush=True)
     pprint.pprint(vars(configuration), sort_dicts=False, width=100)
     sys.stdout.flush()
+    # simple_trainer's functions and classes are only reachable once
+    # runpy has defined them, through the globals of its main.
+    record_per_image_metrics(function.__globals__["Runner"])
     if block_training is not None:
-        # simple_trainer's functions and classes are only reachable once
-        # runpy has defined them, through the globals of its main.
         train_block(function.__globals__, *block_training, configuration.result_dir)
     return original_cli(function, configuration, verbose=verbose)
 
