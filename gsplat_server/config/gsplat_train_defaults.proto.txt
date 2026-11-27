@@ -35,7 +35,8 @@ iterations: 30000
 test_every: 8
 # COLMAP image downsample factor used by the trainer.
 data_factor: 1
-# Weight of the mean-opacity penalty (gsplat opacity_reg).
+# Weight of the mean-opacity penalty (gsplat opacity_reg). 0.01 beat 0 and
+# 0.001 by 0.7-1.4 dB at opacities_lr 0.005 (wiki: Benchmark - Opacity Grid Sweep).
 opacity_reg_weight: 0.01
 # Weight of the mean-scale penalty (gsplat scale_reg).
 scale_reg_weight: 0.01
@@ -84,7 +85,8 @@ strategy: STRATEGY_MCMC
 # MCMC only: Gaussian count to converge to. Ignored by STRATEGY_DEFAULT.
 cap_max: 500000
 # MCMC only: relocate Gaussians at or below this opacity during refinement.
-min_opacity: 0.005
+# 0.05 and 0.1 crashed with opacity_reg_weight on in the opacity grid sweep.
+min_opacity: 0.01
 
 
 # Spherical-harmonic degree for view-dependent colour.
@@ -95,11 +97,13 @@ ssim_lambda: 0.5
 # Packed rasterization: less GPU memory, slightly slower.
 packed: true
 
-# Gaussian learning rates. These match simple_trainer's defaults.
+# Gaussian learning rates. These match simple_trainer's defaults except
+# opacities_lr, where 0.05 runs out of memory or collapses at
+# opacity_reg_weight 0.01 (wiki: Benchmark - Opacity Grid Sweep).
 # Positions are scaled by the scene size internally, so keep means_lr small.
 means_lr: 0.00016
 scales_lr: 0.005
-opacities_lr: 0.05
+opacities_lr: 0.005
 quats_lr: 0.001
 # Degree-zero spherical harmonics control base colour; higher degrees control
 # view-dependent detail and train more slowly.
@@ -136,4 +140,4 @@ depth_lambda_final: 0
 # Voxel edge of the merged depth cloud, as a fraction of the scene scale.
 depth_voxel_factor: 0.001
 # Depth confidence floor for both the merged cloud and the depth term.
-depth_min_confidence: 0.5
+depth_min_confidence: 0.9

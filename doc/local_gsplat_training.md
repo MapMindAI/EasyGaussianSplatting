@@ -90,7 +90,7 @@ only needs the values it changes:
 ```text
 iterations: 5000
 cap_max: 250000
-min_opacity: 0.01
+sh_degree: 0
 ```
 
 With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
@@ -107,4 +107,4 @@ plus any `<workspace>/depth_points.ply` (thinned to keep the total within
 0.8 × `cap_max` under MCMC), and with a positive `depth_lambda_begin` uses any
 existing `<workspace>/depths/*.npz` files for depth supervision. It logs generated-depth
 minus sparse-COLMAP-depth statistics for samples within two pixels of each
-sparse point.
+sparse point. A `--ckpt` evaluation skips the depth seed and depth files.

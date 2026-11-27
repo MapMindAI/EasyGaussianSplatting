@@ -156,7 +156,7 @@ run. It is layered over the shipped defaults, so it only names what it changes:
 
 ```
 cap_max: 1500000
-min_opacity: 0.01
+sh_degree: 0
 ```
 
 For the Wixi Chongansi drone scene, use
@@ -168,8 +168,10 @@ With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
 refinement; it does not reduce their count. `prune_opa` applies only to
 DefaultStrategy.
 
-The Gaussian learning rates match `simple_trainer` by default and can be
-overridden as `means_lr`, `scales_lr`, `opacities_lr`, `quats_lr`, `sh0_lr`,
+The Gaussian learning rates match `simple_trainer` by default, except
+`opacities_lr` 0.005 with `min_opacity` 0.01 and `opacity_reg_weight` 0.01, the best
+cell of the [opacity grid sweep](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Opacity-Grid-Sweep).
+They can be overridden as `means_lr`, `scales_lr`, `opacities_lr`, `quats_lr`, `sh0_lr`,
 or `shN_lr`; `pose_opt_lr` controls pose optimization when `pose_opt` is true.
 
 Every `test_every`-th image (default 8) is held out of training and rendered,
