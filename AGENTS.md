@@ -66,7 +66,7 @@ Mandatory rules for AI coding agents contributing to this repo. Direct user inst
 │   ├── block_partition.py        # Grid, tree, and covisibility-graph training blocks.
 │   ├── block_partition_test.py   # Splits, ownership, and frame assignment.
 │   ├── block_gaussians.py        # Coarse Gaussians per block, and the block merge.
-│   ├── block_gaussians_test.py   # Ownership, expanded regions, and checkpoints.
+│   ├── block_gaussians_test.py   # Ownership, expanded regions, seed thinning, and checkpoints.
 │   ├── mapping_pipeline.py       # The four mapping stages end to end.
 │   ├── onnx_session.py           # ONNX Runtime sessions on CUDA, else the CPU.
 │   ├── file_listing.py           # Files under a directory without a request per file.

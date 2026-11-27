@@ -176,7 +176,10 @@ settings, `cap_max` 8M, 50,000 iterations, `refine_stop_iter` 40,000,
   owns or that lie within 10% of its extent of its points; their opacities,
   scales, and colors carry over. Swapped in by wrapping
   `create_splats_with_optimizers`, reached through the globals of
-  simple_trainer's `main`.
+  simple_trainer's `main`. With `run_depth` set in the block parameters, the
+  trainable splats are instead seeded like an ordinary run, from the SfM and
+  depth points in the same region: every SfM point, and depth points randomly
+  thinned to `0.8 × (cap_max − frozen coarse Gaussians − SfM points)`.
 * **Context.** Every other coarse Gaussian is appended to each render, frozen:
   no gradient, no optimizer state, unseen by the strategy. Without it, a
   block's images show content the block cannot represent, and it grows
@@ -213,7 +216,7 @@ On `data/wixi_chongansi`, compare against run 13 of the
 * `block_partition_test.py`: balanced splits, covisibility, graph bisection,
   point ownership, image coverage, and the image-limited tree.
 * `block_gaussians_test.py`: nearest-point ownership, the expanded region, the
-  frame inverse, and checkpoint lookup.
+  frame inverse, depth seed thinning, and checkpoint lookup.
 * The trainer patches need a GPU and are untested.
 
 ## Risks

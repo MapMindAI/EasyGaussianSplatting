@@ -47,3 +47,14 @@ def test_latest_checkpoint_orders_steps_numerically(tmp_path):
     for name in ["ckpt_999_rank0.pt", "ckpt_29999_rank0.pt", "ckpt_29999_rank1.pt"]:
         (tmp_path / "ckpts" / name).touch()
     assert block_gaussians.latest_checkpoint(str(tmp_path)).endswith("ckpt_29999_rank0.pt")
+
+
+def test_seed_point_indices_keep_inside_sfm_and_thin_depth():
+    # Three SfM points then six depth points; the last of each lies outside.
+    inside = np.array([True, True, False, True, True, True, True, True, False])
+    # 0.8 * (10 - 3 frozen - 2 SfM) = 4 of the 5 inside depth points.
+    sfm, depth = block_gaussians.seed_point_indices(inside, sfm_count=3, frozen_count=3, cap_max=10)
+    assert sfm.tolist() == [0, 1]
+    assert len(depth) == 4 and set(depth) <= {3, 4, 5, 6, 7} and np.all(np.diff(depth) > 0)
+    _, depth = block_gaussians.seed_point_indices(inside, 3, frozen_count=20, cap_max=10)
+    assert len(depth) == 0

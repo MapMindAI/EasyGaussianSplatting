@@ -177,6 +177,7 @@ def initialize_from_depth_points(parser_class, maximum_points=None):
 
     def __init__(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
+        self.sfm_point_count = len(self.points)
         path = os.path.join(self.data_dir, POINT_CLOUD_NAME)
         if not os.path.exists(path):
             return
@@ -185,15 +186,14 @@ def initialize_from_depth_points(parser_class, maximum_points=None):
             depth_budget = max(maximum_points - len(self.points), 0)
             if len(points) > depth_budget:
                 print(f"Randomly keeping {depth_budget} of {len(points)} depth points")
-                kept = np.random.default_rng(0).choice(len(points), depth_budget, replace=False)
+                kept = block_gaussians.thinned(np.arange(len(points)), depth_budget)
                 points, colours = points[kept], colours[kept]
-        sfm_count = len(self.points)
         self.points = np.concatenate(
             [self.points, transform_points(self.transform, points)]).astype(np.float32)
         self.points_rgb = np.concatenate([self.points_rgb, colours]).astype(np.uint8)
         self.points_err = np.concatenate(
             [self.points_err, np.zeros(len(points))]).astype(np.float32)
-        print(f"Initializing from {sfm_count} SfM points and {len(points)} depth points in {path}")
+        print(f"Initializing from {self.sfm_point_count} SfM points and {len(points)} depth points in {path}")
 
     parser_class.__init__ = __init__
 
@@ -261,31 +261,45 @@ def restrict_to_images(dataset_class, image_names):
     dataset_class.__init__ = __init__
 
 
-def train_block(trainer, coarse_checkpoint, points, owners, block, result_dir):
-    """Start from the coarse Gaussians around the block and render the rest frozen.
+def train_block(trainer, result_dir, coarse_checkpoint, points, owners, block, seed_cap_max):
+    """Train the block's expanded region and render the coarse Gaussians outside it frozen.
 
-    `trainer` is simple_trainer's namespace. The coarse Gaussians in the
-    block's expanded region become the trainable splats; the rest are
-    appended to every render with no gradient or optimizer state, so the
-    block's images never show content it would have to explain with floaters.
-    MCMC only: it reads nothing per Gaussian from the render, while
-    DefaultStrategy's densification would see the context in it.
+    `trainer` is simple_trainer's namespace. The trainable splats start from
+    the coarse Gaussians in the region or, with `seed_cap_max`, from the
+    parser's SfM and depth seed points in it (block_gaussians.seed_point_indices).
+    The coarse Gaussians outside are appended to every render with no gradient
+    or optimizer state, so the block's images never show content it would
+    have to explain with floaters. MCMC only: it reads nothing per Gaussian
+    from the render, while DefaultStrategy's densification would see the context in it.
     """
     coarse = torch.load(coarse_checkpoint, map_location="cpu", weights_only=True)["splats"]
     context = {}
     original_create = trainer["create_splats_with_optimizers"]
 
     def create_splats_with_optimizers(parser, *args, **kwargs):
-        splats, optimizers = original_create(parser, *args, **kwargs)
         np.save(os.path.join(result_dir, "scene_transform.npy"), parser.transform)
         means = block_gaussians.to_colmap(parser.transform, coarse["means"].numpy())
         inside = torch.from_numpy(block_gaussians.expanded_region(means, points, owners, block))
-        print(f"Block: {int(inside.sum())} trainable and {int((~inside).sum())} frozen coarse Gaussians", flush=True)
+        frozen_count = int((~inside).sum())
+        if seed_cap_max is not None:
+            seed_inside = block_gaussians.expanded_region(
+                block_gaussians.to_colmap(parser.transform, parser.points), points, owners, block)
+            sfm, depth = block_gaussians.seed_point_indices(
+                seed_inside, parser.sfm_point_count, frozen_count, seed_cap_max)
+            kept = np.concatenate([sfm, depth])
+            parser.points, parser.points_rgb, parser.points_err = (
+                parser.points[kept], parser.points_rgb[kept], parser.points_err[kept])
+            print(f"Block: seeding from {len(sfm)} SfM and {len(depth)} depth points, "
+                  f"{frozen_count} frozen coarse Gaussians", flush=True)
+        else:
+            print(f"Block: {int(inside.sum())} trainable and {frozen_count} frozen coarse Gaussians", flush=True)
+        splats, optimizers = original_create(parser, *args, **kwargs)
         for name, optimizer in optimizers.items():
             device = splats[name].device
             assert coarse[name].shape[1:] == splats[name].shape[1:], f"coarse {name} has another shape"
-            splats[name] = torch.nn.Parameter(coarse[name][inside].to(device))
-            optimizer.param_groups[0]["params"] = [splats[name]]
+            if seed_cap_max is None:
+                splats[name] = torch.nn.Parameter(coarse[name][inside].to(device))
+                optimizer.param_groups[0]["params"] = [splats[name]]
             context[name] = coarse[name][~inside].to(device)
         return splats, optimizers
 
@@ -457,7 +471,7 @@ def cli_with_configuration(function, configuration, verbose=False):
     # runpy has defined them, through the globals of its main.
     record_per_image_metrics(function.__globals__["Runner"])
     if block_training is not None:
-        train_block(function.__globals__, *block_training, configuration.result_dir)
+        train_block(function.__globals__, configuration.result_dir, *block_training)
     return original_cli(function, configuration, verbose=verbose)
 
 
@@ -476,7 +490,8 @@ if block_option is not None:
     manifest_path, block_name = block_option.rsplit(":", 1)
     block, block_index, block_points, block_owners = block_gaussians.load_block(manifest_path, block_name)
     restrict_to_images(Dataset, set(block["training_images"]))
-    block_training = (coarse_checkpoint, block_points, block_owners, block_index)
+    seed_cap_max = parameters.cap_max if parameters.run_depth else None
+    block_training = (coarse_checkpoint, block_points, block_owners, block_index, seed_cap_max)
 strategy_classes = [gsplat.strategy.DefaultStrategy, gsplat.strategy.MCMCStrategy]
 if parameters is not None and parameters.stop_regularization_after_refinement:
     stop_regularization_after_refinement(gsplat.losses, strategy_classes, parameters.refine_stop_iter)
@@ -499,8 +514,10 @@ if training and depth_loss_enabled(parameters):
             parameters.depth_lambda_begin, parameters.depth_lambda_final, parameters.refine_stop_iter)
 if training and parameters.run_depth:
     # MCMC never grows past cap_max, so leave it room to relocate and add.
+    # A block thins its own seed once it knows its frozen context.
     maximum_points = (
-        int(0.8 * parameters.cap_max) if parameters.strategy == gsplat_pb2.STRATEGY_MCMC else None
+        int(block_gaussians.SEED_FRACTION * parameters.cap_max)
+        if parameters.strategy == gsplat_pb2.STRATEGY_MCMC and block_training is None else None
     )
     initialize_from_depth_points(Parser, maximum_points)
 capture_scene_transform(Parser)

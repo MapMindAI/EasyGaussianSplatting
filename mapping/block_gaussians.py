@@ -18,6 +18,8 @@ from scipy import spatial
 
 # Share of a block's extent its trainable region reaches past it on each side.
 EXPANSION = 0.1
+# Share of cap_max seeded; the rest leaves MCMC room to relocate and add.
+SEED_FRACTION = 0.8
 
 
 def load_block(manifest_path, name):
@@ -36,7 +38,7 @@ def to_colmap(transform, means):
 
 
 def nearest_owners(positions, points, owners):
-    _, nearest = spatial.cKDTree(points[:, :2]).query(positions[:, :2])
+    _, nearest = spatial.cKDTree(points[:, :2]).query(positions[:, :2], workers=-1)
     return owners[nearest]
 
 
@@ -44,8 +46,26 @@ def expanded_region(positions, points, owners, block):
     """Positions the block owns, or within EXPANSION of its middle-90% extent of its points."""
     own = points[owners == block, :2]
     low, high = np.percentile(own, [5, 95], axis=0)
-    distance, _ = spatial.cKDTree(own).query(positions[:, :2])
+    distance, _ = spatial.cKDTree(own).query(positions[:, :2], workers=-1)
     return (distance <= EXPANSION * np.max(high - low)) | (nearest_owners(positions, points, owners) == block)
+
+
+def thinned(indices, budget):
+    """`indices`, randomly thinned to at most `budget` and kept in order."""
+    if len(indices) <= budget:
+        return indices
+    return np.sort(np.random.default_rng(0).choice(indices, budget, replace=False))
+
+
+def seed_point_indices(inside, sfm_count, frozen_count, cap_max):
+    """A block's seed SfM and depth point indices: all its SfM points, its depth points thinned.
+
+    The seed is SfM points then depth points.
+    """
+    sfm = np.flatnonzero(inside[:sfm_count])
+    depth = sfm_count + np.flatnonzero(inside[sfm_count:])
+    budget = max(int(SEED_FRACTION * (cap_max - frozen_count - len(sfm))), 0)
+    return sfm, thinned(depth, budget)
 
 
 def latest_checkpoint(result_dir):
