@@ -4,16 +4,31 @@
 # STRATEGY_MCMC; test_every must match the coarse run.
 
 iterations: 50000
+refine_stop_iter: 40000
+sh_degree: 0
 test_every: 64
 data_factor: 1
-# use 0.003 might introduce strange artifacts
-opacity_reg_weight: 0.005
-scale_reg_weight: 0.005
-refine_stop_iter: 40000
+opacity_reg_weight: 0.01
+scale_reg_weight: 0.01
+
 strategy: STRATEGY_MCMC
-# Trainable Gaussians in one block; the frozen coarse context is extra.
-cap_max: 8000000
+cap_max: 10000000
+min_opacity: 0.01
 packed: false
-means_lr: 0.00008
-scales_lr: 0.001
-opacities_lr: 0.025
+
+means_lr: 0.00016
+scales_lr: 0.005
+opacities_lr: 0.005
+quats_lr: 0.001
+
+# Predict depth with VGGT-Omega and supervise training on it, when the
+# upload carried no depths/ of its own. Off by default: it costs another pass
+# over the images and needs the depth model served alongside the others.
+run_depth: true
+# Weight of the depth term in the loss. 0.003 scored best in the depth weight
+# sweeps; from 0.01 up it costs PSNR (wiki: Benchmark - Depth Weight Sweep).
+depth_lambda_begin: 0.003
+# Voxel edge of the merged depth cloud, as a fraction of the scene scale.
+depth_voxel_factor: 0.001
+# Depth confidence floor for both the merged cloud and the depth term.
+depth_min_confidence: 0.9
