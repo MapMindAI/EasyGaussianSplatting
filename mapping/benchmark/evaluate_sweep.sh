@@ -19,8 +19,11 @@ source scripts/gsplat_env.sh
 export PYTHONPATH="${REPO_ROOT}"
 export PYTORCH_ALLOC_CONF=expandable_segments:True
 
-for run_dir in "${SWEEP_DIR}"/*/; do
-  name="$(basename "${run_dir}")"
+RUN_DIRS=("${SWEEP_DIR}"/*/)
+index=0
+for run_dir in "${RUN_DIRS[@]}"; do
+  index=$((index + 1))
+  name="[${index}/${#RUN_DIRS[@]}] $(basename "${run_dir}")"
   # sweep_status.txt is written once training ends, so this also skips a run in progress.
   if ! grep -qs '^exit_status 0$' "${run_dir}sweep_status.txt"; then
     echo "=== ${name}: failed or unfinished, skipping"

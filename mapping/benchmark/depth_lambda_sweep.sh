@@ -16,6 +16,7 @@ DEPTH_LAMBDAS=("${@:3}")
 if [ ${#DEPTH_LAMBDAS[@]} -eq 0 ]; then
   DEPTH_LAMBDAS=(0 0.001 0.003 0.01 0.03 0.1 0.05:0.01 0.1:0.01 0.2:0.01)
 fi
+SWEEP_RUN_COUNT=$((${#DEPTH_LAMBDAS[@]} + 1))
 
 for weight in "${DEPTH_LAMBDAS[@]}"; do
   final=0

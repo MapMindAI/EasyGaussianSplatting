@@ -15,6 +15,7 @@ WEIGHTS=("${@:3}")
 if [ ${#WEIGHTS[@]} -eq 0 ]; then
   WEIGHTS=(0 0.01 0.03 0.1 0.3 1)
 fi
+SWEEP_RUN_COUNT=${#WEIGHTS[@]}
 
 for weight in "${WEIGHTS[@]}"; do
   train_sweep_run "anisotropy_reg_weight_${weight}" "anisotropy_reg_weight: ${weight}"

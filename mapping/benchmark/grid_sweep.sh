@@ -24,6 +24,11 @@ if [ $# -eq 0 ]; then
 fi
 AXES=("$@")
 start_sweep grid_sweep "${WORKSPACE_ARGUMENT}" "${PARAMETERS_ARGUMENT[@]}"
+SWEEP_RUN_COUNT=1
+for axis in "${AXES[@]}"; do
+  IFS=',' read -ra values <<<"${axis#*=}"
+  SWEEP_RUN_COUNT=$((SWEEP_RUN_COUNT * ${#values[@]}))
+done
 
 # Usage: train_combinations <axis index> <name so far> <overrides so far>
 train_combinations() {
