@@ -72,11 +72,13 @@ def score_gaussians(runner, parameters):
     with torch.no_grad():
         opacity = splats["opacities"].sigmoid().flatten()
         scales = splats["scales"].exp()
+        # Only the projection metadata is used; the image builds 3 and 4 channels only.
+        colors = torch.zeros(count, 3, device=device)
 
     def score_region(view_matrix, intrinsics, width, height, mask):
         _, _, metadata = rasterization(
             means=splats["means"], quats=splats["quats"], scales=scales,
-            opacities=opacity, colors=None, render_mode="D",
+            opacities=opacity, colors=colors, render_mode="RGB",
             viewmats=view_matrix, Ks=intrinsics,
             width=width, height=height, packed=configuration.packed,
             near_plane=configuration.near_plane, far_plane=configuration.far_plane,
