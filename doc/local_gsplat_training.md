@@ -97,6 +97,41 @@ With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
 refinement; `cap_max` limits the count. `prune_opa` applies only to
 DefaultStrategy.
 
+## Prune during MCMC training
+
+Enable optional significance pruning in a custom JobParameters file:
+
+```text
+iterations: 12000
+strategy: STRATEGY_MCMC
+cap_max: 500000
+mcmc_prune_steps: 6000
+mcmc_prune_steps: 9000
+mcmc_prune_keep_fraction: 0.8
+mcmc_prune_scoring_views: 32
+mcmc_prune_resolution: 256
+```
+
+Steps count completed optimizer updates from 1; they must increase and precede
+the final iteration. The default step list is empty, disabling pruning. Each
+event retains a fraction of the current population and lowers `cap_max` to
+prevent regrowth; MCMC relocation and noise continue under their existing settings.
+
+Scoring renders evenly sampled training cameras, with the masks training uses, at most
+`mcmc_prune_resolution` on the longest side. The score is
+`accepted_pixel_hits × sigmoid(opacity) × volume**0.1`. Zero sampled hits do
+not establish invisibility from other views.
+
+Deletion preserves Adam and scene state. Each event logs a line when scoring
+starts, then its counts, `cap_max`, and duration to the log and `pruning.jsonl`.
+Saves on a pruning iteration precede its optimizer/pruning updates; later saves
+contain the reduced population. Supports one GPU, full COLMAP images, and standard
+pinhole rasterization; frozen block context, `with_ut`, and `with_eval3d` are
+unsupported. Final model size does not establish peak training memory.
+PPISP phases that freeze Gaussians skip pruning callbacks.
+
+## Image and supervision settings
+
 A `data_factor` above 1 trains on `<workspace>/images_<data_factor>/`, which
 the first run writes from `images/`.
 

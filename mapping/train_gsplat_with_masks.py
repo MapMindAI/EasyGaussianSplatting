@@ -49,16 +49,11 @@ def attach_masks(dataset_class):
         image_name = self.parser.image_names[self.indices[item]]
         if f"{image_name}.png" not in listed_files(self, "masks"):
             return data
-        mask_path = os.path.join(self.parser.data_dir, "masks", f"{image_name}.png")
-
-        assert self.patch_size is None, "masks are not cropped along with patches"
         height, width = data["image"].shape[:2]
-        mask = Image.open(mask_path).resize((width, height), Image.NEAREST)
-        mask = torch.from_numpy(np.asarray(mask) > 127)
-        # An all-black mask leaves the losses averaging over no pixels at all,
-        # which trains on NaN from there on.
-        if mask.any():
-            data["mask"] = mask
+        mask = load_training_mask(self.parser.data_dir, image_name, (width, height))
+        if mask is not None:
+            assert self.patch_size is None, "masks are not cropped along with patches"
+            data["mask"] = torch.from_numpy(mask)
         return data
 
     dataset_class.__getitem__ = __getitem__
@@ -341,6 +336,9 @@ from mapping.gsplat_regularization import (  # noqa: E402
     regularize_anisotropy,
     stop_regularization_after_refinement,
 )
+from mapping.gsplat_pruning import (  # noqa: E402
+    attach_pruning, load_training_mask, validate_pruning,
+)
 from gsplat_server.proto import gsplat_pb2  # noqa: E402
 from mapping.gsplat_world_frame import (  # noqa: E402
     capture_scene_transform,
@@ -408,6 +406,7 @@ def load_job_parameters():
     except ValueError:
         return None
     parameters = load_parameters(sys.argv[parameter_index + 1])
+    validate_pruning(parameters)
     flags = [
         "--data_factor", str(parameters.data_factor),
         "--max_steps", str(parameters.iterations),
@@ -452,6 +451,8 @@ def cli_with_configuration(function, configuration, verbose=False):
     print("Training configuration:", flush=True)
     pprint.pprint(vars(configuration), sort_dicts=False, width=100)
     sys.stdout.flush()
+    if parameters is not None and parameters.mcmc_prune_steps:
+        attach_pruning(function.__globals__, parameters)
     # simple_trainer's functions and classes are only reachable once
     # runpy has defined them, through the globals of its main.
     record_per_image_metrics(function.__globals__["Runner"])
@@ -470,6 +471,8 @@ if block_option is not None:
     assert coarse_checkpoint is not None, "--block needs --coarse_checkpoint"
     assert parameters is not None and parameters.strategy == gsplat_pb2.STRATEGY_MCMC, \
         "block training needs STRATEGY_MCMC"
+    if parameters.mcmc_prune_steps:
+        raise ValueError("significance pruning does not support frozen block context")
     manifest_path, block_name = block_option.rsplit(":", 1)
     block, block_index, block_points, block_owners = block_gaussians.load_block(manifest_path, block_name)
     restrict_to_images(Dataset, set(block["training_images"]))

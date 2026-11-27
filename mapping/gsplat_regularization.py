@@ -13,10 +13,11 @@ def stop_regularization_after_refinement(losses_module, strategy_classes, refine
     next_step = 0
 
     for strategy_class in strategy_classes:
-        def step_post_backward(self, *args, original=strategy_class.step_post_backward, **kwargs):
+        def step_post_backward(self, params, optimizers, state, step, *args,
+                               original=strategy_class.step_post_backward, **kwargs):
             nonlocal next_step
-            next_step = kwargs["step"] + 1
-            return original(self, *args, **kwargs)
+            next_step = step + 1
+            return original(self, params, optimizers, state, step, *args, **kwargs)
 
         strategy_class.step_post_backward = step_post_backward
 
