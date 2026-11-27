@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from gsplat_server.parameters import masking_enabled
 from gsplat_server.proto import gsplat_pb2
 
 MAXIMUM_REGION_HITS = 1_000_000
@@ -118,6 +119,7 @@ def score_gaussians(runner, parameters):
         hits.add_(torch.bincount(gaussian_ids.long(), minlength=count))
 
     dataset = runner.trainset
+    use_masks = masking_enabled(parameters)
     parser = dataset.parser
     selected = np.linspace(0, len(dataset) - 1,
                            min(parameters.mcmc_prune_scoring_views, len(dataset)), dtype=int)
@@ -135,7 +137,7 @@ def score_gaussians(runner, parameters):
             if configuration.pose_opt:
                 view = runner.pose_adjust(view, torch.tensor([int(index)], device=device))
             mask = load_training_mask(parser.data_dir, parser.image_names[image_index],
-                                      (resized_width, resized_height))
+                                      (resized_width, resized_height)) if use_masks else None
             if mask is not None:
                 mask = torch.from_numpy(mask).to(device)
             elif parser.mask_dict[camera_id] is not None:

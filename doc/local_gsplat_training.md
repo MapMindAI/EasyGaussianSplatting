@@ -117,7 +117,7 @@ the final iteration. The default step list is empty, disabling pruning. Each
 event retains a fraction of the current population and lowers `cap_max` to
 prevent regrowth; MCMC relocation and noise continue under their existing settings.
 
-Scoring renders evenly sampled training cameras, with their masks, at most
+Scoring renders evenly sampled training cameras, with the masks training uses, at most
 `mcmc_prune_resolution` on the longest side. The score is
 `accepted_pixel_hits × sigmoid(opacity) × volume**0.1`. Zero sampled hits do
 not establish invisibility from other views.
