@@ -341,6 +341,9 @@ mapping/benchmark/grid_sweep.sh data/panorama [parameters.proto.txt] \
   opacities_lr=0.1,0.05,0.01 min_opacity=0.01,0.1 opacity_reg_weight=0.001,0.01
 ```
 
+A repeated field's value joins its entries with `+`, so
+`mcmc_prune_steps=10000+20000,15000` is two runs, one pruning twice.
+
 `mapping/benchmark/evaluate_sweep.sh` re-evaluates every run of such a sweep,
 or every `gsplat_output_*` run when given the workspace itself, from its final
 checkpoint with another `test_every`, without retraining, into
