@@ -90,7 +90,7 @@ only needs the values it changes:
 ```text
 iterations: 5000
 cap_max: 250000
-min_opacity: 0.01
+sh_degree: 0
 ```
 
 With MCMC, `min_opacity` relocates Gaussians at or below the threshold during
