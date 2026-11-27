@@ -140,4 +140,4 @@ depth_lambda_final: 0
 # Voxel edge of the merged depth cloud, as a fraction of the scene scale.
 depth_voxel_factor: 0.001
 # Depth confidence floor for both the merged cloud and the depth term.
-depth_min_confidence: 0.5
+depth_min_confidence: 0.9
