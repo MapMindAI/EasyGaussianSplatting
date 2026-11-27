@@ -341,10 +341,11 @@ mapping/benchmark/grid_sweep.sh data/panorama [parameters.proto.txt] \
   opacities_lr=0.1,0.05,0.01 min_opacity=0.01,0.1 opacity_reg_weight=0.001,0.01
 ```
 
-`mapping/benchmark/evaluate_sweep.sh` re-evaluates every run of such a sweep
-from its final checkpoint with another `test_every`, without retraining, into
+`mapping/benchmark/evaluate_sweep.sh` re-evaluates every run of such a sweep,
+or every `gsplat_output_*` run when given the workspace itself, from its final
+checkpoint with another `test_every`, without retraining, into
 `<run>/renders_test_every_<N>/` (`renders/`, `stats/`, and the log), skipping
-runs that failed or are still training. Besides the averages in
+runs with no final checkpoint: those that failed or are still training. Besides the averages in
 `stats/val_step<step>.json`, every evaluation, in training too, writes each
 view's PSNR, SSIM, and LPIPS to `stats/val_step<step>_per_image.csv`. Views
 held out by the new `test_every` but not the original were trained on, so their
@@ -352,6 +353,7 @@ metrics are optimistic:
 
 ```
 mapping/benchmark/evaluate_sweep.sh data/panorama/grid_sweep 8
+mapping/benchmark/evaluate_sweep.sh data/panorama 8
 ```
 
 The [historical sweep configurations](https://github.com/MapMindAI/EasyGaussianSplatting/wiki/Benchmark---Parameter-Sweep)
